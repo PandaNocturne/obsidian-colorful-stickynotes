@@ -408,24 +408,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
-			.setName('默认排序')
-			.setDesc(
-				'创建/修改时间对应库内文件的 ctime、mtime；列表工具栏可临时切换并会保存至此默认值。'
-			)
-			.addDropdown(dd =>
-				dd
-					.addOption('ctime-desc', '创建时间 · 新在前')
-					.addOption('ctime-asc', '创建时间 · 旧在前')
-					.addOption('mtime-desc', '修改时间 · 新在前')
-					.addOption('mtime-asc', '修改时间 · 旧在前')
-					.setValue(this.plugin.settings.noteListSort)
-					.onChange(async v => {
-						this.plugin.settings.noteListSort = v as NoteListSort;
-						await this.plugin.saveSettings();
-					})
-			);
-
 		containerEl.createEl('h3', { text: '底部工具栏' });
 		new Setting(containerEl)
 			.setName('自动隐藏')
