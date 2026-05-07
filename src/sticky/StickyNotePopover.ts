@@ -586,7 +586,7 @@ export class StickyNotePopover {
 		const layer = getComputedStyle(document.documentElement).getPropertyValue('--layer-popover').trim();
 		this.rootEl.setCssProps({
 			position: 'fixed',
-			'z-index': layer || 'var(--layer-modal)'
+			'z-index': layer || 'calc(var(--layer-slides) - 2)'
 		});
 
 		if (emit) {
