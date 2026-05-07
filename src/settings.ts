@@ -3,16 +3,13 @@ import { formatStickyNoteRelativePath } from './filename-template';
 import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
 import { SHEET_COLOR_ORDER } from './sticky/sticky-color-order';
-import type { NoteListSort, StickyColorId } from './types';
+import type { NoteListOpenLocation, NoteListSort, StickyColorId } from './types';
 
 export interface ColorfulStickyNotesSettings {
 	stickyFolder: string;
 	filenameTemplate: string;
 	defaultTemplatePath: string;
 	defaultViewMode: 'preview' | 'source';
-	defaultPositionMode: 'center' | 'custom';
-	defaultPositionX: number;
-	defaultPositionY: number;
 	/** 便笺内 `.view-content` 的 `zoom`（0.5–1），与阅读/编辑正文显示比例一致。 */
 	viewContentZoom: number;
 	bottomBarAutoHide: boolean;
@@ -24,6 +21,8 @@ export interface ColorfulStickyNotesSettings {
 	noteListLayout: 'column' | 'grid';
 	/** 便笺列表排序（默认：创建时间新在前）。 */
 	noteListSort: NoteListSort;
+	/** 便笺列表首次打开时的挂载位置。 */
+	noteListOpenLocation: NoteListOpenLocation;
 	/** 关闭空白便笺移入回收站前是否弹出确认框（默认开启）。 */
 	confirmBlankStickyTrashOnClose: boolean;
 	/** 新建便笺窗口默认宽度（px）。 */
@@ -39,15 +38,13 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	filenameTemplate: 'YYYY/YYYY-MM-DD',
 	defaultTemplatePath: '',
 	defaultViewMode: 'source',
-	defaultPositionMode: 'center',
-	defaultPositionX: 80,
-	defaultPositionY: 80,
 	viewContentZoom: 0.6,
 	bottomBarAutoHide: true,
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
 	noteListLayout: 'column',
 	noteListSort: 'ctime-desc',
+	noteListOpenLocation: 'right-sidebar',
 	confirmBlankStickyTrashOnClose: true,
 	defaultNewStickyWidth: 420,
 	defaultNewStickyHeight: 360,
@@ -239,46 +236,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
-			.setName('默认位置')
-			.setDesc('新建便笺窗口出现的位置（不含已保存的工作区布局）。')
-			.addDropdown(dd =>
-				dd
-					.addOption('center', '屏幕居中')
-					.addOption('custom', '自定义坐标')
-					.setValue(this.plugin.settings.defaultPositionMode)
-					.onChange(async v => {
-						this.plugin.settings.defaultPositionMode = v as 'center' | 'custom';
-						await this.plugin.saveSettings();
-						this.display();
-					})
-			);
-
-		if (this.plugin.settings.defaultPositionMode === 'custom') {
-			new Setting(containerEl)
-				.setName('距左侧（px）')
-				.addText(text =>
-					text
-						.setValue(String(this.plugin.settings.defaultPositionX))
-						.onChange(async v => {
-							const n = parseInt(v, 10);
-							this.plugin.settings.defaultPositionX = Number.isFinite(n) ? n : 0;
-							await this.plugin.saveSettings();
-						})
-				);
-			new Setting(containerEl)
-				.setName('距顶部（px）')
-				.addText(text =>
-					text
-						.setValue(String(this.plugin.settings.defaultPositionY))
-						.onChange(async v => {
-							const n = parseInt(v, 10);
-							this.plugin.settings.defaultPositionY = Number.isFinite(n) ? n : 0;
-							await this.plugin.saveSettings();
-						})
-				);
-		}
-
 		containerEl.createEl('h3', { text: '新建便笺' });
 		new Setting(containerEl)
 			.setName('默认宽度')
@@ -326,6 +283,23 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			});
 
 		containerEl.createEl('h3', { text: '便笺列表' });
+		new Setting(containerEl)
+			.setName('打开位置')
+			.setDesc(
+				'命令或功能区打开「便笺列表」时，若当前尚无该视图，则创建在指定位置；已固定或已打开的列表会切换到该视图。'
+			)
+			.addDropdown(dd =>
+				dd
+					.addOption('left-sidebar', '左侧侧边栏')
+					.addOption('right-sidebar', '右侧侧边栏')
+					.addOption('new-tab', '新标签页')
+					.setValue(this.plugin.settings.noteListOpenLocation)
+					.onChange(async v => {
+						this.plugin.settings.noteListOpenLocation = v as NoteListOpenLocation;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		new Setting(containerEl)
 			.setName('默认布局')
 			.setDesc('在便笺列表视图内也可随时切换；此处为打开列表时的默认排布。')

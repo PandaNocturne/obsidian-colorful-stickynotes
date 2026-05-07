@@ -142,14 +142,6 @@ export class StickyNoteManager {
 		const w = Math.max(200, Math.min(1600, s.defaultNewStickyWidth ?? 420));
 		const h = Math.max(200, Math.min(1200, s.defaultNewStickyHeight ?? 360));
 		const margin = 12;
-		if (s.defaultPositionMode === 'custom') {
-			return {
-				left: Math.max(0, s.defaultPositionX),
-				top: Math.max(0, s.defaultPositionY),
-				width: w,
-				height: h
-			};
-		}
 		return {
 			left: Math.max(margin, Math.round((window.innerWidth - w) / 2)),
 			top: Math.max(margin, Math.round((window.innerHeight - h) / 2)),

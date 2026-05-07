@@ -3,7 +3,7 @@ import { ColorfulStickyNotesSettingTab, DEFAULT_SETTINGS, type ColorfulStickyNot
 import { WorkspacePanelModal } from './modals/WorkspacePanelModal';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
-import { VIEW_STICKY_NOTE_LIST, type NoteListSort, type StickyColorId } from './types';
+import { VIEW_STICKY_NOTE_LIST, type NoteListOpenLocation, type NoteListSort, type StickyColorId } from './types';
 
 const VALID_NEW_STICKY_BG: readonly StickyColorId[] = [
 	'default',
@@ -20,6 +20,12 @@ const VALID_NOTE_LIST_SORT: readonly NoteListSort[] = [
 	'ctime-asc',
 	'mtime-desc',
 	'mtime-asc'
+];
+
+const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [
+	'left-sidebar',
+	'right-sidebar',
+	'new-tab'
 ];
 
 export default class ColorfulStickyNotesPlugin extends Plugin {
@@ -103,7 +109,11 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()) as ColorfulStickyNotesSettings;
-		delete (this.settings as unknown as Record<string, unknown>).bottomBarCommands;
+		const st = this.settings as unknown as Record<string, unknown>;
+		delete st.bottomBarCommands;
+		delete st.defaultPositionMode;
+		delete st.defaultPositionX;
+		delete st.defaultPositionY;
 		const z = this.settings.viewContentZoom;
 		if (typeof z !== 'number' || !Number.isFinite(z)) {
 			this.settings.viewContentZoom = DEFAULT_SETTINGS.viewContentZoom;
@@ -118,6 +128,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.includes(nls as NoteListSort)) {
 			this.settings.noteListSort = DEFAULT_SETTINGS.noteListSort;
 		}
+
+		const nlo = this.settings.noteListOpenLocation;
+		if (
+			typeof nlo !== 'string' ||
+			!VALID_NOTE_LIST_OPEN_LOCATION.includes(nlo as NoteListOpenLocation)
+		) {
+			this.settings.noteListOpenLocation = DEFAULT_SETTINGS.noteListOpenLocation;
+		}
 		const delaySec = this.settings.restoreStickySessionDelaySec;
 		if (typeof delaySec !== 'number' || !Number.isFinite(delaySec)) {
 			this.settings.restoreStickySessionDelaySec = DEFAULT_SETTINGS.restoreStickySessionDelaySec;
@@ -127,10 +145,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				Math.min(10, Math.round(delaySec))
 			);
 		}
-		const rawSettings = this.settings as unknown as Record<string, unknown>;
-		if (typeof rawSettings.notifyBlankStickyTrashOnClose === 'boolean') {
-			this.settings.confirmBlankStickyTrashOnClose = rawSettings.notifyBlankStickyTrashOnClose;
-			delete rawSettings.notifyBlankStickyTrashOnClose;
+		if (typeof st.notifyBlankStickyTrashOnClose === 'boolean') {
+			this.settings.confirmBlankStickyTrashOnClose = st.notifyBlankStickyTrashOnClose;
+			delete st.notifyBlankStickyTrashOnClose;
 		}
 		if (typeof this.settings.confirmBlankStickyTrashOnClose !== 'boolean') {
 			this.settings.confirmBlankStickyTrashOnClose = DEFAULT_SETTINGS.confirmBlankStickyTrashOnClose;
@@ -188,18 +205,34 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	async openNoteListView(): Promise<void> {
 		const { workspace } = this.app;
 		let leaf = workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)[0];
+		const loc = this.settings.noteListOpenLocation;
+
 		if (!leaf) {
-			const right = workspace.getRightLeaf(false);
-			if (!right) {
-				new Notice('无法创建右侧分栏');
-				return;
+			if (loc === 'left-sidebar') {
+				const L = workspace.getLeftLeaf(false);
+				if (!L) {
+					new Notice('无法创建左侧侧边栏视图');
+					return;
+				}
+				await L.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
+				leaf = L;
+			} else if (loc === 'right-sidebar') {
+				const R = workspace.getRightLeaf(false);
+				if (!R) {
+					new Notice('无法创建右侧侧边栏视图');
+					return;
+				}
+				await R.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
+				leaf = R;
+			} else {
+				const tab = workspace.getLeaf('tab');
+				await tab.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
+				leaf = tab;
 			}
-			await right.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
-			leaf = right;
 		} else {
 			await leaf.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
 		}
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 	}
 
 	/** 打开或聚焦指定文件的便笺窗口 */

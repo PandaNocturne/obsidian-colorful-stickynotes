@@ -721,9 +721,9 @@
   width: 100%;
   height: 100%;
   background-color: var(--background-primary);
-  overflow: hidden;
 }
 .csn-list-card-body--rendered {
+  overflow: auto;
   padding: 6px 8px;
   border: 1px solid var(--csn-list-preview-border);
   border-radius: var(--radius-s);
