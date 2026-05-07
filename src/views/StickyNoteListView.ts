@@ -120,6 +120,29 @@ async function filterStickyFilesByKeywords(
 	return files.filter((_, i) => flags[i]!);
 }
 
+/**
+ * 生成 1-based 页码序列：含间断时用占位 `'gap'` 渲染为省略号。
+ * 总页数较多时大致为「1 2 3 … 中间窗口 … 末三页」形态。
+ */
+function buildPaginationEntries(totalPages: number, currentPage0: number): Array<number | 'gap'> {
+	const T = totalPages;
+	const c = Math.min(Math.max(currentPage0 + 1, 1), T);
+	if (T <= 1) return [1];
+	if (T <= 9) return Array.from({ length: T }, (_, i) => i + 1);
+
+	const s = new Set<number>();
+	for (const p of [1, 2, 3, T - 2, T - 1, T, c - 1, c, c + 1]) {
+		if (p >= 1 && p <= T) s.add(p);
+	}
+	const arr = [...s].sort((a, b) => a - b);
+	const out: Array<number | 'gap'> = [];
+	for (let i = 0; i < arr.length; i++) {
+		if (i > 0 && arr[i]! - arr[i - 1]! > 1) out.push('gap');
+		out.push(arr[i]!);
+	}
+	return out;
+}
+
 /** 空数组表示不过滤；否则保留解析颜色命中任一选中色的便笺（或关系）。 */
 async function filterStickyFilesByColors(
 	app: App,
@@ -144,6 +167,8 @@ export class StickyNoteListView extends ItemView {
 	private colorFilterBarEl: HTMLElement | null = null;
 	private searchInput: HTMLInputElement | null = null;
 	private paginationEl: HTMLElement | null = null;
+	private paginationRowEl: HTMLElement | null = null;
+	private paginationPagesEl: HTMLElement | null = null;
 	private paginationPrevBtn: HTMLButtonElement | null = null;
 	private paginationNextBtn: HTMLButtonElement | null = null;
 	private paginationMetaEl: HTMLElement | null = null;
@@ -488,17 +513,19 @@ export class StickyNoteListView extends ItemView {
 		this.syncListGridMetricsFromSettings();
 
 		this.paginationEl = root.createDiv({ cls: 'csn-list-pagination' });
-		this.paginationPrevBtn = this.paginationEl.createEl('button', {
+		this.paginationRowEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-row' });
+		this.paginationPrevBtn = this.paginationRowEl.createEl('button', {
 			type: 'button',
 			text: '上一页',
-			cls: 'csn-list-pagination-btn'
+			cls: 'csn-list-pagination-btn csn-list-pagination-btn--nav'
 		});
-		this.paginationMetaEl = this.paginationEl.createSpan({ cls: 'csn-list-pagination-meta' });
-		this.paginationNextBtn = this.paginationEl.createEl('button', {
+		this.paginationPagesEl = this.paginationRowEl.createDiv({ cls: 'csn-list-pagination-pages' });
+		this.paginationNextBtn = this.paginationRowEl.createEl('button', {
 			type: 'button',
 			text: '下一页',
-			cls: 'csn-list-pagination-btn'
+			cls: 'csn-list-pagination-btn csn-list-pagination-btn--nav'
 		});
+		this.paginationMetaEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-meta' });
 		this.registerDomEvent(this.paginationPrevBtn, 'click', () => {
 			if (this.listPageIndex <= 0) return;
 			this.listPageIndex -= 1;
@@ -506,6 +533,18 @@ export class StickyNoteListView extends ItemView {
 		});
 		this.registerDomEvent(this.paginationNextBtn, 'click', () => {
 			this.listPageIndex += 1;
+			void this.renderList();
+		});
+		this.registerDomEvent(this.paginationEl, 'click', (evt: MouseEvent) => {
+			const t = evt.target;
+			if (!(t instanceof Element)) return;
+			const btn = t.closest('button[data-csn-list-page]');
+			if (!btn || !this.paginationEl?.contains(btn)) return;
+			const raw = (btn as HTMLButtonElement).dataset.csnListPage;
+			const p0 = raw !== undefined ? parseInt(raw, 10) : NaN;
+			if (!Number.isFinite(p0) || p0 < 0) return;
+			evt.preventDefault();
+			this.listPageIndex = p0;
 			void this.renderList();
 		});
 
@@ -729,6 +768,8 @@ export class StickyNoteListView extends ItemView {
 				this.lastRenderedPageIndex = null;
 				container.empty();
 				container.createDiv({ text: `文件夹不存在：${folder}`, cls: 'csn-list-empty' });
+				this.paginationPagesEl?.empty();
+				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
 				this.colorFilterBarEl?.hide();
 				return;
@@ -739,6 +780,8 @@ export class StickyNoteListView extends ItemView {
 				this.lastRenderedPageIndex = null;
 				container.empty();
 				container.createDiv({ text: `便笺目录不是文件夹：${folder}`, cls: 'csn-list-empty' });
+				this.paginationPagesEl?.empty();
+				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
 				this.colorFilterBarEl?.hide();
 				return;
@@ -772,11 +815,11 @@ export class StickyNoteListView extends ItemView {
 				this.lastRenderedPageIndex = null;
 				container.empty();
 				container.createDiv({ text: '没有匹配的便笺', cls: 'csn-list-empty' });
+				this.paginationPagesEl?.empty();
+				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
 				return;
 			}
-
-			this.paginationEl.show();
 
 			const pageSize = Math.max(4, Math.min(48, Math.round(this.plugin.settings.noteListPageSize)));
 			const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -822,11 +865,48 @@ export class StickyNoteListView extends ItemView {
 
 			this.lastRenderedPageIndex = this.listPageIndex;
 
-			this.paginationMetaEl.setText(
-				`第 ${this.listPageIndex + 1} / ${totalPages} 页 · 本页 ${pageFiles.length} 条 · 共 ${filtered.length} 条`
+			this.paginationEl?.show();
+			this.paginationMetaEl?.setText(
+				`本页 ${pageFiles.length} 条 · 共 ${filtered.length} 条`
 			);
-			this.paginationPrevBtn!.disabled = this.listPageIndex <= 0;
-			this.paginationNextBtn!.disabled = this.listPageIndex >= totalPages - 1;
+
+			if (totalPages <= 1) {
+				this.paginationPagesEl?.empty();
+				this.paginationRowEl?.hide();
+			} else {
+				this.paginationRowEl?.show();
+				this.paginationPrevBtn!.disabled = this.listPageIndex <= 0;
+				this.paginationNextBtn!.disabled = this.listPageIndex >= totalPages - 1;
+
+				const pagesWrap = this.paginationPagesEl;
+				if (pagesWrap) {
+					pagesWrap.empty();
+					const entries = buildPaginationEntries(totalPages, this.listPageIndex);
+					const cur1 = this.listPageIndex + 1;
+					for (const ent of entries) {
+						if (ent === 'gap') {
+							pagesWrap.createSpan({
+								cls: 'csn-list-pagination-ellipsis',
+								text: '…',
+								attr: { 'aria-hidden': 'true' }
+							});
+							continue;
+						}
+						const isActive = ent === cur1;
+						const btn = pagesWrap.createEl('button', {
+							type: 'button',
+							cls: `csn-list-pagination-page${isActive ? ' is-active' : ''}`,
+							text: String(ent),
+							attr: {
+								'data-csn-list-page': String(ent - 1),
+								'aria-label': `第 ${ent} 页`,
+								...(isActive ? { 'aria-current': 'page' as const } : {})
+							}
+						});
+						if (isActive) btn.disabled = true;
+					}
+				}
+			}
 
 			container.scrollTop = 0;
 		} finally {
@@ -847,6 +927,8 @@ export class StickyNoteListView extends ItemView {
 		this.listItemsEl = null;
 		this.searchInput = null;
 		this.paginationEl = null;
+		this.paginationRowEl = null;
+		this.paginationPagesEl = null;
 		this.paginationPrevBtn = null;
 		this.paginationNextBtn = null;
 		this.paginationMetaEl = null;
