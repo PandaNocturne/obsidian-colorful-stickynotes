@@ -220,6 +220,25 @@ export class StickyNoteListView extends ItemView {
 		void this.renderList();
 	}
 
+	/** 根据当前已打开的浮动便笺，更新卡片右下角卷角类名（不重渲嵌入）。 */
+	syncOpenStickyCornerIndicators(): void {
+		if (!this.listItemsEl) return;
+		const open = this.plugin.stickies.getOpenStickyNotePaths();
+		for (const el of Array.from(this.listItemsEl.querySelectorAll('.csn-list-card'))) {
+			if (!(el instanceof HTMLElement)) continue;
+			const p = el.dataset.csnNotePath;
+			if (!p) continue;
+			el.toggleClass('csn-list-card--sticky-open', open.has(p));
+		}
+	}
+
+	private syncCardStickyOpenFlag(card: HTMLElement, path: string): void {
+		card.toggleClass(
+			'csn-list-card--sticky-open',
+			this.plugin.stickies.getOpenStickyNotePaths().has(path)
+		);
+	}
+
 	/** 按设置里的 `noteListViewContentZoom` 更新已渲染卡片上的 CSS 变量，不重渲 Markdown。 */
 	syncViewContentZoomFromSettings(): void {
 		if (!this.listItemsEl) return;
@@ -617,6 +636,7 @@ export class StickyNoteListView extends ItemView {
 		if (titleEl) titleEl.setText(f.basename);
 		const dateEl = card.querySelector('.csn-list-card-date');
 		if (dateEl) dateEl.setText(moment(listDateTs).format('M月D日'));
+		this.syncCardStickyOpenFlag(card, f.path);
 	}
 
 	private async createListCardElement(
@@ -658,6 +678,7 @@ export class StickyNoteListView extends ItemView {
 		});
 		await this.renderCardPreview(previewEl, f);
 		card.dataset.csnEmbedMtime = String(f.stat.mtime);
+		this.syncCardStickyOpenFlag(card, f.path);
 		return card;
 	}
 

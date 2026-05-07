@@ -56,6 +56,8 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 写入 frontmatter 等触发的 `modify`：跳过防抖列表刷新，由新建流程末尾主动 `refreshStickyListIfOpen` 一次，避免连刷卡顿 */
 	muteStickyListModifyPaths: Set<string> = new Set();
 
+	private listOpenIndicatorRaf: number | null = null;
+
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.stickies = new StickyNoteManager(this, this.app);
@@ -125,6 +127,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		if (this.listOpenIndicatorRaf !== null) {
+			window.cancelAnimationFrame(this.listOpenIndicatorRaf);
+			this.listOpenIndicatorRaf = null;
+		}
 		/* 勿 detach 便笺列表：重载插件时不应关闭用户已固定在侧栏的叶视图。 */
 		this.stickies?.onunload();
 	}
@@ -254,6 +260,22 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 	}
 
+	/** 同步便笺列表卡片上「已打开浮动便笺」的右下角卷角标记（requestAnimationFrame 合并多次触发）。 */
+	refreshStickyListOpenIndicatorsIfOpen(): void {
+		if (this.listOpenIndicatorRaf !== null) {
+			window.cancelAnimationFrame(this.listOpenIndicatorRaf);
+		}
+		this.listOpenIndicatorRaf = window.requestAnimationFrame(() => {
+			this.listOpenIndicatorRaf = null;
+			for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
+				const v = leaf.view;
+				if (v instanceof StickyNoteListView) {
+					v.syncOpenStickyCornerIndicators();
+				}
+			}
+		});
+	}
+
 	/** 若便笺列表已打开：取消 create 等已排队的防抖并立即重绘，避免与 vault 事件叠成两次整表渲染 */
 	refreshStickyListIfOpen(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
@@ -330,6 +352,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			await leaf.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
 		}
 		await workspace.revealLeaf(leaf);
+		this.refreshStickyListOpenIndicatorsIfOpen();
 	}
 
 	/** 打开或聚焦指定文件的便笺窗口 */

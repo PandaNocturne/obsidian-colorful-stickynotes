@@ -51,6 +51,21 @@ export class StickyNoteManager {
 		private readonly app: App
 	) {}
 
+	/** 当前已打开浮动便笺对应的笔记路径（用于便笺列表卡片右下角卷角）。 */
+	getOpenStickyNotePaths(): ReadonlySet<string> {
+		const s = new Set<string>();
+		for (const pop of this.popovers.values()) {
+			const vf =
+				pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
+			if (vf?.path) s.add(vf.path);
+		}
+		return s;
+	}
+
+	private notifyStickyListOpenIndicators(): void {
+		this.plugin.refreshStickyListOpenIndicatorsIfOpen();
+	}
+
 	async init(): Promise<void> {
 		this.workspaces = await loadWorkspacesFile(this.plugin);
 		this.plugin.registerEvent(
@@ -292,7 +307,7 @@ export class StickyNoteManager {
 		await pop.openFile(f);
 
 		/** 与新建 Markdown 叶 `loadIfDeferred` 错开，降低「列表已打开时新建便笺」的卡顿 */
-		const LIST_REFRESH_AFTER_NEW_STICKY_MS = 800;
+		const LIST_REFRESH_AFTER_NEW_STICKY_MS = 500;
 		const scheduleListRefreshSoon = (): void => {
 			window.setTimeout(() => {
 				requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
@@ -324,6 +339,7 @@ export class StickyNoteManager {
 		}
 		this.bringStickyToFront(pop);
 		this.persistOpenWindows();
+		this.notifyStickyListOpenIndicators();
 	}
 
 	/**
@@ -482,6 +498,7 @@ export class StickyNoteManager {
 		pop.destroy();
 		this.popovers.delete(id);
 		this.persistOpenWindows();
+		this.notifyStickyListOpenIndicators();
 	}
 
 	/** 路径是否在「便笺文件夹」下（含根目录下同名 .md）。 */
@@ -498,6 +515,7 @@ export class StickyNoteManager {
 		pop.destroy();
 		this.popovers.delete(id);
 		this.persistOpenWindows();
+		this.notifyStickyListOpenIndicators();
 		if (!trashIfBlank || !(file instanceof TFile)) return;
 		if (!this.app.vault.getAbstractFileByPath(file.path)) return;
 		void this.app.vault.trash(file, false).catch(() => {
@@ -597,6 +615,7 @@ export class StickyNoteManager {
 			}
 		}
 		this.persistOpenWindows();
+		this.notifyStickyListOpenIndicators();
 	}
 
 	async openExistingSticky(serial: SerializedStickyWindow): Promise<void> {

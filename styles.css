@@ -496,6 +496,13 @@
   --csn-list-preview-bg: var(--background-primary);
   --csn-list-preview-border: var(--background-modifier-border);
   --csn-list-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+  /* 已打开便笺卡片右下角卷角：下层「反面」浅色 + 上层折痕阴影 */
+  --csn-list-fold-under: rgba(255, 255, 255, 0.93);
+  --csn-list-fold-shadow: rgba(0, 0, 0, 0.13);
+}
+.theme-dark .csn-list-card {
+  --csn-list-fold-under: rgba(255, 255, 255, 0.09);
+  --csn-list-fold-shadow: rgba(0, 0, 0, 0.42);
 }
 /* 便笺列表 */
 .workspace-leaf-content .view-content.csn-list-view {
@@ -669,6 +676,7 @@
 }
 /* —— 卡片：对齐浮动便笺色板；令牌见 list-view-tokens.less —— */
 .csn-list-card {
+  position: relative;
   border: 1px solid var(--background-modifier-border);
   border-radius: 10px;
   background: var(--csn-list-card-bg);
@@ -679,6 +687,30 @@
   height: var(--csn-list-card-height, 160px);
   overflow: hidden;
   transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+/* 浮动便笺已打开：右下角纸页卷角（伪元素叠在卡片内容之上） */
+.csn-list-card.csn-list-card--sticky-open::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
+  border-style: solid;
+  border-width: 0 0 26px 26px;
+  border-color: transparent transparent var(--csn-list-fold-under) transparent;
+  pointer-events: none;
+}
+.csn-list-card.csn-list-card--sticky-open::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 9;
+  border-style: solid;
+  border-width: 0 0 17px 17px;
+  border-color: transparent transparent var(--csn-list-fold-shadow) transparent;
+  pointer-events: none;
+  opacity: 0.88;
 }
 .csn-list-card:hover {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 4px 14px rgba(0, 0, 0, 0.06);
