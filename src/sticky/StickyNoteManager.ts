@@ -219,16 +219,17 @@ export class StickyNoteManager {
 		const resolvedNewColor =
 			initial?.color ?? (sourcePopover ? sourcePopover.getColor() : undefined) ?? fallbackBg;
 
-		/** 空白新建且需写入背景时，直接把 YAML 放进首次 create，避免 processFrontMatter 二次落盘与元数据重算。 */
+		/**
+		 * 空白新建且需写入背景时，直接把 YAML 放进首次 create。
+		 * 含「从便笺旁新建」：若仍依赖随后 processFrontMatter，易与刚打开的编辑区竞态，出现空白闪屏或覆盖已输入内容。
+		 */
 		let bodyForCreate = body;
-		if (!sourcePopover && resolvedNewColor !== 'default') {
-			if (parseStickyBgColorFromMarkdownSource(bodyForCreate.replace(/^\uFEFF/, '')) === null) {
-				if (bodyForCreate.replace(/^\uFEFF/, '').trim() === '') {
-					bodyForCreate = `---\n${FM_COLOR_KEY}: ${resolvedNewColor}\n---\n\n`;
-				}
+		if (resolvedNewColor !== 'default') {
+			const raw = bodyForCreate.replace(/^\uFEFF/, '');
+			if (parseStickyBgColorFromMarkdownSource(raw) === null && raw.trim() === '') {
+				bodyForCreate = `---\n${FM_COLOR_KEY}: ${resolvedNewColor}\n---\n\n`;
 			}
 		}
-		const preParsedStickyBg = parseStickyBgColorFromMarkdownSource(bodyForCreate);
 
 		const normalizedPath = normalizePath(path);
 		this.plugin.listPrioritizeStickyPath = normalizedPath;
@@ -279,7 +280,12 @@ export class StickyNoteManager {
 
 		this.popovers.set(id, pop);
 		this.bringStickyToFront(pop);
-		/* openFile 内已有 rAF；此处不再多等一帧，缩短首屏可交互时间。 */
+
+		try {
+			await this.app.vault.cachedRead(f);
+		} catch {
+			/* 预热缓存失败时仍尝试打开 */
+		}
 		await pop.openFile(f);
 
 		const scheduleListRefreshSoon = (): void => {
@@ -291,9 +297,14 @@ export class StickyNoteManager {
 			window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(p), 120);
 		};
 
-		/** processFrontMatter 较慢：不阻塞便笺窗口收尾，颜色 UI 已由 shell initialColor 对齐来源便笺。 */
-		if (sourcePopover) {
+		const parsedOnDisk = parseStickyBgColorFromMarkdownSource(bodyForCreate.replace(/^\uFEFF/, ''));
+		const needsBgWrite = color !== 'default' && parsedOnDisk !== color;
+
+		if (needsBgWrite) {
 			this.plugin.muteStickyListModifyPaths.add(f.path);
+			await new Promise<void>(resolve =>
+				requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+			);
 			void this.setStickyBackgroundColorForFile(f, color)
 				.catch(() => undefined)
 				.finally(() => {
@@ -302,18 +313,9 @@ export class StickyNoteManager {
 				});
 		} else {
 			const fromCache = getStickyBgColorFromMetadataCache(this.app, f);
-			const yamlGuess = fromCache ?? preParsedStickyBg;
-			if (yamlGuess) {
-				pop.setColor(yamlGuess);
-			} else if (color !== 'default') {
-				this.plugin.muteStickyListModifyPaths.add(f.path);
-				void this.setStickyBackgroundColorForFile(f, color)
-					.catch(() => undefined)
-					.finally(() => {
-						scheduleListRefreshSoon();
-						endMuteAfterList(f.path);
-					});
-			}
+			const yamlUi = fromCache ?? parsedOnDisk;
+			if (yamlUi) pop.setColor(yamlUi);
+			scheduleListRefreshSoon();
 		}
 		this.bringStickyToFront(pop);
 		this.persistOpenWindows();
