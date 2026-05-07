@@ -307,7 +307,7 @@ export class StickyNoteManager {
 		await pop.openFile(f);
 
 		/** 与新建 Markdown 叶 `loadIfDeferred` 错开，降低「列表已打开时新建便笺」的卡顿 */
-		const LIST_REFRESH_AFTER_NEW_STICKY_MS = 500;
+		const LIST_REFRESH_AFTER_NEW_STICKY_MS = 800;
 		const scheduleListRefreshSoon = (): void => {
 			window.setTimeout(() => {
 				requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());

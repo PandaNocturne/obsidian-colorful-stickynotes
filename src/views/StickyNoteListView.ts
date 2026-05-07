@@ -232,11 +232,12 @@ export class StickyNoteListView extends ItemView {
 		}
 	}
 
-	private syncCardStickyOpenFlag(card: HTMLElement, path: string): void {
-		card.toggleClass(
-			'csn-list-card--sticky-open',
-			this.plugin.stickies.getOpenStickyNotePaths().has(path)
-		);
+	private syncCardStickyOpenFlag(
+		card: HTMLElement,
+		path: string,
+		openStickyPaths: ReadonlySet<string>
+	): void {
+		card.toggleClass('csn-list-card--sticky-open', openStickyPaths.has(path));
 	}
 
 	/** 按设置里的 `noteListViewContentZoom` 更新已渲染卡片上的 CSS 变量，不重渲 Markdown。 */
@@ -626,7 +627,13 @@ export class StickyNoteListView extends ItemView {
 		await MarkdownRenderer.render(this.app, md, previewEl, f.path, host);
 	}
 
-	private updateListCardChrome(card: HTMLElement, f: TFile, sortMode: NoteListSort, color: StickyColorId): void {
+	private updateListCardChrome(
+		card: HTMLElement,
+		f: TFile,
+		sortMode: NoteListSort,
+		color: StickyColorId,
+		openStickyPaths: ReadonlySet<string>
+	): void {
 		card.setAttr('data-csn-note-path', f.path);
 		card.setAttr('data-csn-list-color', color);
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
@@ -636,13 +643,14 @@ export class StickyNoteListView extends ItemView {
 		if (titleEl) titleEl.setText(f.basename);
 		const dateEl = card.querySelector('.csn-list-card-date');
 		if (dateEl) dateEl.setText(moment(listDateTs).format('M月D日'));
-		this.syncCardStickyOpenFlag(card, f.path);
+		this.syncCardStickyOpenFlag(card, f.path, openStickyPaths);
 	}
 
 	private async createListCardElement(
 		f: TFile,
 		sortMode: NoteListSort,
-		color: StickyColorId
+		color: StickyColorId,
+		openStickyPaths: ReadonlySet<string>
 	): Promise<HTMLElement> {
 		const card = this.contentEl.createDiv({
 			cls: 'csn-list-card',
@@ -678,7 +686,7 @@ export class StickyNoteListView extends ItemView {
 		});
 		await this.renderCardPreview(previewEl, f);
 		card.dataset.csnEmbedMtime = String(f.stat.mtime);
-		this.syncCardStickyOpenFlag(card, f.path);
+		this.syncCardStickyOpenFlag(card, f.path, openStickyPaths);
 		return card;
 	}
 
@@ -697,11 +705,12 @@ export class StickyNoteListView extends ItemView {
 	private async renderListCardsFull(
 		container: HTMLElement,
 		pageFiles: TFile[],
-		sortMode: NoteListSort
+		sortMode: NoteListSort,
+		openStickyPaths: ReadonlySet<string>
 	): Promise<void> {
 		for (const f of pageFiles) {
 			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
-			const card = await this.createListCardElement(f, sortMode, color);
+			const card = await this.createListCardElement(f, sortMode, color, openStickyPaths);
 			container.appendChild(card);
 		}
 	}
@@ -709,7 +718,8 @@ export class StickyNoteListView extends ItemView {
 	private async syncListPageIncremental(
 		container: HTMLElement,
 		pageFiles: TFile[],
-		sortMode: NoteListSort
+		sortMode: NoteListSort,
+		openStickyPaths: ReadonlySet<string>
 	): Promise<void> {
 		const wantedPaths = new Set(pageFiles.map(x => x.path));
 		const pool = new Map<string, HTMLElement>();
@@ -730,9 +740,9 @@ export class StickyNoteListView extends ItemView {
 			pool.delete(f.path);
 			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
 			if (!card) {
-				card = await this.createListCardElement(f, sortMode, color);
+				card = await this.createListCardElement(f, sortMode, color, openStickyPaths);
 			} else {
-				this.updateListCardChrome(card, f, sortMode, color);
+				this.updateListCardChrome(card, f, sortMode, color, openStickyPaths);
 				await this.maybeRefreshCardPreview(card, f);
 			}
 			container.appendChild(card);
@@ -746,7 +756,8 @@ export class StickyNoteListView extends ItemView {
 	private async syncListPageContentOnly(
 		container: HTMLElement,
 		pageFiles: TFile[],
-		sortMode: NoteListSort
+		sortMode: NoteListSort,
+		openStickyPaths: ReadonlySet<string>
 	): Promise<void> {
 		const byPath = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
@@ -757,7 +768,7 @@ export class StickyNoteListView extends ItemView {
 		if (byPath.size !== pageFiles.length) {
 			this.disposeAllListCardMarkdownHosts();
 			container.empty();
-			await this.renderListCardsFull(container, pageFiles, sortMode);
+			await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths);
 			return;
 		}
 		for (const f of pageFiles) {
@@ -765,11 +776,11 @@ export class StickyNoteListView extends ItemView {
 			if (!card) {
 				this.disposeAllListCardMarkdownHosts();
 				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode);
+				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths);
 				return;
 			}
 			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
-			this.updateListCardChrome(card, f, sortMode, color);
+			this.updateListCardChrome(card, f, sortMode, color, openStickyPaths);
 			await this.maybeRefreshCardPreview(card, f);
 		}
 	}
@@ -849,6 +860,7 @@ export class StickyNoteListView extends ItemView {
 
 			const start = this.listPageIndex * pageSize;
 			const pageFiles = filtered.slice(start, start + pageSize);
+			const openStickyPaths = this.plugin.stickies.getOpenStickyNotePaths();
 
 			const structureKey = this.buildListStructureKey(
 				sortMode,
@@ -873,15 +885,15 @@ export class StickyNoteListView extends ItemView {
 				this.lastListStructureKey = structureKey;
 				this.disposeAllListCardMarkdownHosts();
 				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode);
+				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths);
 			} else if (paginationOnly) {
-				await this.syncListPageIncremental(container, pageFiles, sortMode);
+				await this.syncListPageIncremental(container, pageFiles, sortMode, openStickyPaths);
 			} else if (samePageContentTouch) {
-				await this.syncListPageContentOnly(container, pageFiles, sortMode);
+				await this.syncListPageContentOnly(container, pageFiles, sortMode, openStickyPaths);
 			} else {
 				this.disposeAllListCardMarkdownHosts();
 				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode);
+				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths);
 			}
 
 			this.lastRenderedPageIndex = this.listPageIndex;
