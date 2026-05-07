@@ -481,6 +481,19 @@
 .csn-sticky.csn-metadata-on .metadata-container {
   display: block !important;
 }
+/*
+ * 便笺列表 — 卡片级 CSS 变量（预览区高度、默认色等）。
+ * 修改列表预览条高度：只改 --csn-list-preview-h。
+ */
+.csn-list-card {
+  --csn-list-preview-h: 160px;
+  --csn-list-card-bg: var(--background-primary);
+  --csn-list-card-head-bg: var(--background-modifier-hover);
+  --csn-list-card-head-border: var(--background-modifier-border);
+  --csn-list-preview-bg: var(--background-primary);
+  --csn-list-preview-border: var(--background-modifier-border);
+  --csn-list-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
 /* 便笺列表 */
 .csn-list-view {
   padding: 8px 10px 12px;
@@ -551,14 +564,8 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-/* —— 卡片：对齐浮动便笺色板，默认无 YAML 色时用主题主背景（微软便笺式色块 + 顶栏标题行）—— */
+/* —— 卡片：对齐浮动便笺色板；令牌见 list-view-tokens.less —— */
 .csn-list-card {
-  --csn-list-card-bg: var(--background-primary);
-  --csn-list-card-head-bg: var(--background-modifier-hover);
-  --csn-list-card-head-border: var(--background-modifier-border);
-  --csn-list-preview-bg: var(--background-primary);
-  --csn-list-preview-border: var(--background-modifier-border);
-  --csn-list-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
   border: 1px solid var(--background-modifier-border);
   border-radius: 10px;
   background: var(--csn-list-card-bg);
@@ -566,6 +573,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: var(--csn-list-preview-h);
   overflow: hidden;
   transition: box-shadow 0.12s ease, transform 0.12s ease;
 }
@@ -687,12 +695,7 @@
   font-variant-numeric: tabular-nums;
 }
 .csn-list-card-menu-btn {
-  opacity: 0;
   transition: opacity 0.12s ease;
-}
-.csn-list-card:hover .csn-list-card-menu-btn,
-.csn-list-card-menu-btn:focus-visible {
-  opacity: 1;
 }
 @media (hover: none) {
   .csn-list-card-menu-btn {
@@ -706,26 +709,30 @@
   cursor: default;
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   min-width: 0;
 }
 /* Obsidian MarkdownRenderer：固定高度，内部滚动；zoom 与便笺正文一致（--csn-sticky-view-content-zoom 由 TS 写在卡片上） */
 .csn-list-card-body {
   width: 100%;
+  height: 100%;
   background-color: var(--background-primary);
+  overflow: hidden;
 }
 .csn-list-card-body--rendered {
-  --csn-list-preview-h: 112px;
-  height: var(--csn-list-preview-h);
-  min-height: var(--csn-list-preview-h);
-  max-height: var(--csn-list-preview-h);
-  overflow: auto;
   padding: 6px 8px;
   border: 1px solid var(--csn-list-preview-border);
   border-radius: var(--radius-s);
   background: var(--csn-list-preview-bg);
+  /* 与浮动便笺 `.view-content` 内阅读区一致：用正文字号作基准；勿继承侧栏 ItemView 的 UI 字号，否则再叠 zoom 会显得明显偏小（并非多写了一次 zoom） */
+  font-size: var(--font-text-size);
   line-height: var(--line-height-normal);
   word-break: break-word;
   zoom: var(--csn-sticky-view-content-zoom, 0.6);
+}
+.csn-list-card-body--rendered .markdown-preview-view,
+.csn-list-card-body--rendered .markdown-preview-sizer {
+  font-size: inherit;
 }
 .csn-list-card-body--rendered .markdown-preview-sizer {
   min-height: 0 !important;
@@ -739,7 +746,6 @@
 .csn-list-card-body--rendered ul,
 .csn-list-card-body--rendered ol {
   margin: 0.25em 0;
-  padding-left: 1.25em;
 }
 .csn-list-empty {
   color: var(--text-muted);

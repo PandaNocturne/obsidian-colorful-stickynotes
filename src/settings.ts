@@ -209,7 +209,9 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('内容缩放')
-			.setDesc('便笺窗口内笔记正文的显示比例（50%–100%），通过 CSS zoom 作用于阅读/编辑区域。')
+			.setDesc(
+				'便笺窗口与列表预览卡片共用同一比例（50%–100%）。列表仅预览区嵌套与内边距与便笺不同，观感可能略有差异。'
+			)
 			.addSlider(slider =>
 				slider
 					.setLimits(0.5, 1, 0.05)
@@ -219,7 +221,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					.onChange(async v => {
 						this.plugin.settings.viewContentZoom = v;
 						await this.plugin.saveSettings();
-						this.plugin.stickies.updateViewContentZoomFromSettings();
+						this.plugin.syncViewContentZoomToOpenViews();
 					})
 			);
 

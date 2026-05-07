@@ -101,6 +101,17 @@ export class StickyNoteListView extends ItemView {
 		void this.renderList();
 	}
 
+	/** 与浮动便笺共用设置里的 `viewContentZoom`，仅更新已渲染卡片上的 CSS 变量，不重渲 Markdown。 */
+	syncViewContentZoomFromSettings(): void {
+		if (!this.listItemsEl) return;
+		const zoom = Math.max(0.5, Math.min(1, this.plugin.settings.viewContentZoom));
+		this.listItemsEl.querySelectorAll('.csn-list-card').forEach(card => {
+			if (card instanceof HTMLElement) {
+				card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
+			}
+		});
+	}
+
 	private disposeListMarkdownHost(): void {
 		if (this.listMarkdownHost) {
 			this.removeChild(this.listMarkdownHost);

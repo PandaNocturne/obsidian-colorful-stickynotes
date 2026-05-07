@@ -126,6 +126,17 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 	}
 
+	/** 将「内容缩放」同步到所有浮动便笺与已打开的便笺列表卡片（不重渲列表正文）。 */
+	syncViewContentZoomToOpenViews(): void {
+		this.stickies.updateViewContentZoomFromSettings();
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteListView) {
+				v.syncViewContentZoomFromSettings();
+			}
+		}
+	}
+
 	async openNoteListView(): Promise<void> {
 		const { workspace } = this.app;
 		let leaf = workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)[0];
