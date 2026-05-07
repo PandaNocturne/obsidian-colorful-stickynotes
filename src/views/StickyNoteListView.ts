@@ -2,12 +2,14 @@ import {
 	Component,
 	ItemView,
 	MarkdownRenderer,
+	TAbstractFile,
 	TFile,
 	TFolder,
 	WorkspaceLeaf,
 	debounce,
 	normalizePath,
-	setIcon
+	setIcon,
+	type Debouncer
 } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
 import { VIEW_STICKY_NOTE_LIST } from '../types';
@@ -38,6 +40,10 @@ export class StickyNoteListView extends ItemView {
 	/** 当前页 Markdown 渲染子组件挂载点，整页替换前 unload。 */
 	private listMarkdownHost: Component | null = null;
 	private listPageIndex = 0;
+	private debouncedListStructureRefresh: Debouncer<[], void> | null = null;
+	private debouncedListContentRefresh: Debouncer<[], void> | null = null;
+	/** 手动刷新时用 `vault.read` 拉预览，避免缓存未失效时仍显示旧内容。 */
+	private previewForceDiskRead = false;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -63,6 +69,61 @@ export class StickyNoteListView extends ItemView {
 			this.removeChild(this.listMarkdownHost);
 			this.listMarkdownHost = null;
 		}
+	}
+
+	private stickyFolderRoot(): string {
+		return normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+	}
+
+	private pathUnderStickyFolder(path: string): boolean {
+		const root = this.stickyFolderRoot();
+		const p = normalizePath(path);
+		return p === root || p.startsWith(`${root}/`);
+	}
+
+	private cancelListRefreshDebouncers(): void {
+		this.debouncedListStructureRefresh?.cancel();
+		this.debouncedListContentRefresh?.cancel();
+	}
+
+	private registerVaultListRefresh(): void {
+		this.debouncedListStructureRefresh = debounce(() => {
+			this.listPageIndex = 0;
+			void this.renderList();
+		}, 80, false);
+
+		this.debouncedListContentRefresh = debounce(() => {
+			void this.renderList();
+		}, 280, false);
+
+		this.register(() => {
+			this.cancelListRefreshDebouncers();
+		});
+
+		this.registerEvent(
+			this.app.vault.on('create', (f: TAbstractFile) => {
+				if (this.pathUnderStickyFolder(f.path)) this.debouncedListStructureRefresh?.();
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on('delete', (f: TAbstractFile) => {
+				if (this.pathUnderStickyFolder(f.path)) this.debouncedListStructureRefresh?.();
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on('rename', (f: TAbstractFile, oldPath: string) => {
+				if (this.pathUnderStickyFolder(f.path) || this.pathUnderStickyFolder(oldPath)) {
+					this.debouncedListStructureRefresh?.();
+				}
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on('modify', (f: TAbstractFile) => {
+				if (f instanceof TFile && f.extension === 'md' && this.pathUnderStickyFolder(f.path)) {
+					this.debouncedListContentRefresh?.();
+				}
+			})
+		);
 	}
 
 	async onOpen(): Promise<void> {
@@ -102,6 +163,19 @@ export class StickyNoteListView extends ItemView {
 			void this.setListLayout('grid');
 		});
 
+		toolbar.createDiv({ cls: 'csn-list-toolbar-spacer' });
+		const refreshBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-refresh-btn',
+			attr: { 'aria-label': '刷新', title: '立即刷新列表与预览（从磁盘读取正文）' }
+		});
+		setIcon(refreshBtn, 'refresh-ccw');
+		this.registerDomEvent(refreshBtn, 'click', () => {
+			this.cancelListRefreshDebouncers();
+			this.previewForceDiskRead = true;
+			void this.renderList();
+		});
+
 		this.listItemsEl = root.createDiv({ cls: 'csn-list-items' });
 		this.applyListLayoutClass();
 
@@ -137,6 +211,7 @@ export class StickyNoteListView extends ItemView {
 		);
 
 		this.registerDomEvent(this.searchInput, 'input', render);
+		this.registerVaultListRefresh();
 		this.syncLayoutToolbarActive();
 		void this.renderList();
 	}
@@ -167,103 +242,111 @@ export class StickyNoteListView extends ItemView {
 		if (!container || !this.paginationEl || !this.paginationMetaEl) return;
 
 		const query = (this.searchInput?.value ?? '').trim();
+		const forceDisk = this.previewForceDiskRead;
 
-		this.disposeListMarkdownHost();
-		container.empty();
+		try {
+			this.disposeListMarkdownHost();
+			container.empty();
 
-		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
-		const folderAbs = this.app.vault.getAbstractFileByPath(folder);
-		if (!folderAbs) {
-			container.createDiv({ text: `文件夹不存在：${folder}`, cls: 'csn-list-empty' });
-			this.paginationEl.hide();
-			return;
+			const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+			const folderAbs = this.app.vault.getAbstractFileByPath(folder);
+			if (!folderAbs) {
+				container.createDiv({ text: `文件夹不存在：${folder}`, cls: 'csn-list-empty' });
+				this.paginationEl.hide();
+				return;
+			}
+			if (!(folderAbs instanceof TFolder)) {
+				container.createDiv({ text: `便笺目录不是文件夹：${folder}`, cls: 'csn-list-empty' });
+				this.paginationEl.hide();
+				return;
+			}
+
+			const keywords = query
+				.split(/\s+/)
+				.filter(Boolean)
+				.map(k => k.toLowerCase());
+
+			const files = collectMarkdownUnderFolder(folderAbs);
+			const filtered =
+				keywords.length === 0
+					? files
+					: files.filter(f => {
+							const hay = (f.basename + '\n' + f.path).toLowerCase();
+							return keywords.every(k => hay.includes(k));
+					  });
+
+			filtered.sort((a, b) => b.stat.mtime - a.stat.mtime);
+
+			if (filtered.length === 0) {
+				container.createDiv({ text: '没有匹配的便笺', cls: 'csn-list-empty' });
+				this.paginationEl.hide();
+				return;
+			}
+
+			this.paginationEl.show();
+
+			const totalPages = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
+			if (this.listPageIndex >= totalPages) this.listPageIndex = totalPages - 1;
+			if (this.listPageIndex < 0) this.listPageIndex = 0;
+
+			const start = this.listPageIndex * LIST_PAGE_SIZE;
+			const pageFiles = filtered.slice(start, start + LIST_PAGE_SIZE);
+
+			const mdHost = new Component();
+			this.listMarkdownHost = mdHost;
+			this.addChild(mdHost);
+
+			await Promise.all(
+				pageFiles.map(async f => {
+					const card = container.createDiv({ cls: 'csn-list-card' });
+					const main = card.createDiv({
+						cls: 'csn-list-card-main',
+						attr: { title: '双击打开便笺' }
+					});
+					const iconEl = main.createSpan({ cls: 'csn-list-card-icon' });
+					setIcon(iconEl, 'file-text');
+					const col = main.createDiv({ cls: 'csn-list-card-text' });
+					col.createDiv({ cls: 'csn-list-card-name', text: f.basename });
+					col.createDiv({ cls: 'csn-list-card-path', text: f.path });
+					const previewEl = col.createDiv({
+						cls: 'csn-list-card-body csn-list-card-body--rendered markdown-rendered'
+					});
+
+					this.registerDomEvent(main, 'dblclick', evt => {
+						evt.preventDefault();
+						evt.stopPropagation();
+						void this.plugin.openStickyForFile(f);
+					});
+
+					let md = '';
+					try {
+						const raw = forceDisk ? await this.app.vault.read(f) : await this.app.vault.cachedRead(f);
+						md = previewMarkdownSlice(raw, PREVIEW_MARKDOWN_MAX);
+					} catch {
+						md = '*（无法读取预览）*';
+					}
+					if (!md.trim()) md = '*（空白）*';
+
+					await MarkdownRenderer.render(this.app, md, previewEl, f.path, mdHost);
+				})
+			);
+
+			this.paginationMetaEl.setText(
+				`第 ${this.listPageIndex + 1} / ${totalPages} 页 · 本页 ${pageFiles.length} 条 · 共 ${filtered.length} 条`
+			);
+			this.paginationPrevBtn!.disabled = this.listPageIndex <= 0;
+			this.paginationNextBtn!.disabled = this.listPageIndex >= totalPages - 1;
+
+			container.scrollTop = 0;
+		} finally {
+			this.previewForceDiskRead = false;
 		}
-		if (!(folderAbs instanceof TFolder)) {
-			container.createDiv({ text: `便笺目录不是文件夹：${folder}`, cls: 'csn-list-empty' });
-			this.paginationEl.hide();
-			return;
-		}
-
-		const keywords = query
-			.split(/\s+/)
-			.filter(Boolean)
-			.map(k => k.toLowerCase());
-
-		const files = collectMarkdownUnderFolder(folderAbs);
-		const filtered =
-			keywords.length === 0
-				? files
-				: files.filter(f => {
-						const hay = (f.basename + '\n' + f.path).toLowerCase();
-						return keywords.every(k => hay.includes(k));
-				  });
-
-		filtered.sort((a, b) => b.stat.mtime - a.stat.mtime);
-
-		if (filtered.length === 0) {
-			container.createDiv({ text: '没有匹配的便笺', cls: 'csn-list-empty' });
-			this.paginationEl.hide();
-			return;
-		}
-
-		this.paginationEl.show();
-
-		const totalPages = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
-		if (this.listPageIndex >= totalPages) this.listPageIndex = totalPages - 1;
-		if (this.listPageIndex < 0) this.listPageIndex = 0;
-
-		const start = this.listPageIndex * LIST_PAGE_SIZE;
-		const pageFiles = filtered.slice(start, start + LIST_PAGE_SIZE);
-
-		const mdHost = new Component();
-		this.listMarkdownHost = mdHost;
-		this.addChild(mdHost);
-
-		await Promise.all(
-			pageFiles.map(async f => {
-				const card = container.createDiv({ cls: 'csn-list-card' });
-				const main = card.createDiv({
-					cls: 'csn-list-card-main',
-					attr: { title: '双击打开便笺' }
-				});
-				const iconEl = main.createSpan({ cls: 'csn-list-card-icon' });
-				setIcon(iconEl, 'file-text');
-				const col = main.createDiv({ cls: 'csn-list-card-text' });
-				col.createDiv({ cls: 'csn-list-card-name', text: f.basename });
-				col.createDiv({ cls: 'csn-list-card-path', text: f.path });
-				const previewEl = col.createDiv({
-					cls: 'csn-list-card-body csn-list-card-body--rendered markdown-rendered'
-				});
-
-				this.registerDomEvent(main, 'dblclick', evt => {
-					evt.preventDefault();
-					evt.stopPropagation();
-					void this.plugin.openStickyForFile(f);
-				});
-
-				let md = '';
-				try {
-					const raw = await this.app.vault.cachedRead(f);
-					md = previewMarkdownSlice(raw, PREVIEW_MARKDOWN_MAX);
-				} catch {
-					md = '*（无法读取预览）*';
-				}
-				if (!md.trim()) md = '*（空白）*';
-
-				await MarkdownRenderer.render(this.app, md, previewEl, f.path, mdHost);
-			})
-		);
-
-		this.paginationMetaEl.setText(
-			`第 ${this.listPageIndex + 1} / ${totalPages} 页 · 本页 ${pageFiles.length} 条 · 共 ${filtered.length} 条`
-		);
-		this.paginationPrevBtn!.disabled = this.listPageIndex <= 0;
-		this.paginationNextBtn!.disabled = this.listPageIndex >= totalPages - 1;
-
-		container.scrollTop = 0;
 	}
 
 	async onClose(): Promise<void> {
+		this.cancelListRefreshDebouncers();
+		this.debouncedListStructureRefresh = null;
+		this.debouncedListContentRefresh = null;
 		this.disposeListMarkdownHost();
 		this.listItemsEl = null;
 		this.layoutColumnBtn = null;

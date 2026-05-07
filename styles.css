@@ -506,6 +506,10 @@
   display: flex;
   gap: 2px;
 }
+.csn-list-toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
 .csn-list-layout-btn.is-active {
   background-color: var(--background-modifier-hover);
   border-radius: var(--radius-s);
