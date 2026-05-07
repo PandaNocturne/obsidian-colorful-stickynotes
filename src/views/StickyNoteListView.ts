@@ -118,9 +118,28 @@ async function filterStickyFilesByKeywords(
 	return files.filter((_, i) => flags[i]!);
 }
 
+/** 空数组表示不过滤；否则保留解析颜色命中任一选中色的便笺（或关系）。 */
+async function filterStickyFilesByColors(
+	app: App,
+	files: TFile[],
+	colors: readonly StickyColorId[]
+): Promise<TFile[]> {
+	if (colors.length === 0) return files;
+	const want = new Set(colors);
+	const rows = await Promise.all(
+		files.map(async f => {
+			const c = (await resolveStickyBgColorForFile(app, f)) ?? 'default';
+			return want.has(c) ? f : null;
+		})
+	);
+	return rows.filter((f): f is TFile => f !== null);
+}
+
 export class StickyNoteListView extends ItemView {
 	private listItemsEl: HTMLElement | null = null;
 	private readonly sortBtnByMode = new Map<NoteListSort, HTMLButtonElement>();
+	private readonly colorFilterBtnById = new Map<StickyColorId, HTMLButtonElement>();
+	private colorFilterBarEl: HTMLElement | null = null;
 	private searchInput: HTMLInputElement | null = null;
 	private paginationEl: HTMLElement | null = null;
 	private paginationPrevBtn: HTMLButtonElement | null = null;
@@ -287,6 +306,29 @@ export class StickyNoteListView extends ItemView {
 			});
 		}
 
+		const colorBar = toolbar.createDiv({ cls: 'csn-list-toolbar-color-filter' });
+		this.colorFilterBarEl = colorBar;
+		const colorLabel = colorBar.createSpan({ cls: 'csn-list-toolbar-label', text: '颜色' });
+		colorLabel.setAttr('aria-hidden', 'true');
+		const colorBtns = colorBar.createDiv({ cls: 'csn-list-color-filter-btns' });
+		this.colorFilterBtnById.clear();
+
+		for (const c of SHEET_COLOR_ORDER) {
+			const sw = colorBtns.createEl('button', {
+				type: 'button',
+				cls: 'clickable-icon csn-list-color-filter-btn csn-list-color-filter-swatch',
+				attr: {
+					'aria-label': `${c.label}，点击加入或移出筛选；未选任何色时显示全部`,
+					title: `${c.label}（多选）`,
+					'data-csn-list-color': c.id
+				}
+			});
+			this.colorFilterBtnById.set(c.id, sw);
+			this.registerDomEvent(sw, 'click', () => {
+				void this.toggleListColorFilter(c.id);
+			});
+		}
+
 		toolbar.createDiv({ cls: 'csn-list-toolbar-spacer' });
 		const newStickyBtn = toolbar.createEl('button', {
 			type: 'button',
@@ -347,6 +389,7 @@ export class StickyNoteListView extends ItemView {
 		this.registerDomEvent(this.searchInput, 'input', render);
 		this.registerVaultListRefresh();
 		this.syncSortToolbarActive();
+		this.syncColorFilterToolbarActive();
 		void this.renderList();
 	}
 
@@ -362,6 +405,26 @@ export class StickyNoteListView extends ItemView {
 		this.plugin.settings.noteListSort = sort;
 		await this.plugin.saveSettings();
 		this.syncSortToolbarActive();
+		this.listPageIndex = 0;
+		void this.renderList();
+	}
+
+	private syncColorFilterToolbarActive(): void {
+		const sel = new Set(this.plugin.settings.noteListColorFilters);
+		for (const [id, btn] of this.colorFilterBtnById) {
+			btn.toggleClass('is-active', sel.has(id));
+		}
+	}
+
+	/** 切换某色是否参与筛选；均未选中时显示全部便笺。 */
+	private async toggleListColorFilter(color: StickyColorId): Promise<void> {
+		const arr = [...this.plugin.settings.noteListColorFilters];
+		const i = arr.indexOf(color);
+		if (i >= 0) arr.splice(i, 1);
+		else arr.push(color);
+		this.plugin.settings.noteListColorFilters = arr;
+		await this.plugin.saveSettings();
+		this.syncColorFilterToolbarActive();
 		this.listPageIndex = 0;
 		void this.renderList();
 	}
@@ -382,13 +445,17 @@ export class StickyNoteListView extends ItemView {
 			if (!folderAbs) {
 				container.createDiv({ text: `文件夹不存在：${folder}`, cls: 'csn-list-empty' });
 				this.paginationEl.hide();
+				this.colorFilterBarEl?.hide();
 				return;
 			}
 			if (!(folderAbs instanceof TFolder)) {
 				container.createDiv({ text: `便笺目录不是文件夹：${folder}`, cls: 'csn-list-empty' });
 				this.paginationEl.hide();
+				this.colorFilterBarEl?.hide();
 				return;
 			}
+
+			this.colorFilterBarEl?.show();
 
 			const keywords = query
 				.split(/\s+/)
@@ -396,8 +463,9 @@ export class StickyNoteListView extends ItemView {
 				.map(k => k.toLowerCase());
 
 			const files = collectMarkdownUnderFolder(folderAbs);
-			const filtered =
+			let filtered =
 				keywords.length === 0 ? files : await filterStickyFilesByKeywords(this.app, files, keywords);
+			filtered = await filterStickyFilesByColors(this.app, filtered, this.plugin.settings.noteListColorFilters);
 
 			const prio = this.plugin.listPrioritizeStickyPath;
 			const sortMode = this.plugin.settings.noteListSort;
@@ -554,6 +622,8 @@ export class StickyNoteListView extends ItemView {
 		this.paginationPrevBtn = null;
 		this.paginationNextBtn = null;
 		this.paginationMetaEl = null;
+		this.colorFilterBarEl = null;
+		this.colorFilterBtnById.clear();
 		this.contentEl.empty();
 	}
 }

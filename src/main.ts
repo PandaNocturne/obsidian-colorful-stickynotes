@@ -33,6 +33,19 @@ const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [
 	'new-tab'
 ];
 
+function normalizeNoteListColorFilters(value: unknown): StickyColorId[] {
+	if (!Array.isArray(value)) return [];
+	const out: StickyColorId[] = [];
+	const seen = new Set<string>();
+	for (const x of value) {
+		if (typeof x !== 'string' || !VALID_NEW_STICKY_BG.includes(x as StickyColorId)) continue;
+		if (seen.has(x)) continue;
+		seen.add(x);
+		out.push(x as StickyColorId);
+	}
+	return out;
+}
+
 export default class ColorfulStickyNotesPlugin extends Plugin {
 	settings!: ColorfulStickyNotesSettings;
 	stickies!: StickyNoteManager;
@@ -161,6 +174,23 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.includes(nls as NoteListSort)) {
 			this.settings.noteListSort = DEFAULT_SETTINGS.noteListSort;
 		}
+
+		const hasNewColorFilters = 'noteListColorFilters' in raw;
+		if (hasNewColorFilters) {
+			this.settings.noteListColorFilters = normalizeNoteListColorFilters(raw.noteListColorFilters);
+		} else {
+			const leg = raw.noteListColorFilter;
+			if (
+				typeof leg === 'string' &&
+				leg !== 'all' &&
+				VALID_NEW_STICKY_BG.includes(leg as StickyColorId)
+			) {
+				this.settings.noteListColorFilters = [leg as StickyColorId];
+			} else {
+				this.settings.noteListColorFilters = [];
+			}
+		}
+		delete st.noteListColorFilter;
 
 		const nlo = this.settings.noteListOpenLocation;
 		if (

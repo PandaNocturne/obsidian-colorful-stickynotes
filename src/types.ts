@@ -44,3 +44,4 @@ export type NoteListSort = 'ctime-desc' | 'ctime-asc' | 'mtime-desc' | 'mtime-as
 
 /** 便笺列表首次打开时的挂载位置。 */
 export type NoteListOpenLocation = 'left-sidebar' | 'right-sidebar' | 'new-tab';
+

@@ -38,6 +38,8 @@ export interface ColorfulStickyNotesSettings {
 	noteListPageSize: number;
 	/** 便笺列表排序（默认：创建时间新在前）。 */
 	noteListSort: NoteListSort;
+	/** 便笺列表按背景色多选筛选（空数组表示显示全部）。 */
+	noteListColorFilters: StickyColorId[];
 	/** 便笺列表首次打开时的挂载位置。 */
 	noteListOpenLocation: NoteListOpenLocation;
 	/** 关闭空白便笺移入回收站前是否弹出确认框（默认开启）。 */
@@ -64,6 +66,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	noteListGridMinWidth: 320,
 	noteListPageSize: 12,
 	noteListSort: 'ctime-desc',
+	noteListColorFilters: [],
 	noteListOpenLocation: 'right-sidebar',
 	confirmBlankStickyTrashOnClose: true,
 	defaultNewStickyWidth: 420,

@@ -495,8 +495,8 @@
   --csn-list-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 /* 便笺列表 */
-.csn-list-view {
-  padding: 8px 10px 12px;
+.workspace-leaf-content .view-content.csn-list-view {
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -529,6 +529,71 @@
 .csn-list-sort-btn.is-active {
   background-color: var(--background-modifier-hover);
   border-radius: var(--radius-s);
+}
+/* 颜色筛选（顶部工具栏，排序右侧）：与卡片色条一致 */
+.csn-list-toolbar-color-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.csn-list-color-filter-btns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.csn-list-color-filter-btn.csn-list-color-filter-swatch {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  box-sizing: border-box;
+}
+.csn-list-color-filter-btn.is-active {
+  box-shadow: inset 0 0 0 2px var(--text-accent);
+}
+.csn-list-color-filter-swatch[data-csn-list-color='yellow'] {
+  background: #f5e6a3;
+}
+.csn-list-color-filter-swatch[data-csn-list-color='mint'] {
+  background: #a8e6cf;
+}
+.csn-list-color-filter-swatch[data-csn-list-color='pink'] {
+  background: #f5c2d6;
+}
+.csn-list-color-filter-swatch[data-csn-list-color='lavender'] {
+  background: #d4c4f5;
+}
+.csn-list-color-filter-swatch[data-csn-list-color='blue'] {
+  background: #a8d4f0;
+}
+.csn-list-color-filter-swatch[data-csn-list-color='gray'] {
+  background: #d8d8d8;
+}
+.csn-list-color-filter-swatch[data-csn-list-color='default'] {
+  background: var(--background-modifier-hover);
+}
+.theme-dark .csn-list-color-filter-swatch[data-csn-list-color='yellow'] {
+  background: #5c5430;
+}
+.theme-dark .csn-list-color-filter-swatch[data-csn-list-color='mint'] {
+  background: #2d5c48;
+}
+.theme-dark .csn-list-color-filter-swatch[data-csn-list-color='pink'] {
+  background: #5c3040;
+}
+.theme-dark .csn-list-color-filter-swatch[data-csn-list-color='lavender'] {
+  background: #403060;
+}
+.theme-dark .csn-list-color-filter-swatch[data-csn-list-color='blue'] {
+  background: #2d4a5c;
+}
+.theme-dark .csn-list-color-filter-swatch[data-csn-list-color='gray'] {
+  background: #404040;
 }
 /* 自适应网格（列最小宽度、卡片高度由 `.csn-list-view` 上 CSS 变量控制） */
 .csn-list-items {
