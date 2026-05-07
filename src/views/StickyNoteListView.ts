@@ -385,13 +385,6 @@ export class StickyNoteListView extends ItemView {
 						void this.app.workspace.getLeaf('tab').openFile(f);
 					});
 			});
-			menu.addItem(item => {
-				item.setTitle('打开便笺窗口')
-					.setIcon('square-pen')
-					.onClick(() => {
-						void this.plugin.openStickyForFile(f);
-					});
-			});
 			menu.addSeparator();
 			menu.addItem(item => {
 				item.setTitle('修改背景').setIcon('palette');
