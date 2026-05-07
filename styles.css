@@ -107,6 +107,7 @@
   background: var(--csn-b);
   border-top: 1px solid var(--csn-border);
   position: relative;
+  z-index: 20;
 }
 .csn-sticky-bottombar-title {
   flex: 1 1 auto;
