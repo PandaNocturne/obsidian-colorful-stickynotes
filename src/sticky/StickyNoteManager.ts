@@ -202,6 +202,7 @@ export class StickyNoteManager {
 		});
 
 		this.popovers.set(id, pop);
+		await this.yieldForStickyChromePaint();
 		await pop.openFile(f);
 		const y = await this.resolveStickyBgColorForOpen(f);
 		if (y) pop.setColor(y);
@@ -377,6 +378,11 @@ export class StickyNoteManager {
 		this.persistOpenWindows();
 	}
 
+	/** 让便笺外壳先完成一帧绘制，再执行叶视图 setViewState / 读盘等重活。 */
+	private yieldForStickyChromePaint(): Promise<void> {
+		return new Promise(resolve => requestAnimationFrame(() => resolve()));
+	}
+
 	async openExistingSticky(serial: SerializedStickyWindow): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(serial.path);
 		if (!(file instanceof TFile)) {
@@ -386,27 +392,22 @@ export class StickyNoteManager {
 		const id = serial.id || this.newId();
 		const b = serial.bounds ?? this.getDefaultBounds();
 		const savedColor = serial.color;
-		/* 工作区 JSON 里已有 color 时不再读盘解析 YAML，减轻批量恢复卡顿。 */
-		let yamlBoot: StickyColorId | null = null;
-		if (savedColor === undefined) {
-			yamlBoot = await this.resolveStickyBgColorForOpen(file);
-		}
-		const initialColor = savedColor ?? yamlBoot ?? 'default';
+		/* 不在创建窗口前 await 读 YAML：外壳先出现，颜色在 openFile 后再对齐（可能短暂为默认色）。 */
 		const pop = this.createPopoverShell(id, {
 			bounds: b,
-			initialColor,
+			initialColor: savedColor ?? 'default',
 			initialCollapsed: !!serial.collapsed,
 			initialYamlVisible: !!serial.yamlVisible
 		});
 		this.popovers.set(id, pop);
+		await this.yieldForStickyChromePaint();
 		await pop.openFile(file);
-		if (savedColor === undefined) {
-			const after = this.readStickyColorFromMetadataCache(file) ?? yamlBoot;
-			if (after) pop.setColor(after);
-		} else {
-			pop.setColor(savedColor);
-		}
 		pop.setBounds(b);
+		if (savedColor === undefined) {
+			const after =
+				this.readStickyColorFromMetadataCache(file) ?? (await this.resolveStickyBgColorForOpen(file));
+			if (after) pop.setColor(after);
+		}
 		this.persistOpenWindows();
 	}
 

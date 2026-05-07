@@ -20,10 +20,6 @@
 .csn-sticky--active {
   opacity: 1;
   filter: none;
-  box-shadow: var(--shadow-s), 0 8px 28px color-mix(in srgb, var(--text-normal) 10%, transparent);
-}
-.theme-dark .csn-sticky--active {
-  box-shadow: var(--shadow-s), 0 8px 32px color-mix(in srgb, #000 45%, transparent);
 }
 .csn-sticky-header {
   display: flex;

@@ -519,7 +519,10 @@ export class StickyNotePopover {
 			await leaf.openFile(file, { active: true });
 		}
 
+		/* setViewState 后先交出一帧，让便笺窗口与叶视图占位先上屏，再跑 loadIfDeferred 的重排版。 */
+		await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 		await leaf.loadIfDeferred?.();
+		if (this.disposed) return;
 		this.syncModeToggleUi();
 		this.requestLeafMeasure();
 	}
