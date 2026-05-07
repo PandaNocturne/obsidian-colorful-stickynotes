@@ -718,7 +718,11 @@
   border: 1px solid var(--csn-list-preview-border);
   border-radius: var(--radius-s);
   background: var(--csn-list-preview-bg);
-  /* 与浮动便笺 `.view-content` 内阅读区一致：用正文字号作基准；勿继承侧栏 ItemView 的 UI 字号，否则再叠 zoom 会显得明显偏小（并非多写了一次 zoom） */
+  /*
+	 * 与浮动便笺内 Markdown 阅读视图一致：侧栏 ItemView 默认走界面字体，须显式用笔记正文变量，
+	 * 否则列表预览与便笺窗口正文字体族不一致。
+	 */
+  font-family: var(--font-text);
   font-size: var(--font-text-size);
   line-height: var(--line-height-normal);
   word-break: break-word;
@@ -726,6 +730,7 @@
 }
 .csn-list-card-body--rendered .markdown-preview-view,
 .csn-list-card-body--rendered .markdown-preview-sizer {
+  font-family: inherit;
   font-size: inherit;
 }
 .csn-list-card-body--rendered .markdown-preview-sizer {
