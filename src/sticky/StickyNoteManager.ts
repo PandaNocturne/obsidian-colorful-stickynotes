@@ -2,7 +2,11 @@ import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian'
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
-import { getStickyBgColorFromMetadataCache, resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
+import {
+	getStickyBgColorFromMetadataCache,
+	parseStickyBgColorFromMarkdownSource,
+	resolveStickyBgColorForFile
+} from '../utils/sticky-bg-from-file';
 import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
 import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
@@ -199,11 +203,27 @@ export class StickyNoteManager {
 				}
 			}
 		}
+
+		const fallbackBg = this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
+		const resolvedNewColor =
+			initial?.color ?? (sourcePopover ? sourcePopover.getColor() : undefined) ?? fallbackBg;
+
+		/** 空白新建且需写入背景时，直接把 YAML 放进首次 create，避免 processFrontMatter 二次落盘与元数据重算。 */
+		let bodyForCreate = body;
+		if (!sourcePopover && resolvedNewColor !== 'default') {
+			if (parseStickyBgColorFromMarkdownSource(bodyForCreate.replace(/^\uFEFF/, '')) === null) {
+				if (bodyForCreate.replace(/^\uFEFF/, '').trim() === '') {
+					bodyForCreate = `---\n${FM_COLOR_KEY}: ${resolvedNewColor}\n---\n\n`;
+				}
+			}
+		}
+		const preParsedStickyBg = parseStickyBgColorFromMarkdownSource(bodyForCreate);
+
 		const normalizedPath = normalizePath(path);
 		this.plugin.listPrioritizeStickyPath = normalizedPath;
 
 		try {
-			await this.app.vault.create(path, body);
+			await this.app.vault.create(path, bodyForCreate);
 		} catch {
 			if (this.plugin.listPrioritizeStickyPath === normalizedPath) {
 				this.plugin.listPrioritizeStickyPath = null;
@@ -222,9 +242,7 @@ export class StickyNoteManager {
 		}
 
 		const id = initial?.id ?? this.newId();
-		const fallbackBg = this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
-		const color =
-			initial?.color ?? (sourcePopover ? sourcePopover.getColor() : undefined) ?? fallbackBg;
+		const color = resolvedNewColor;
 		const collapsed = initial?.collapsed ?? false;
 		const yamlVisible = initial?.yamlVisible ?? false;
 
@@ -248,25 +266,36 @@ export class StickyNoteManager {
 		this.bringStickyToFront(pop);
 		await this.yieldForStickyChromePaint();
 		await pop.openFile(f);
+
+		const scheduleListRefreshSoon = (): void => {
+			window.setTimeout(() => {
+				requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
+			}, 0);
+		};
+		const endMuteAfterList = (p: string): void => {
+			window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(p), 120);
+		};
+
 		if (sourcePopover) {
 			this.plugin.muteStickyListModifyPaths.add(f.path);
 			try {
 				await this.setStickyBackgroundColorForFile(f, color);
 			} finally {
-				requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
-				window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(f.path), 120);
+				scheduleListRefreshSoon();
+				endMuteAfterList(f.path);
 			}
 		} else {
-			const y = await resolveStickyBgColorForFile(this.app, f);
-			if (y) {
-				pop.setColor(y);
-			} else {
+			const fromCache = getStickyBgColorFromMetadataCache(this.app, f);
+			const yamlGuess = fromCache ?? preParsedStickyBg;
+			if (yamlGuess) {
+				pop.setColor(yamlGuess);
+			} else if (color !== 'default') {
 				this.plugin.muteStickyListModifyPaths.add(f.path);
 				try {
 					await this.setStickyBackgroundColorForFile(f, color);
 				} finally {
-					requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
-					window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(f.path), 120);
+					scheduleListRefreshSoon();
+					endMuteAfterList(f.path);
 				}
 			}
 		}

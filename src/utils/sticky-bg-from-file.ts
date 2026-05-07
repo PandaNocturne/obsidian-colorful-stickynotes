@@ -24,7 +24,8 @@ export function getStickyBgColorFromMetadataCache(app: App, file: TFile): Sticky
 	return normalizeStickyBgValue(raw);
 }
 
-function parseStickyColorFromMarkdownSource(source: string): StickyColorId | null {
+/** 解析 Markdown 源码首段 YAML 中的 `colorful-sticky-bg`（不落盘、不读 vault）。 */
+export function parseStickyBgColorFromMarkdownSource(source: string): StickyColorId | null {
 	const text = source.replace(/^\uFEFF/, '');
 	const m = text.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---(?:[\t ]*)(?:\r?\n|$)/);
 	if (!m?.[1]) return null;
@@ -40,7 +41,7 @@ function parseStickyColorFromMarkdownSource(source: string): StickyColorId | nul
 async function readStickyColorFromVaultCachedRead(app: App, file: TFile): Promise<StickyColorId | null> {
 	try {
 		const text = await app.vault.cachedRead(file);
-		return parseStickyColorFromMarkdownSource(text);
+		return parseStickyBgColorFromMarkdownSource(text);
 	} catch {
 		return null;
 	}
