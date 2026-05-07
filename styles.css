@@ -1,0 +1,344 @@
+/* 多彩便笺 — 浮动窗口 */
+.csn-sticky {
+	--csn-h: var(--background-secondary);
+	--csn-b: var(--background-primary);
+	--csn-border: var(--background-modifier-border);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--csn-border);
+	background: var(--csn-b);
+	box-shadow: var(--shadow-s);
+}
+
+.csn-sticky-header {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	min-height: 36px;
+	padding: 0 4px 0 6px;
+	background: var(--csn-h);
+	border-bottom: 1px solid var(--csn-border);
+	user-select: none;
+	cursor: grab;
+}
+
+.csn-sticky--active .csn-sticky-header {
+	cursor: grabbing;
+}
+
+.csn-sticky-header-left,
+.csn-sticky-header-right {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.csn-sticky-header-spacer {
+	flex: 1 1 auto;
+	min-width: 8px;
+}
+
+.csn-sticky-header .csn-sticky-header-btn,
+.csn-sticky-bottombar .csn-sticky-bottom-btn,
+.csn-sticky-bottombar .csn-sticky-add-cmd {
+	background: transparent !important;
+	border: none !important;
+	border-radius: var(--radius-s);
+	box-shadow: none !important;
+	padding: 4px;
+	margin: 0 1px;
+}
+
+.csn-sticky-header .csn-sticky-header-btn:hover,
+.csn-sticky-bottombar .csn-sticky-bottom-btn:hover,
+.csn-sticky-bottombar .csn-sticky-add-cmd:hover {
+	background-color: var(--background-modifier-hover) !important;
+}
+
+.csn-sticky-main {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.csn-sticky-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.csn-sticky-body .workspace-split.mod-vertical,
+.csn-sticky-body .workspace-split.mod-vertical .workspace-leaf {
+	min-height: 0 !important;
+}
+
+.csn-sticky-bottombar {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	padding: 2px 4px 4px;
+	background: var(--csn-b);
+	border-top: 1px solid var(--csn-border);
+	position: relative;
+}
+
+.csn-sticky-add-cmd {
+	position: relative;
+}
+
+.csn-sticky--bar-autohide .csn-sticky-bottombar {
+	opacity: 0;
+	max-height: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+	border-top-color: transparent;
+	pointer-events: none;
+	overflow: hidden;
+	transition:
+		opacity 0.15s ease,
+		max-height 0.2s ease;
+}
+
+.csn-sticky--bar-autohide:hover .csn-sticky-bottombar,
+.csn-sticky--bar-autohide .csn-sticky-bottombar:focus-within {
+	opacity: 1;
+	max-height: 48px;
+	padding: 2px 4px 4px;
+	border-top: 1px solid var(--csn-border);
+	pointer-events: auto;
+}
+
+.csn-sticky--collapsed .csn-sticky-body,
+.csn-sticky--collapsed .csn-sticky-bottombar {
+	display: none;
+}
+
+.csn-sticky--collapsed {
+	height: auto !important;
+	min-height: 0;
+}
+
+.csn-sticky--collapsed .csn-sticky-main {
+	flex: 0 0 auto;
+}
+
+/* 调整大小 */
+.csn-sticky .csn-sticky-resize {
+	position: absolute;
+	z-index: 2;
+}
+.csn-sticky .csn-sticky-resize.is-n,
+.csn-sticky .csn-sticky-resize.is-s {
+	left: 8px;
+	right: 8px;
+	height: 6px;
+}
+.csn-sticky .csn-sticky-resize.is-n {
+	top: 0;
+	cursor: n-resize;
+}
+.csn-sticky .csn-sticky-resize.is-s {
+	bottom: 0;
+	cursor: s-resize;
+}
+.csn-sticky .csn-sticky-resize.is-w,
+.csn-sticky .csn-sticky-resize.is-e {
+	top: 8px;
+	bottom: 8px;
+	width: 6px;
+}
+.csn-sticky .csn-sticky-resize.is-w {
+	left: 0;
+	cursor: w-resize;
+}
+.csn-sticky .csn-sticky-resize.is-e {
+	right: 0;
+	cursor: e-resize;
+}
+.csn-sticky .csn-sticky-resize.is-nw,
+.csn-sticky .csn-sticky-resize.is-ne,
+.csn-sticky .csn-sticky-resize.is-sw,
+.csn-sticky .csn-sticky-resize.is-se {
+	width: 10px;
+	height: 10px;
+}
+.csn-sticky .csn-sticky-resize.is-nw {
+	top: 0;
+	left: 0;
+	cursor: nw-resize;
+}
+.csn-sticky .csn-sticky-resize.is-ne {
+	top: 0;
+	right: 0;
+	cursor: ne-resize;
+}
+.csn-sticky .csn-sticky-resize.is-sw {
+	bottom: 0;
+	left: 0;
+	cursor: sw-resize;
+}
+.csn-sticky .csn-sticky-resize.is-se {
+	bottom: 0;
+	right: 0;
+	cursor: se-resize;
+}
+
+/* 主题色 */
+.csn-sticky[data-csn-color='default'] {
+	--csn-h: var(--background-secondary);
+	--csn-b: var(--background-primary);
+}
+.csn-sticky[data-csn-color='yellow'] {
+	--csn-h: #f5e6a3;
+	--csn-b: #fff8d4;
+}
+.csn-sticky[data-csn-color='pink'] {
+	--csn-h: #f5c2d6;
+	--csn-b: #ffe8f0;
+}
+.csn-sticky[data-csn-color='mint'] {
+	--csn-h: #a8e6cf;
+	--csn-b: #e4fff4;
+}
+.csn-sticky[data-csn-color='blue'] {
+	--csn-h: #a8d4f0;
+	--csn-b: #e8f4ff;
+}
+.csn-sticky[data-csn-color='lavender'] {
+	--csn-h: #d4c4f5;
+	--csn-b: #f0e8ff;
+}
+.csn-sticky[data-csn-color='gray'] {
+	--csn-h: #d8d8d8;
+	--csn-b: #f0f0f0;
+}
+.theme-dark .csn-sticky[data-csn-color='yellow'] {
+	--csn-h: #5c5430;
+	--csn-b: #3d3820;
+}
+.theme-dark .csn-sticky[data-csn-color='pink'] {
+	--csn-h: #5c3040;
+	--csn-b: #3d2028;
+}
+.theme-dark .csn-sticky[data-csn-color='mint'] {
+	--csn-h: #2d5c48;
+	--csn-b: #1e3d30;
+}
+.theme-dark .csn-sticky[data-csn-color='blue'] {
+	--csn-h: #2d4a5c;
+	--csn-b: #1e303d;
+}
+.theme-dark .csn-sticky[data-csn-color='lavender'] {
+	--csn-h: #403060;
+	--csn-b: #282040;
+}
+.theme-dark .csn-sticky[data-csn-color='gray'] {
+	--csn-h: #404040;
+	--csn-b: #2a2a2a;
+}
+
+/* YAML 显示开关 */
+.csn-sticky:not(.csn-metadata-on) .metadata-container {
+	display: none !important;
+}
+
+.csn-sticky.csn-metadata-on .metadata-container {
+	display: block !important;
+}
+
+/* 便笺列表 */
+.csn-list-view {
+	padding: 8px 10px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+}
+
+.csn-list-search-input {
+	width: 100%;
+}
+
+.csn-list-items {
+	overflow: auto;
+	flex: 1 1 auto;
+}
+
+.csn-list-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 6px 4px;
+	border-radius: var(--radius-s);
+	cursor: var(--cursor);
+}
+
+.csn-list-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.csn-list-row-name {
+	font-weight: 500;
+}
+
+.csn-list-row-path {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.csn-list-empty {
+	color: var(--text-muted);
+	padding: 8px 4px;
+}
+
+/* 工作区面板 */
+.csn-ws-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 4px 0 8px;
+}
+
+.csn-ws-name {
+	flex: 1 1 auto;
+}
+
+.csn-cmd-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin: 4px 0;
+}
+
+.csn-cmd-label {
+	font-size: var(--font-ui-small);
+}
+
+.csn-setting-filename-block .csn-setting-filename-preview {
+	margin-top: -4px;
+	margin-bottom: 10px;
+	padding: 6px 0 2px;
+	font-size: var(--font-ui-small);
+}
+
+.csn-setting-filename-block .csn-filename-preview-code {
+	font-size: var(--font-ui-small);
+	word-break: break-all;
+}
+
+.csn-filename-sample-line {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	margin-top: 2px;
+}
+
+.csn-filename-sample-value {
+	color: var(--text-normal);
+	margin-left: 4px;
+}
