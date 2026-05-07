@@ -1,4 +1,4 @@
-import { normalizePath, Notice, TFile, type App } from 'obsidian';
+import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
@@ -8,10 +8,21 @@ import { StickyNotePopover } from './StickyNotePopover';
 
 const FM_COLOR_KEY = 'colorful-sticky-bg';
 
+/** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
+function executeCommandById(app: App, commandId: string): boolean {
+	const withCommands = app as unknown as {
+		commands?: { executeCommandById: (id: string) => boolean };
+	};
+	return withCommands.commands?.executeCommandById(commandId) ?? false;
+}
+
 export class StickyNoteManager {
 	private readonly popovers = new Map<string, StickyNotePopover>();
 	private readonly mount = document.body;
 	private saveTimer: number | null = null;
+	/** 等待内置删除命令完成时挂起的 vault 监听，避免重复注册。 */
+	private pendingDeleteListener: EventRef | null = null;
+	private pendingDeleteSafetyTimer: number | null = null;
 	private dragCluster = new Set<string>();
 	private draggingId: string | null = null;
 
@@ -334,22 +345,49 @@ export class StickyNoteManager {
 		);
 	}
 
-	private async deleteCurrentStickyNote(id: string): Promise<void> {
+	private clearPendingDeleteListener(): void {
+		if (this.pendingDeleteListener !== null) {
+			this.app.vault.offref(this.pendingDeleteListener);
+			this.pendingDeleteListener = null;
+		}
+		if (this.pendingDeleteSafetyTimer !== null) {
+			window.clearTimeout(this.pendingDeleteSafetyTimer);
+			this.pendingDeleteSafetyTimer = null;
+		}
+	}
+
+	private deleteCurrentStickyNote(id: string): void {
 		const pop = this.popovers.get(id);
+		const leaf = pop?.leaf ?? null;
 		const file =
 			pop?.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
-		if (!(file instanceof TFile)) {
+		if (!(file instanceof TFile) || !leaf) {
 			this.closeSticky(id);
 			return;
 		}
-		if (!confirm(`确定删除「${file.basename}」？文件将移入库内回收站（.trash）。`)) return;
-		try {
-			await this.app.vault.trash(file, false);
-		} catch {
-			new Notice('删除失败');
-			return;
-		}
-		this.closeSticky(id);
+
+		this.clearPendingDeleteListener();
+		const targetPath = file.path;
+		this.pendingDeleteListener = this.app.vault.on('delete', f => {
+			if (f.path !== targetPath) return;
+			this.clearPendingDeleteListener();
+			this.closeSticky(id);
+		});
+
+		void Promise.resolve(this.app.workspace.setActiveLeaf(leaf, { focus: true })).then(
+			() => {
+				const ok = executeCommandById(this.app, 'app:delete-file');
+				if (!ok) {
+					this.clearPendingDeleteListener();
+					new Notice('无法执行「删除当前笔记」命令');
+					return;
+				}
+				this.pendingDeleteSafetyTimer = window.setTimeout(() => this.clearPendingDeleteListener(), 120_000);
+			},
+			() => {
+				this.clearPendingDeleteListener();
+			}
+		);
 	}
 
 	closeSticky(id: string): void {

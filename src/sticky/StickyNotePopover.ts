@@ -48,7 +48,7 @@ export interface StickyNotePopoverOptions {
 	onCollapseChange?: (c: boolean) => void;
 	onYamlVisibilityChange?: (v: boolean) => void;
 	onOpenNoteList: () => void;
-	/** 删除当前便笺文件（移入回收站）并关闭窗口，由管理器确认与执行。 */
+	/** 删除便笺：由管理器激活当前叶视图并执行 Obsidian 默认「删除当前笔记」命令。 */
 	onDeleteCurrentSticky: () => void;
 }
 
@@ -353,7 +353,7 @@ export class StickyNotePopover {
 			evt.stopPropagation();
 		});
 
-		/* 自上而下：删除当前便笺 → 便笺列表；底部无缝颜色条 */
+		/* 自上而下：删除便笺 → 便笺列表；底部无缝颜色条 */
 		const actions = this.sheetPanelEl.createDiv({ cls: 'csn-sticky-sheet-actions' });
 
 		const deleteBtn = actions.createEl('button', {
@@ -362,7 +362,7 @@ export class StickyNotePopover {
 		});
 		const delIc = deleteBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
 		setIcon(delIc, 'trash-2');
-		deleteBtn.createSpan({ text: '删除当前便笺' });
+		deleteBtn.createSpan({ text: '删除便笺' });
 		this.plugin.registerDomEvent(deleteBtn, 'click', evt => {
 			evt.preventDefault();
 			evt.stopPropagation();
