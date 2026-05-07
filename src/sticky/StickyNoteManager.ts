@@ -18,6 +18,8 @@ function executeCommandById(app: App, commandId: string): boolean {
 export class StickyNoteManager {
 	private readonly popovers = new Map<string, StickyNotePopover>();
 	private readonly mount = document.body;
+	/** 便笺间 z-index 微调，单调递增即可。 */
+	private stickyZStackSeq = 0;
 	private saveTimer: number | null = null;
 	/** 等待内置删除命令完成时挂起的 vault 监听，避免重复注册。 */
 	private pendingDeleteListener: EventRef | null = null;
@@ -36,6 +38,33 @@ export class StickyNoteManager {
 
 	async init(): Promise<void> {
 		this.workspaces = await loadWorkspacesFile(this.plugin);
+		this.plugin.registerEvent(
+			this.app.workspace.on('active-leaf-change', leaf => {
+				if (!leaf) return;
+				for (const pop of this.popovers.values()) {
+					if (pop.leaf === leaf) {
+						this.bringStickyToFront(pop);
+						return;
+					}
+				}
+				for (const p of this.popovers.values()) {
+					p.setActiveHighlight(false);
+				}
+			})
+		);
+	}
+
+	private bringStickyToFront(pop: StickyNotePopover): void {
+		for (const p of this.popovers.values()) {
+			p.setActiveHighlight(p === pop);
+		}
+		pop.setZStackBoost(++this.stickyZStackSeq);
+	}
+
+	private bringStickyToFrontById(id: string): void {
+		const pop = this.popovers.get(id);
+		if (!pop) return;
+		this.bringStickyToFront(pop);
 	}
 
 	private scheduleSaveWorkspaces(): void {
@@ -230,7 +259,8 @@ export class StickyNoteManager {
 			onCollapseChange: () => this.persistOpenWindows(),
 			onYamlVisibilityChange: () => this.persistOpenWindows(),
 			onOpenNoteList: () => void this.plugin.openNoteListView(),
-			onDeleteCurrentSticky: () => void this.deleteCurrentStickyNote(id)
+			onDeleteCurrentSticky: () => void this.deleteCurrentStickyNote(id),
+			onActivate: () => this.bringStickyToFrontById(id)
 		});
 	}
 

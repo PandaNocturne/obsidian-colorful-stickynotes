@@ -46,6 +46,8 @@ export interface StickyNotePopoverOptions {
 	onOpenNoteList: () => void;
 	/** 删除便笺：由管理器激活当前叶视图并执行 Obsidian 默认「删除当前笔记」命令。 */
 	onDeleteCurrentSticky: () => void;
+	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
+	onActivate: () => void;
 }
 
 const SHEET_COLOR_ORDER: { id: StickyColorId; label: string }[] = [
@@ -107,6 +109,18 @@ export class StickyNotePopover {
 			cls: 'csn-sticky',
 			attr: { 'data-csn-sticky': 'true', 'data-csn-color': options.initialColor }
 		});
+		this.rootEl.style.setProperty('--csn-sticky-stack', '0');
+
+		this.plugin.registerDomEvent(
+			this.rootEl,
+			'pointerdown',
+			(e: PointerEvent) => {
+				if (this.disposed) return;
+				if (e.pointerType === 'mouse' && e.button !== 0) return;
+				this.options.onActivate();
+			},
+			{ capture: true }
+		);
 
 		this.headerEl = this.rootEl.createDiv({ cls: 'csn-sticky-header' });
 		this.wireHeader();
@@ -457,10 +471,20 @@ export class StickyNotePopover {
 	}
 
 	focus(): void {
-		this.rootEl.addClass('csn-sticky--active');
+		this.options.onActivate();
 		if (this.leaf) {
 			void this.plugin.app.workspace.setActiveLeaf(this.leaf, { focus: true });
 		}
+	}
+
+	/** 由管理器设置：仅一个便笺显示「活动」标题样式。 */
+	setActiveHighlight(on: boolean): void {
+		this.rootEl.toggleClass('csn-sticky--active', on);
+	}
+
+	/** 叠在其他便笺之上：与 Obsidian 的 `--layer-popover` 相加。 */
+	setZStackBoost(n: number): void {
+		this.rootEl.style.setProperty('--csn-sticky-stack', String(n));
 	}
 
 	getBounds(): FloatingBounds {
@@ -633,9 +657,14 @@ export class StickyNotePopover {
 		this.rootEl.style.top = `${top}px`;
 
 		const layer = getComputedStyle(document.documentElement).getPropertyValue('--layer-popover').trim();
+		/* 便笺叠放：在 popover 基准上加 --csn-sticky-stack，但不得 ≥ calc(var(--layer-slides) - 1) */
+		const baseZ = layer
+			? `calc(${layer} + var(--csn-sticky-stack, 0))`
+			: `calc(var(--layer-slides) - 2 + var(--csn-sticky-stack, 0))`;
+		const zIndex = `min(${baseZ}, calc(var(--layer-slides) - 2))`;
 		this.rootEl.setCssProps({
 			position: 'fixed',
-			'z-index': layer || 'calc(var(--layer-slides) - 2)'
+			'z-index': zIndex
 		});
 
 		if (emit) {
