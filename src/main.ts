@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, normalizePath, type App } from 'obsidian';
+import { Notice, Plugin, TFile, normalizePath } from 'obsidian';
 import {
 	clampViewContentZoom,
 	ColorfulStickyNotesSettingTab,
@@ -46,7 +46,11 @@ function normalizeNoteListColorFilters(value: unknown): StickyColorId[] {
 	return out;
 }
 
-function normalizeNoteListPinnedPathsStorage(app: App, value: unknown): string[] {
+/**
+ * 便笺列表置顶路径：仅做规范化与去重。
+ * 不在加载时用 vault 校验文件是否存在，否则插件早于库就绪时会把合法路径整批丢掉，表现为「置顶未保存」。
+ */
+function normalizeNoteListPinnedPathsStorage(value: unknown): string[] {
 	if (!Array.isArray(value)) return [];
 	const seen = new Set<string>();
 	const out: string[] = [];
@@ -55,7 +59,6 @@ function normalizeNoteListPinnedPathsStorage(app: App, value: unknown): string[]
 		const p = normalizePath(x);
 		if (seen.has(p)) continue;
 		seen.add(p);
-		if (!(app.vault.getAbstractFileByPath(p) instanceof TFile)) continue;
 		out.push(p);
 	}
 	return out;
@@ -151,7 +154,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const raw = (await this.loadData()) as Record<string, unknown>;
+		const raw = ((await this.loadData()) ?? {}) as Record<string, unknown>;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw) as ColorfulStickyNotesSettings;
 		const st = this.settings as unknown as Record<string, unknown>;
 		delete st.bottomBarCommands;
@@ -177,7 +180,6 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 
 		this.settings.noteListPinnedPaths = normalizeNoteListPinnedPathsStorage(
-			this.app,
 			'noteListPinnedPaths' in raw ? raw.noteListPinnedPaths : this.settings.noteListPinnedPaths
 		);
 
@@ -267,7 +269,15 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+		try {
+			/* 深拷贝后写入，避免不可 JSON 序列化字段或 Obsidian 内部引用导致静默失败 */
+			const payload = JSON.parse(JSON.stringify(this.settings)) as ColorfulStickyNotesSettings;
+			await this.saveData(payload);
+		} catch (e) {
+			console.error('[colorful-sticky-notes] saveSettings failed', e);
+			new Notice('多彩便笺：设置保存失败，请查看控制台。');
+			throw e;
+		}
 	}
 
 	openWorkspacePanel(): void {
