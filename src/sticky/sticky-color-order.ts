@@ -10,17 +10,3 @@ export const SHEET_COLOR_ORDER: { id: StickyColorId; label: string }[] = [
 	{ id: 'gray', label: '浅灰' },
 	{ id: 'default', label: '默认' }
 ];
-
-/** 列表/菜单小色块用，与 `.csn-sticky` / 列表卡片底色一致（亮暗主题）。 */
-export const STICKY_MENU_SWATCH_HEX: Record<
-	StickyColorId,
-	{ light: string; dark: string } | null
-> = {
-	default: null,
-	yellow: { light: '#fff8d4', dark: '#3d3820' },
-	mint: { light: '#e4fff4', dark: '#1e3d30' },
-	pink: { light: '#ffe8f0', dark: '#3d2028' },
-	lavender: { light: '#f0e8ff', dark: '#282040' },
-	blue: { light: '#e8f4ff', dark: '#1e303d' },
-	gray: { light: '#f0f0f0', dark: '#2a2a2a' }
-};

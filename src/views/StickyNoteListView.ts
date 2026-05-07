@@ -18,7 +18,7 @@ import { VIEW_STICKY_NOTE_LIST } from '../types';
 import { previewMarkdownSlice } from '../utils/preview-markdown-slice';
 import '../obsidian-augmentations';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
-import { SHEET_COLOR_ORDER, STICKY_MENU_SWATCH_HEX } from '../sticky/sticky-color-order';
+import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
 import type { StickyColorId } from '../types';
 
 const LIST_PAGE_SIZE = 12;
@@ -36,15 +36,6 @@ function buildStickyBgSubmenuTitle(
 	row.className = 'csn-list-bg-menu-row';
 	row.dataset.csnBg = colorId;
 	if (selected) row.classList.add('csn-list-bg-menu-row--selected');
-
-	const dark = doc.body?.classList.contains('theme-dark') ?? false;
-	const hex = STICKY_MENU_SWATCH_HEX[colorId];
-	if (colorId === 'default' || !hex) {
-		row.classList.add('csn-list-bg-menu-row--theme');
-	} else {
-		row.style.background = dark ? hex.dark : hex.light;
-		row.style.color = dark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.88)';
-	}
 
 	const lab = doc.createElement('span');
 	lab.className = 'csn-list-bg-menu-label';
@@ -319,9 +310,9 @@ export class StickyNoteListView extends ItemView {
 				keywords.length === 0
 					? files
 					: files.filter(f => {
-							const hay = (f.basename + '\n' + f.path).toLowerCase();
-							return keywords.every(k => hay.includes(k));
-					  });
+						const hay = (f.basename + '\n' + f.path).toLowerCase();
+						return keywords.every(k => hay.includes(k));
+					});
 
 			filtered.sort((a, b) => b.stat.mtime - a.stat.mtime);
 

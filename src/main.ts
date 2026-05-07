@@ -62,7 +62,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	}
 
 	onunload(): void {
-		this.app.workspace.detachLeavesOfType(VIEW_STICKY_NOTE_LIST);
+		/* 勿 detach 便笺列表：重载插件时不应关闭用户已固定在侧栏的叶视图。 */
 		this.stickies?.onunload();
 	}
 

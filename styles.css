@@ -745,28 +745,68 @@
   color: var(--text-muted);
   padding: 8px 4px;
 }
-/* 「修改背景」子菜单：整行使用便笺背景色（非独立色块） */
+/* 「修改背景」子菜单：背景色画在 Obsidian `.menu-item` 上（与列表/便笺色一致） */
+.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='yellow']) {
+  background-color: #fff8d4;
+  color: rgba(0, 0, 0, 0.88);
+}
+.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='yellow']) {
+  background-color: #3d3820;
+  color: rgba(255, 255, 255, 0.92);
+}
+.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='mint']) {
+  background-color: #e4fff4;
+  color: rgba(0, 0, 0, 0.88);
+}
+.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='mint']) {
+  background-color: #1e3d30;
+  color: rgba(255, 255, 255, 0.92);
+}
+.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='pink']) {
+  background-color: #ffe8f0;
+  color: rgba(0, 0, 0, 0.88);
+}
+.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='pink']) {
+  background-color: #3d2028;
+  color: rgba(255, 255, 255, 0.92);
+}
+.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='lavender']) {
+  background-color: #f0e8ff;
+  color: rgba(0, 0, 0, 0.88);
+}
+.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='lavender']) {
+  background-color: #282040;
+  color: rgba(255, 255, 255, 0.92);
+}
+.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='blue']) {
+  background-color: #e8f4ff;
+  color: rgba(0, 0, 0, 0.88);
+}
+.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='blue']) {
+  background-color: #1e303d;
+  color: rgba(255, 255, 255, 0.92);
+}
+.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='gray']) {
+  background-color: #f0f0f0;
+  color: rgba(0, 0, 0, 0.88);
+}
+.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='gray']) {
+  background-color: #2a2a2a;
+  color: rgba(255, 255, 255, 0.92);
+}
+.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='default']) {
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+.menu .menu-item:has(.csn-list-bg-menu-row--selected) {
+  box-shadow: inset 0 0 0 2px var(--text-accent);
+}
 .menu .csn-list-bg-menu-row {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  box-sizing: border-box;
-  min-height: 1.65em;
-  padding: 6px 10px;
-  margin: 1px 0;
-  border-radius: var(--radius-s);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-}
-.theme-dark .menu .csn-list-bg-menu-row {
-  border-color: rgba(255, 255, 255, 0.08);
-}
-.menu .csn-list-bg-menu-row--theme {
-  background: var(--background-primary);
-  color: var(--text-normal);
-}
-.menu .csn-list-bg-menu-row--selected {
-  box-shadow: inset 0 0 0 2px var(--text-accent);
+  min-height: 1.2em;
 }
 .menu .csn-list-bg-menu-label {
   flex: 1 1 auto;
