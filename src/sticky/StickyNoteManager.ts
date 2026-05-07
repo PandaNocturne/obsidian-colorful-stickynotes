@@ -1,21 +1,12 @@
-import { normalizePath, Notice, parseYaml, TFile, type App, type EventRef } from 'obsidian';
+import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
+import { getStickyBgColorFromMetadataCache, resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
 import { StickyNotePopover } from './StickyNotePopover';
 
 const FM_COLOR_KEY = 'colorful-sticky-bg';
-
-const STICKY_BG_ALLOWED: readonly StickyColorId[] = [
-	'default',
-	'yellow',
-	'pink',
-	'mint',
-	'blue',
-	'lavender',
-	'gray'
-];
 
 /** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
 function executeCommandById(app: App, commandId: string): boolean {
@@ -204,7 +195,7 @@ export class StickyNoteManager {
 		this.popovers.set(id, pop);
 		await this.yieldForStickyChromePaint();
 		await pop.openFile(f);
-		const y = await this.resolveStickyBgColorForOpen(f);
+		const y = await resolveStickyBgColorForFile(this.app, f);
 		if (y) pop.setColor(y);
 		this.persistOpenWindows();
 	}
@@ -284,45 +275,6 @@ export class StickyNoteManager {
 			(fm as Record<string, unknown>)[FM_COLOR_KEY] = color;
 		});
 		this.persistOpenWindows();
-	}
-
-	private normalizeStickyBgValue(raw: unknown): StickyColorId | null {
-		if (typeof raw !== 'string' || !raw) return null;
-		return STICKY_BG_ALLOWED.includes(raw as StickyColorId) ? (raw as StickyColorId) : null;
-	}
-
-	private readStickyColorFromMetadataCache(file: TFile): StickyColorId | null {
-		const raw = this.app.metadataCache.getFileCache(file)?.frontmatter?.[FM_COLOR_KEY];
-		return this.normalizeStickyBgValue(raw);
-	}
-
-	private parseStickyColorFromMarkdownSource(source: string): StickyColorId | null {
-		const text = source.replace(/^\uFEFF/, '');
-		const m = text.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---(?:[\t ]*)(?:\r?\n|$)/);
-		if (!m?.[1]) return null;
-		try {
-			const fm = parseYaml(m[1]) as unknown;
-			if (!fm || typeof fm !== 'object') return null;
-			return this.normalizeStickyBgValue((fm as Record<string, unknown>)[FM_COLOR_KEY]);
-		} catch {
-			return null;
-		}
-	}
-
-	private async readStickyColorFromVaultCachedRead(file: TFile): Promise<StickyColorId | null> {
-		try {
-			const text = await this.app.vault.cachedRead(file);
-			return this.parseStickyColorFromMarkdownSource(text);
-		} catch {
-			return null;
-		}
-	}
-
-	/** 元数据就绪则用之，否则读正文首段 YAML（不依赖索引时序）。 */
-	private async resolveStickyBgColorForOpen(file: TFile): Promise<StickyColorId | null> {
-		const fromCache = this.readStickyColorFromMetadataCache(file);
-		if (fromCache) return fromCache;
-		return this.readStickyColorFromVaultCachedRead(file);
 	}
 
 	private clearPendingDeleteListener(): void {
@@ -405,7 +357,7 @@ export class StickyNoteManager {
 		pop.setBounds(b);
 		if (savedColor === undefined) {
 			const after =
-				this.readStickyColorFromMetadataCache(file) ?? (await this.resolveStickyBgColorForOpen(file));
+				getStickyBgColorFromMetadataCache(this.app, file) ?? (await resolveStickyBgColorForFile(this.app, file));
 			if (after) pop.setColor(after);
 		}
 		this.persistOpenWindows();

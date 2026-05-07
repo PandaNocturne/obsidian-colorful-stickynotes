@@ -7,6 +7,7 @@ import {
 	TFolder,
 	WorkspaceLeaf,
 	debounce,
+	moment,
 	normalizePath,
 	setIcon,
 	type Debouncer
@@ -14,6 +15,7 @@ import {
 import type ColorfulStickyNotesPlugin from '../main';
 import { VIEW_STICKY_NOTE_LIST } from '../types';
 import { previewMarkdownSlice } from '../utils/preview-markdown-slice';
+import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 
 const LIST_PAGE_SIZE = 12;
 /** 单卡传入渲染器的 Markdown 最大字符数（含换行），避免超大笔记阻塞 UI。 */
@@ -122,6 +124,13 @@ export class StickyNoteListView extends ItemView {
 				if (f instanceof TFile && f.extension === 'md' && this.pathUnderStickyFolder(f.path)) {
 					this.debouncedListContentRefresh?.();
 				}
+			})
+		);
+		this.registerEvent(
+			this.app.metadataCache.on('changed', file => {
+				if (!(file instanceof TFile) || file.extension !== 'md') return;
+				if (!this.pathUnderStickyFolder(file.path)) return;
+				this.debouncedListContentRefresh?.();
 			})
 		);
 	}
@@ -298,21 +307,27 @@ export class StickyNoteListView extends ItemView {
 
 			await Promise.all(
 				pageFiles.map(async f => {
-					const card = container.createDiv({ cls: 'csn-list-card' });
-					const main = card.createDiv({
-						cls: 'csn-list-card-main',
-						attr: { title: '双击打开便笺' }
+					const color = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
+					const card = container.createDiv({
+						cls: 'csn-list-card',
+						attr: { 'data-csn-list-color': color, title: '双击打开便笺' }
 					});
-					const iconEl = main.createSpan({ cls: 'csn-list-card-icon' });
-					setIcon(iconEl, 'file-text');
+
+					const head = card.createDiv({ cls: 'csn-list-card-head' });
+					head.createDiv({ cls: 'csn-list-card-title', text: f.basename });
+					head.createDiv({
+						cls: 'csn-list-card-date',
+						text: moment(f.stat.mtime).format('M月D日')
+					});
+
+					const main = card.createDiv({ cls: 'csn-list-card-main' });
 					const col = main.createDiv({ cls: 'csn-list-card-text' });
-					col.createDiv({ cls: 'csn-list-card-name', text: f.basename });
 					col.createDiv({ cls: 'csn-list-card-path', text: f.path });
 					const previewEl = col.createDiv({
 						cls: 'csn-list-card-body csn-list-card-body--rendered markdown-rendered'
 					});
 
-					this.registerDomEvent(main, 'dblclick', evt => {
+					this.registerDomEvent(card, 'dblclick', evt => {
 						evt.preventDefault();
 						evt.stopPropagation();
 						void this.plugin.openStickyForFile(f);
