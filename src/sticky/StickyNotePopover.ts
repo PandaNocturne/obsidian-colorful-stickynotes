@@ -2,7 +2,6 @@ import { around } from 'monkey-around';
 import {
 	FileView,
 	MarkdownView,
-	Menu,
 	Plugin,
 	Workspace,
 	WorkspaceItem,
@@ -11,7 +10,6 @@ import {
 	WorkspaceTabs,
 	setIcon
 } from 'obsidian';
-import { getAppCommands } from '../obsidian-commands';
 import type { TFile } from 'obsidian';
 import type { FloatingBounds, StickyColorId } from '../types';
 
@@ -37,7 +35,6 @@ export interface StickyNotePopoverOptions {
 	initialCollapsed: boolean;
 	initialYamlVisible: boolean;
 	bottomBarAutoHide: boolean;
-	bottomCommands: Array<{ id: string; icon: string; tooltip: string }>;
 	/** 正文区域 zoom（0.5–1），作用于 `.view-content`。 */
 	viewContentZoom: number;
 	onClose: () => void;
@@ -50,11 +47,20 @@ export interface StickyNotePopoverOptions {
 	onColorChange: (c: StickyColorId) => void;
 	onCollapseChange?: (c: boolean) => void;
 	onYamlVisibilityChange?: (v: boolean) => void;
-	onOpenWorkspacePanel: () => void;
 	onOpenNoteList: () => void;
-	/** 点击底部栏「添加命令」时由管理器打开命令选择。 */
-	onRequestAddBottomCommand: () => void;
+	/** 删除当前便笺文件（移入回收站）并关闭窗口，由管理器确认与执行。 */
+	onDeleteCurrentSticky: () => void;
 }
+
+const SHEET_COLOR_ORDER: { id: StickyColorId; label: string }[] = [
+	{ id: 'yellow', label: '亮黄' },
+	{ id: 'mint', label: '薄荷' },
+	{ id: 'pink', label: '粉红' },
+	{ id: 'lavender', label: '淡紫' },
+	{ id: 'blue', label: '天蓝' },
+	{ id: 'gray', label: '浅灰' },
+	{ id: 'default', label: '默认' }
+];
 
 export class StickyNotePopover {
 	readonly rootEl: HTMLElement;
@@ -62,7 +68,12 @@ export class StickyNotePopover {
 	private readonly headerEl: HTMLElement;
 	private readonly mainColumnEl: HTMLElement;
 	private readonly bottomBarEl: HTMLElement;
-	private addCommandBtn: HTMLButtonElement;
+	private readonly bottomTitleEl: HTMLElement;
+	private readonly settingsBtn: HTMLButtonElement;
+	private readonly sheetLayerEl: HTMLElement;
+	private readonly sheetPanelEl: HTMLElement;
+	private sheetOpen = false;
+	private readonly colorSwatchEls = new Map<StickyColorId, HTMLButtonElement>();
 	private readonly rootSplit: WorkspaceSplit;
 	private readonly plugin: Plugin;
 	private readonly onBoundsChange: (bounds: FloatingBounds) => void;
@@ -81,6 +92,7 @@ export class StickyNotePopover {
 	private resizeStartY = 0;
 	private resizeStartBounds: FloatingBounds | null = null;
 	private resizeObserver: ResizeObserver | null = null;
+	private bottomBarResizeObserver: ResizeObserver | null = null;
 	private resizeReflowRaf: number | null = null;
 	private leafModeSyncUninstall: (() => void) | null = null;
 	private modeToggleLayoutRaf: number | null = null;
@@ -88,8 +100,7 @@ export class StickyNotePopover {
 	private collapsed: boolean;
 	private yamlVisible: boolean;
 	private modeToggleWrap!: HTMLElement;
-	private previewModeBtn!: HTMLButtonElement;
-	private sourceModeBtn!: HTMLButtonElement;
+	private markdownModeToggleBtn!: HTMLButtonElement;
 	constructor(private readonly options: StickyNotePopoverOptions) {
 		this.plugin = options.plugin;
 		this.onBoundsChange = options.onBoundsChange;
@@ -120,9 +131,26 @@ export class StickyNotePopover {
 			void this.plugin.app.workspace.setActiveLeaf(leaf, { focus: true });
 		});
 
+		this.sheetLayerEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-sheet-layer' });
+		this.sheetPanelEl = this.sheetLayerEl.createDiv({ cls: 'csn-sticky-sheet' });
+		this.wireSettingsSheet();
+
 		this.bottomBarEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-bottombar' });
-		this.wireBottomBar();
-		this.addCommandBtn = this.createAddCommandButton();
+		this.bottomTitleEl = this.bottomBarEl.createSpan({ cls: 'csn-sticky-bottombar-title' });
+		this.settingsBtn = this.bottomBarEl.createEl('button', {
+			cls: 'clickable-icon csn-sticky-bottombar-settings',
+			attr: { type: 'button', 'aria-label': '便笺设置', 'aria-expanded': 'false' }
+		});
+		setIcon(this.settingsBtn, 'settings');
+		this.plugin.registerDomEvent(this.settingsBtn, 'click', evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleSettingsSheet();
+		});
+
+		this.bottomBarResizeObserver = new ResizeObserver(() => this.syncBottomBarHeightCss());
+		this.bottomBarResizeObserver.observe(this.bottomBarEl);
+		this.syncBottomBarHeightCss();
 
 		this.attachLeaf();
 		this.wireLeafModeSync();
@@ -166,6 +194,14 @@ export class StickyNotePopover {
 		);
 
 		this.syncModeToggleUi();
+
+		this.plugin.registerDomEvent(window, 'keydown', (e: KeyboardEvent) => {
+			if (!this.sheetOpen || e.key !== 'Escape') return;
+			e.preventDefault();
+			e.stopPropagation();
+			this.closeSettingsSheet();
+		});
+
 		this.headerEl.addEventListener('pointerdown', this.onTitlePointerDown);
 		for (const dir of RESIZE_DIRECTIONS) {
 			this.rootEl
@@ -193,6 +229,7 @@ export class StickyNotePopover {
 
 	setColor(c: StickyColorId): void {
 		this.rootEl.setAttribute('data-csn-color', c);
+		if (this.sheetOpen) this.refreshSheetColorSelection();
 	}
 
 	getColor(): StickyColorId {
@@ -207,12 +244,10 @@ export class StickyNotePopover {
 		return this.yamlVisible;
 	}
 
-	setBottomBarSettings(autoHide: boolean, commands: Array<{ id: string; icon: string; tooltip: string }>): void {
-		this.bottomBarEl.empty();
-		this.wireBottomBarCommands(commands);
-		this.addCommandBtn = this.createAddCommandButton();
+	setBottomBarSettings(autoHide: boolean): void {
 		this.bottomBarAutoHide = autoHide;
 		this.applyBottomBarAutoHideClass();
+		window.requestAnimationFrame(() => this.syncBottomBarHeightCss());
 	}
 
 	/** 与 HoverNoteLeafPopover#setPreviewScale 相同思路：根节点 CSS 变量 + `.view-content` 的 zoom。 */
@@ -221,24 +256,18 @@ export class StickyNotePopover {
 		this.rootEl.style.setProperty('--csn-sticky-view-content-zoom', String(s));
 	}
 
-	private createAddCommandButton(): HTMLButtonElement {
-		const btn = this.bottomBarEl.createEl('button', {
-			cls: 'clickable-icon csn-sticky-add-cmd',
-			attr: { type: 'button', 'aria-label': '添加命令' }
-		});
-		setIcon(btn, 'plus-circle');
-		this.plugin.registerDomEvent(btn, 'click', evt => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			this.options.onRequestAddBottomCommand();
-		});
-		return btn;
-	}
-
 	private bottomBarAutoHide = false;
 
 	private applyBottomBarAutoHideClass(): void {
 		this.rootEl.toggleClass('csn-sticky--bar-autohide', this.bottomBarAutoHide);
+	}
+
+	private syncBottomBarHeightCss(): void {
+		if (this.disposed) return;
+		let h = this.bottomBarEl.offsetHeight;
+		/* 底栏自动隐藏收起时 offsetHeight 可能为 0，仍预留一条带高度以便抽屉贴在「工具栏区域」之上 */
+		if (h < 4) h = 38;
+		this.mainColumnEl.style.setProperty('--csn-sticky-bottombar-height', `${h}px`);
 	}
 
 	private wireHeader(): void {
@@ -257,25 +286,20 @@ export class StickyNotePopover {
 		this.headerEl.createDiv({ cls: 'csn-sticky-header-spacer' });
 
 		this.modeToggleWrap = this.headerEl.createDiv({ cls: 'csn-sticky-mode-toggle' });
-		this.previewModeBtn = this.modeToggleWrap.createEl('button', {
+		this.markdownModeToggleBtn = this.modeToggleWrap.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',
-			attr: { type: 'button', 'aria-label': '阅读模式' }
+			attr: { type: 'button', 'aria-label': '阅读模式，点击进入编辑' }
 		});
-		setIcon(this.previewModeBtn, 'book-open');
-		this.plugin.registerDomEvent(this.previewModeBtn, 'click', async evt => {
+		setIcon(this.markdownModeToggleBtn, 'book-open');
+		this.plugin.registerDomEvent(this.markdownModeToggleBtn, 'click', async evt => {
 			evt.preventDefault();
 			evt.stopPropagation();
-			await this.setMarkdownMode('preview');
-		});
-		this.sourceModeBtn = this.modeToggleWrap.createEl('button', {
-			cls: 'clickable-icon csn-sticky-header-btn',
-			attr: { type: 'button', 'aria-label': '编辑模式' }
-		});
-		setIcon(this.sourceModeBtn, 'pencil');
-		this.plugin.registerDomEvent(this.sourceModeBtn, 'click', async evt => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			await this.setMarkdownMode('source');
+			const leaf = this.leaf;
+			if (!leaf || this.disposed) return;
+			const view = leaf.view;
+			if (!(view instanceof MarkdownView) || !view.file || view.file.extension !== 'md') return;
+			const next = view.getMode() === 'preview' ? 'source' : 'preview';
+			await this.setMarkdownMode(next);
 		});
 
 		const right = this.headerEl.createDiv({ cls: 'csn-sticky-header-right' });
@@ -283,7 +307,7 @@ export class StickyNotePopover {
 			cls: 'clickable-icon csn-sticky-header-btn',
 			attr: { type: 'button', 'aria-label': 'YAML 属性' }
 		});
-		setIcon(yamlBtn, 'file-json');
+		setIcon(yamlBtn, 'alert-circle');
 		this.plugin.registerDomEvent(yamlBtn, 'click', evt => {
 			evt.preventDefault();
 			evt.stopPropagation();
@@ -305,17 +329,6 @@ export class StickyNotePopover {
 			this.options.onCollapseChange?.(this.collapsed);
 		});
 
-		const moreBtn = right.createEl('button', {
-			cls: 'clickable-icon csn-sticky-header-btn',
-			attr: { type: 'button', 'aria-label': '更多' }
-		});
-		setIcon(moreBtn, 'more-horizontal');
-		this.plugin.registerDomEvent(moreBtn, 'click', evt => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			this.showMoreMenu(evt, yamlBtn, foldBtn);
-		});
-
 		const closeBtn = right.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',
 			attr: { type: 'button', 'aria-label': '关闭' }
@@ -328,85 +341,116 @@ export class StickyNotePopover {
 		});
 	}
 
-	private showMoreMenu(evt: MouseEvent, yamlBtn: HTMLButtonElement, foldBtn: HTMLButtonElement): void {
-		const menu = new Menu();
-		const colors: { id: StickyColorId; label: string }[] = [
-			{ id: 'default', label: '默认' },
-			{ id: 'yellow', label: '亮黄' },
-			{ id: 'pink', label: '粉红' },
-			{ id: 'mint', label: '薄荷' },
-			{ id: 'blue', label: '天蓝' },
-			{ id: 'lavender', label: '淡紫' },
-			{ id: 'gray', label: '浅灰' }
-		];
-		menu.addItem(item =>
-			item.setTitle('背景颜色').onClick(subEvt => {
-				const colorMenu = new Menu();
-				for (const c of colors) {
-					colorMenu.addItem(i =>
-						i.setTitle(c.label).onClick(() => {
-							this.setColor(c.id);
-							this.options.onColorChange(c.id);
-						})
-					);
-				}
-				if (subEvt instanceof MouseEvent) {
-					colorMenu.showAtMouseEvent(subEvt);
-				}
-			})
-		);
-		menu.addItem(i =>
-			i.setTitle('便笺列表').onClick(() => {
-				this.options.onOpenNoteList();
-			})
-		);
-		menu.addItem(i =>
-			i.setTitle('工作区面板').onClick(() => {
-				this.options.onOpenWorkspacePanel();
-			})
-		);
-		menu.addSeparator();
-		menu.addItem(i =>
-			i.setTitle('YAML 显示').onClick(() => {
-				yamlBtn.click();
-			})
-		);
-		menu.addItem(i =>
-			i.setTitle('折叠窗口').onClick(() => {
-				foldBtn.click();
-			})
-		);
-		menu.showAtMouseEvent(evt);
-	}
+	private wireSettingsSheet(): void {
+		this.plugin.registerDomEvent(this.sheetPanelEl, 'click', evt => {
+			evt.stopPropagation();
+		});
 
-	private wireBottomBar(): void {
-		this.wireBottomBarCommands(this.options.bottomCommands);
-	}
+		/* 自上而下：删除当前便笺 → 便笺列表；底部无缝颜色条 */
+		const actions = this.sheetPanelEl.createDiv({ cls: 'csn-sticky-sheet-actions' });
 
-	private wireBottomBarCommands(commands: Array<{ id: string; icon: string; tooltip: string }>): void {
-		for (const c of commands) {
-			const btn = this.bottomBarEl.createEl('button', {
-				cls: 'clickable-icon csn-sticky-bottom-btn',
-				attr: { type: 'button', 'aria-label': c.tooltip || c.id }
+		const deleteBtn = actions.createEl('button', {
+			cls: 'csn-sticky-sheet-action csn-sticky-sheet-action--danger',
+			type: 'button'
+		});
+		const delIc = deleteBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
+		setIcon(delIc, 'trash-2');
+		deleteBtn.createSpan({ text: '删除当前便笺' });
+		this.plugin.registerDomEvent(deleteBtn, 'click', evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.closeSettingsSheet();
+			this.options.onDeleteCurrentSticky();
+		});
+
+		const listBtn = actions.createEl('button', {
+			cls: 'csn-sticky-sheet-action',
+			type: 'button'
+		});
+		const listIc = listBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
+		setIcon(listIc, 'layout-list');
+		listBtn.createSpan({ text: '便笺列表' });
+		this.plugin.registerDomEvent(listBtn, 'click', evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.closeSettingsSheet();
+			this.options.onOpenNoteList();
+		});
+
+		const colorsRow = this.sheetPanelEl.createDiv({ cls: 'csn-sticky-sheet-colors' });
+		for (const c of SHEET_COLOR_ORDER) {
+			const sw = colorsRow.createEl('button', {
+				cls: 'csn-sticky-sheet-swatch',
+				type: 'button',
+				attr: { 'data-csn-sheet-color': c.id, 'aria-label': c.label }
 			});
-			setIcon(btn, c.icon);
-			this.plugin.registerDomEvent(btn, 'click', async evt => {
+			const checkWrap = sw.createSpan({ cls: 'csn-sticky-sheet-swatch-check' });
+			this.colorSwatchEls.set(c.id, sw);
+			this.plugin.registerDomEvent(sw, 'click', evt => {
 				evt.preventDefault();
 				evt.stopPropagation();
-				await this.runCommandInLeaf(c.id);
+				this.setColor(c.id);
+				this.options.onColorChange(c.id);
+				this.refreshSheetColorSelection();
 			});
+			checkWrap.style.display = 'none';
+		}
+		this.refreshSheetColorSelection();
+	}
+
+	private refreshSheetColorSelection(): void {
+		const cur = this.getColor();
+		for (const [id, el] of this.colorSwatchEls) {
+			el.toggleClass('is-selected', id === cur);
+			const check = el.querySelector('.csn-sticky-sheet-swatch-check');
+			if (check instanceof HTMLElement) {
+				check.replaceChildren();
+				if (id === cur) {
+					check.style.display = '';
+					setIcon(check, 'check');
+				} else {
+					check.style.display = 'none';
+				}
+			}
 		}
 	}
 
-	private async runCommandInLeaf(commandId: string): Promise<void> {
-		const leaf = this.leaf;
-		if (!leaf) return;
-		await this.plugin.app.workspace.setActiveLeaf(leaf, { focus: true });
-		getAppCommands(this.plugin.app).executeCommandById(commandId);
+	private toggleSettingsSheet(): void {
+		if (this.sheetOpen) this.closeSettingsSheet();
+		else this.openSettingsSheet();
+	}
+
+	private openSettingsSheet(): void {
+		if (this.collapsed || this.disposed) return;
+		this.syncBottomBarHeightCss();
+		this.sheetOpen = true;
+		this.rootEl.addClass('csn-sticky--sheet-open');
+		this.settingsBtn.setAttr('aria-expanded', 'true');
+		this.refreshSheetColorSelection();
+	}
+
+	private closeSettingsSheet(): void {
+		if (!this.sheetOpen) return;
+		this.sheetOpen = false;
+		this.rootEl.removeClass('csn-sticky--sheet-open');
+		this.settingsBtn.setAttr('aria-expanded', 'false');
+	}
+
+	private syncBottomBarTitle(): void {
+		const view = this.leaf?.view;
+		const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
+		if (file) {
+			this.bottomTitleEl.setText(file.name);
+			this.bottomTitleEl.setAttr('title', file.path);
+		} else {
+			this.bottomTitleEl.setText('');
+			this.bottomTitleEl.removeAttribute('title');
+		}
 	}
 
 	private applyCollapsedClass(): void {
 		this.rootEl.toggleClass('csn-sticky--collapsed', this.collapsed);
+		if (this.collapsed) this.closeSettingsSheet();
 	}
 
 	private applyYamlClass(): void {
@@ -470,6 +514,9 @@ export class StickyNotePopover {
 		this.resizeObserver?.disconnect();
 		this.resizeObserver = null;
 
+		this.bottomBarResizeObserver?.disconnect();
+		this.bottomBarResizeObserver = null;
+
 		this.leafModeSyncUninstall?.();
 		this.leafModeSyncUninstall = null;
 
@@ -486,14 +533,15 @@ export class StickyNotePopover {
 		const md = view instanceof MarkdownView ? view : null;
 		const show = !!md?.file && md.file.extension === 'md';
 		this.modeToggleWrap.style.display = show ? '' : 'none';
-		if (!show || !md) {
-			this.previewModeBtn.removeClass('is-active');
-			this.sourceModeBtn.removeClass('is-active');
-			return;
+		if (show && md) {
+			const mode = md.getMode();
+			setIcon(this.markdownModeToggleBtn, mode === 'preview' ? 'book-open' : 'pencil');
+			this.markdownModeToggleBtn.setAttr(
+				'aria-label',
+				mode === 'preview' ? '阅读模式，点击进入编辑' : '编辑模式，点击进入阅读'
+			);
 		}
-		const mode = md.getMode();
-		this.previewModeBtn.toggleClass('is-active', mode === 'preview');
-		this.sourceModeBtn.toggleClass('is-active', mode === 'source');
+		this.syncBottomBarTitle();
 	}
 
 	private async setMarkdownMode(mode: 'source' | 'preview'): Promise<void> {
@@ -521,6 +569,8 @@ export class StickyNotePopover {
 			const v = this.leaf?.view;
 			if (v instanceof MarkdownView && v.file?.extension === 'md') {
 				this.syncModeToggleUi();
+			} else {
+				this.syncBottomBarTitle();
 			}
 		});
 	}

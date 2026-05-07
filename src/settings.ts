@@ -1,13 +1,7 @@
-import { App, PluginSettingTab, Setting, setIcon } from 'obsidian';
+import { App, PluginSettingTab, Setting } from 'obsidian';
 import { formatStickyNoteRelativePath } from './filename-template';
 import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
-
-export interface BottomBarCommand {
-	id: string;
-	icon: string;
-	tooltip: string;
-}
 
 export interface ColorfulStickyNotesSettings {
 	stickyFolder: string;
@@ -20,7 +14,6 @@ export interface ColorfulStickyNotesSettings {
 	/** 便笺内 `.view-content` 的 `zoom`（0.5–1），与阅读/编辑正文显示比例一致。 */
 	viewContentZoom: number;
 	bottomBarAutoHide: boolean;
-	bottomBarCommands: BottomBarCommand[];
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -32,14 +25,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	defaultPositionX: 80,
 	defaultPositionY: 80,
 	viewContentZoom: 0.6,
-	bottomBarAutoHide: true,
-	bottomBarCommands: [
-		{ id: 'editor:toggle-bold', icon: 'bold', tooltip: '加粗' },
-		{ id: 'editor:toggle-italics', icon: 'italic', tooltip: '倾斜' },
-		{ id: 'editor:insert-link', icon: 'link', tooltip: '链接' },
-		{ id: 'editor:toggle-ulist', icon: 'list', tooltip: '无序列表' },
-		{ id: 'editor:attach-file', icon: 'image', tooltip: '添加图片/附件' }
-	]
+	bottomBarAutoHide: true
 };
 
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
@@ -218,7 +204,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 		containerEl.createEl('h3', { text: '底部工具栏' });
 		new Setting(containerEl)
 			.setName('自动隐藏')
-			.setDesc('鼠标离开底部区域时隐藏工具栏（悬浮时显示）。')
+			.setDesc('鼠标离开底部区域时隐藏底栏（左侧文件名与便笺设置）；打开设置抽屉时也会保持显示。')
 			.addToggle(t =>
 				t.setValue(this.plugin.settings.bottomBarAutoHide).onChange(async v => {
 					this.plugin.settings.bottomBarAutoHide = v;
@@ -226,31 +212,5 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					this.plugin.stickies.updateBottomBarsFromSettings();
 				})
 			);
-
-		new Setting(containerEl)
-			.setName('已固定的命令')
-			.setDesc('在便笺窗口底部显示；在窗口内点击「+」可继续添加。')
-			.addButton(btn =>
-				btn.setButtonText('清空').onClick(async () => {
-					this.plugin.settings.bottomBarCommands = [];
-					await this.plugin.saveSettings();
-					this.plugin.stickies.updateBottomBarsFromSettings();
-					this.display();
-				})
-			);
-
-		for (let i = 0; i < this.plugin.settings.bottomBarCommands.length; i++) {
-			const cmd = this.plugin.settings.bottomBarCommands[i]!;
-			const row = containerEl.createDiv({ cls: 'csn-cmd-row' });
-			row.createSpan({ text: cmd.tooltip || cmd.id, cls: 'csn-cmd-label' });
-			const btn = row.createEl('button', { cls: 'clickable-icon', attr: { 'aria-label': '删除' } });
-			setIcon(btn, 'minus-circle');
-			btn.addEventListener('click', async () => {
-				this.plugin.settings.bottomBarCommands.splice(i, 1);
-				await this.plugin.saveSettings();
-				this.plugin.stickies.updateBottomBarsFromSettings();
-				this.display();
-			});
-		}
 	}
 }

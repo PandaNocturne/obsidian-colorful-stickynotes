@@ -2,16 +2,41 @@
 	display: flex;
 	flex: 0 0 auto;
 	align-items: center;
-	justify-content: center;
-	gap: 2px;
-	padding: 2px 4px 4px;
+	justify-content: space-between;
+	gap: 8px;
+	min-height: 32px;
+	padding: 4px 8px 6px;
 	background: var(--csn-b);
 	border-top: 1px solid var(--csn-border);
 	position: relative;
 }
 
-.csn-sticky-add-cmd {
-	position: relative;
+.csn-sticky-bottombar-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.csn-sticky-bottombar-settings {
+	flex: 0 0 auto;
+}
+
+.csn-sticky-bottombar-settings.clickable-icon {
+	background: transparent !important;
+	border: none !important;
+	border-radius: var(--radius-s);
+	box-shadow: none !important;
+	padding: 4px;
+	margin: 0;
+}
+
+.csn-sticky-bottombar-settings.clickable-icon:hover {
+	background-color: var(--background-modifier-hover) !important;
 }
 
 .csn-sticky--bar-autohide .csn-sticky-bottombar {
@@ -30,11 +55,12 @@
 }
 
 .csn-sticky--bar-autohide:hover .csn-sticky-bottombar,
-.csn-sticky--bar-autohide .csn-sticky-bottombar:focus-within {
+.csn-sticky--bar-autohide .csn-sticky-bottombar:focus-within,
+.csn-sticky--bar-autohide.csn-sticky--sheet-open .csn-sticky-bottombar {
 	opacity: 1;
 	min-height: unset;
-	max-height: 48px;
-	padding: 2px 4px 4px;
+	max-height: 56px;
+	padding: 4px 8px 6px;
 	border-top: 1px solid var(--csn-border);
 	pointer-events: auto;
 	flex-shrink: 0;

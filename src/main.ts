@@ -24,6 +24,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			void this.openNoteListView();
 		});
 
+		this.addRibbonIcon('layout', '便笺工作区', () => {
+			this.openWorkspacePanel();
+		});
+
 		this.addCommand({
 			id: 'open-sticky-note-windows',
 			name: '打开便笺窗口（恢复上次会话）',
@@ -40,6 +44,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			}
 		});
 
+		this.addCommand({
+			id: 'open-sticky-workspace-panel',
+			name: '打开便笺工作区',
+			callback: () => {
+				this.openWorkspacePanel();
+			}
+		});
+
 		this.addSettingTab(new ColorfulStickyNotesSettingTab(this.app, this));
 	}
 
@@ -50,9 +62,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()) as ColorfulStickyNotesSettings;
-		if (!Array.isArray(this.settings.bottomBarCommands)) {
-			this.settings.bottomBarCommands = [...DEFAULT_SETTINGS.bottomBarCommands];
-		}
+		delete (this.settings as unknown as Record<string, unknown>).bottomBarCommands;
 		const z = this.settings.viewContentZoom;
 		if (typeof z !== 'number' || !Number.isFinite(z)) {
 			this.settings.viewContentZoom = DEFAULT_SETTINGS.viewContentZoom;

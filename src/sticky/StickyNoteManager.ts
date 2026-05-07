@@ -1,6 +1,5 @@
 import { normalizePath, Notice, TFile, type App } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
-import { CommandPickModal } from '../modals/CommandPickModal';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
 import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
@@ -63,19 +62,6 @@ export class StickyNoteManager {
 		}
 		ws.windows = ser;
 		this.scheduleSaveWorkspaces();
-	}
-
-	async openCommandPicker(): Promise<void> {
-		const modal = new CommandPickModal(this.app, async cmd => {
-			this.plugin.settings.bottomBarCommands.push({
-				id: cmd.id,
-				icon: 'terminal-square',
-				tooltip: cmd.name
-			});
-			await this.plugin.saveSettings();
-			this.updateBottomBarsFromSettings();
-		});
-		modal.open();
 	}
 
 	private getDefaultBounds(): FloatingBounds {
@@ -228,7 +214,6 @@ export class StickyNoteManager {
 			initialCollapsed: extra.initialCollapsed,
 			initialYamlVisible: extra.initialYamlVisible,
 			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
-			bottomCommands: this.plugin.settings.bottomBarCommands,
 			viewContentZoom: this.plugin.settings.viewContentZoom,
 			onClose: () => this.closeSticky(id),
 			onBoundsChange: () => this.persistOpenWindows(),
@@ -239,9 +224,8 @@ export class StickyNoteManager {
 			onColorChange: c => void this.applyColorToFile(id, c),
 			onCollapseChange: () => this.persistOpenWindows(),
 			onYamlVisibilityChange: () => this.persistOpenWindows(),
-			onOpenWorkspacePanel: () => void this.plugin.openWorkspacePanel(),
 			onOpenNoteList: () => void this.plugin.openNoteListView(),
-			onRequestAddBottomCommand: () => void this.openCommandPicker()
+			onDeleteCurrentSticky: () => void this.deleteCurrentStickyNote(id)
 		});
 	}
 
@@ -350,6 +334,24 @@ export class StickyNoteManager {
 		);
 	}
 
+	private async deleteCurrentStickyNote(id: string): Promise<void> {
+		const pop = this.popovers.get(id);
+		const file =
+			pop?.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
+		if (!(file instanceof TFile)) {
+			this.closeSticky(id);
+			return;
+		}
+		if (!confirm(`确定删除「${file.basename}」？文件将移入库内回收站（.trash）。`)) return;
+		try {
+			await this.app.vault.trash(file, false);
+		} catch {
+			new Notice('删除失败');
+			return;
+		}
+		this.closeSticky(id);
+	}
+
 	closeSticky(id: string): void {
 		const pop = this.popovers.get(id);
 		if (!pop) return;
@@ -404,7 +406,7 @@ export class StickyNoteManager {
 
 	updateBottomBarsFromSettings(): void {
 		for (const p of this.popovers.values()) {
-			p.setBottomBarSettings(this.plugin.settings.bottomBarAutoHide, this.plugin.settings.bottomBarCommands);
+			p.setBottomBarSettings(this.plugin.settings.bottomBarAutoHide);
 		}
 	}
 

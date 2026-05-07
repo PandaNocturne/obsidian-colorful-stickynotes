@@ -16,9 +16,9 @@ export class WorkspacePanelModal extends Modal {
 		this.contentEl.empty();
 		this.contentEl.addClass('csn-workspace-panel');
 
-		const mgr = this.plugin.stickies;
 		const refresh = (): void => {
 			this.contentEl.empty();
+			this.contentEl.addClass('csn-workspace-panel');
 			this.renderBody(refresh);
 		};
 		this.renderBody(refresh);
@@ -89,9 +89,7 @@ export class WorkspacePanelModal extends Modal {
 				})
 			);
 
-		new Setting(this.contentEl).addButton(btn =>
-			btn.setButtonText('关闭').onClick(() => this.close())
-		);
+		new Setting(this.contentEl).addButton(btn => btn.setButtonText('关闭').onClick(() => this.close()));
 	}
 
 	onClose(): void {

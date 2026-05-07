@@ -40,11 +40,10 @@
 	min-width: 8px;
 }
 
-/* 阅读 / 编辑（与主界面 Markdown 叶视图一致，需避免叶内容高度为 0） */
+/* 阅读 ⇄ 编辑切换（与主界面 Markdown 叶视图一致，需避免叶内容高度为 0） */
 .csn-sticky-mode-toggle {
 	display: flex;
 	align-items: center;
-	gap: 1px;
 	flex: 0 0 auto;
 }
 
@@ -53,9 +52,7 @@
 	color: var(--text-accent);
 }
 
-.csn-sticky-header .csn-sticky-header-btn,
-.csn-sticky-bottombar .csn-sticky-bottom-btn,
-.csn-sticky-bottombar .csn-sticky-add-cmd {
+.csn-sticky-header .csn-sticky-header-btn {
 	background: transparent !important;
 	border: none !important;
 	border-radius: var(--radius-s);
@@ -64,13 +61,12 @@
 	margin: 0 1px;
 }
 
-.csn-sticky-header .csn-sticky-header-btn:hover,
-.csn-sticky-bottombar .csn-sticky-bottom-btn:hover,
-.csn-sticky-bottombar .csn-sticky-add-cmd:hover {
+.csn-sticky-header .csn-sticky-header-btn:hover {
 	background-color: var(--background-modifier-hover) !important;
 }
 
 .csn-sticky-main {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	flex: 1 1 auto;
