@@ -173,9 +173,28 @@ export class StickyNoteManager {
 
 	async addStickyWindow(initial?: Partial<SerializedStickyWindow>, sourcePopover?: StickyNotePopover): Promise<void> {
 		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
-		if (!(await this.app.vault.adapter.exists(folder))) {
-			await this.app.vault.createFolder(folder).catch(() => undefined);
-		}
+		const defaultTplPath = (this.plugin.settings.defaultTemplatePath || '').trim();
+
+		const pEnsureStickyRoot = (async (): Promise<void> => {
+			if (!(await this.app.vault.adapter.exists(folder))) {
+				await this.app.vault.createFolder(folder).catch(() => undefined);
+			}
+		})();
+
+		const pDefaultTemplateBody = defaultTplPath
+			? (async (): Promise<string> => {
+					const tf = this.app.vault.getAbstractFileByPath(normalizePath(defaultTplPath));
+					if (!(tf instanceof TFile)) return '';
+					try {
+						return await this.app.vault.read(tf);
+					} catch {
+						return '';
+					}
+				})()
+			: Promise.resolve('');
+
+		const [, body] = await Promise.all([pEnsureStickyRoot, pDefaultTemplateBody]);
+
 		const tmpl =
 			(this.plugin.settings.filenameTemplate || '').trim() || 'YYYY/YYYY-MM-DD';
 		const relativeFormatted = formatStickyNoteRelativePath(tmpl);
@@ -190,18 +209,6 @@ export class StickyNoteManager {
 			relativeNoExt = this.suffixStickyRelativePath(relativeFormatted, n);
 			path = await this.pathForStickyRelative(folder, relativeNoExt);
 			n += 1;
-		}
-		let body = '';
-		const tpl = (this.plugin.settings.defaultTemplatePath || '').trim();
-		if (tpl) {
-			const tf = this.app.vault.getAbstractFileByPath(normalizePath(tpl));
-			if (tf instanceof TFile) {
-				try {
-					body = await this.app.vault.read(tf);
-				} catch {
-					/* noop */
-				}
-			}
 		}
 
 		const fallbackBg = this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
@@ -264,7 +271,7 @@ export class StickyNoteManager {
 
 		this.popovers.set(id, pop);
 		this.bringStickyToFront(pop);
-		await this.yieldForStickyChromePaint();
+		/* openFile 内已有 rAF；此处不再多等一帧，缩短首屏可交互时间。 */
 		await pop.openFile(f);
 
 		const scheduleListRefreshSoon = (): void => {
@@ -276,14 +283,15 @@ export class StickyNoteManager {
 			window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(p), 120);
 		};
 
+		/** processFrontMatter 较慢：不阻塞便笺窗口收尾，颜色 UI 已由 shell initialColor 对齐来源便笺。 */
 		if (sourcePopover) {
 			this.plugin.muteStickyListModifyPaths.add(f.path);
-			try {
-				await this.setStickyBackgroundColorForFile(f, color);
-			} finally {
-				scheduleListRefreshSoon();
-				endMuteAfterList(f.path);
-			}
+			void this.setStickyBackgroundColorForFile(f, color)
+				.catch(() => undefined)
+				.finally(() => {
+					scheduleListRefreshSoon();
+					endMuteAfterList(f.path);
+				});
 		} else {
 			const fromCache = getStickyBgColorFromMetadataCache(this.app, f);
 			const yamlGuess = fromCache ?? preParsedStickyBg;
@@ -291,12 +299,12 @@ export class StickyNoteManager {
 				pop.setColor(yamlGuess);
 			} else if (color !== 'default') {
 				this.plugin.muteStickyListModifyPaths.add(f.path);
-				try {
-					await this.setStickyBackgroundColorForFile(f, color);
-				} finally {
-					scheduleListRefreshSoon();
-					endMuteAfterList(f.path);
-				}
+				void this.setStickyBackgroundColorForFile(f, color)
+					.catch(() => undefined)
+					.finally(() => {
+						scheduleListRefreshSoon();
+						endMuteAfterList(f.path);
+					});
 			}
 		}
 		this.bringStickyToFront(pop);
