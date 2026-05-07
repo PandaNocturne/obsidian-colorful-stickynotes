@@ -45,3 +45,6 @@ export type NoteListSort = 'ctime-desc' | 'ctime-asc' | 'mtime-desc' | 'mtime-as
 /** 便笺列表首次打开时的挂载位置。 */
 export type NoteListOpenLocation = 'left-sidebar' | 'right-sidebar' | 'new-tab';
 
+/** 便笺列表：按当前是否已打开浮动便笺窗口筛选。 */
+export type NoteListFloatOpenFilter = 'all' | 'open' | 'closed';
+

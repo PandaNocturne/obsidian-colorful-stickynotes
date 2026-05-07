@@ -16,7 +16,7 @@ import {
 } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
 import { clampViewContentZoom } from '../settings';
-import { VIEW_STICKY_NOTE_LIST, type NoteListSort } from '../types';
+import { VIEW_STICKY_NOTE_LIST, type NoteListFloatOpenFilter, type NoteListSort } from '../types';
 import '../obsidian-augmentations';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
@@ -34,6 +34,13 @@ const NOTE_LIST_SORT_SPECS: readonly { mode: NoteListSort; icon: string; title: 
 	{ mode: 'ctime-asc', icon: 'calendar-arrow-up', title: '创建时间 · 旧的在先' },
 	{ mode: 'mtime-desc', icon: 'clock-arrow-down', title: '修改时间 · 新的在前' },
 	{ mode: 'mtime-asc', icon: 'clock-arrow-up', title: '修改时间 · 旧的在先' }
+];
+
+/** 工具栏「浮动窗口」筛选：与 `settings.noteListFloatOpenFilter` 一一对应。 */
+const NOTE_LIST_FLOAT_OPEN_SPECS: readonly { mode: NoteListFloatOpenFilter; icon: string; title: string }[] = [
+	{ mode: 'all', icon: 'layout-grid', title: '全部便笺' },
+	{ mode: 'open', icon: 'square-pen', title: '仅已打开浮动便笺' },
+	{ mode: 'closed', icon: 'file', title: '仅未打开浮动便笺' }
 ];
 
 /** `pinnedNorm` 为已 normalize 的路径数组，顺序即置顶顺序；不在数组中为未置顶。 */
@@ -169,6 +176,8 @@ async function filterStickyFilesByColors(
 export class StickyNoteListView extends ItemView {
 	private listItemsEl: HTMLElement | null = null;
 	private readonly sortBtnByMode = new Map<NoteListSort, HTMLButtonElement>();
+	private readonly floatOpenBtnByMode = new Map<NoteListFloatOpenFilter, HTMLButtonElement>();
+	private floatOpenBarEl: HTMLElement | null = null;
 	private readonly colorFilterBtnById = new Map<StickyColorId, HTMLButtonElement>();
 	private colorFilterBarEl: HTMLElement | null = null;
 	private searchInput: HTMLInputElement | null = null;
@@ -320,6 +329,7 @@ export class StickyNoteListView extends ItemView {
 		sortMode: NoteListSort,
 		query: string,
 		colorFilters: readonly StickyColorId[],
+		floatOpen: NoteListFloatOpenFilter,
 		pageSize: number,
 		prioPath: string | null,
 		filtered: TFile[],
@@ -329,6 +339,7 @@ export class StickyNoteListView extends ItemView {
 			sort: sortMode,
 			query,
 			colors: [...colorFilters].sort(),
+			floatOpen,
 			pageSize,
 			prio: prioPath ?? '',
 			paths: filtered.map(f => f.path),
@@ -526,6 +537,25 @@ export class StickyNoteListView extends ItemView {
 			});
 		}
 
+		const floatBar = toolbar.createDiv({ cls: 'csn-list-toolbar-float-open' });
+		this.floatOpenBarEl = floatBar;
+		const floatLabel = floatBar.createSpan({ cls: 'csn-list-toolbar-label', text: '窗口' });
+		floatLabel.setAttr('aria-hidden', 'true');
+		const floatWrap = floatBar.createDiv({ cls: 'csn-list-toolbar-btns' });
+		this.floatOpenBtnByMode.clear();
+		for (const spec of NOTE_LIST_FLOAT_OPEN_SPECS) {
+			const btn = floatWrap.createEl('button', {
+				type: 'button',
+				cls: 'clickable-icon csn-list-sort-btn',
+				attr: { 'aria-label': spec.title, title: spec.title, 'data-csn-list-float': spec.mode }
+			});
+			setIcon(btn, spec.icon);
+			this.floatOpenBtnByMode.set(spec.mode, btn);
+			this.registerDomEvent(btn, 'click', () => {
+				void this.setListFloatOpenFilter(spec.mode);
+			});
+		}
+
 		const colorBar = toolbar.createDiv({ cls: 'csn-list-toolbar-color-filter' });
 		this.colorFilterBarEl = colorBar;
 		const colorLabel = colorBar.createSpan({ cls: 'csn-list-toolbar-label', text: '颜色' });
@@ -625,6 +655,7 @@ export class StickyNoteListView extends ItemView {
 		this.registerDomEvent(this.searchInput, 'input', render);
 		this.registerVaultListRefresh();
 		this.syncSortToolbarActive();
+		this.syncFloatOpenToolbarActive();
 		this.syncColorFilterToolbarActive();
 		void this.renderList();
 	}
@@ -641,6 +672,22 @@ export class StickyNoteListView extends ItemView {
 		this.plugin.settings.noteListSort = sort;
 		await this.plugin.saveSettings();
 		this.syncSortToolbarActive();
+		this.listPageIndex = 0;
+		void this.renderList();
+	}
+
+	private syncFloatOpenToolbarActive(): void {
+		const mode = this.plugin.settings.noteListFloatOpenFilter;
+		for (const [m, btn] of this.floatOpenBtnByMode) {
+			btn.toggleClass('is-active', m === mode);
+		}
+	}
+
+	private async setListFloatOpenFilter(mode: NoteListFloatOpenFilter): Promise<void> {
+		if (this.plugin.settings.noteListFloatOpenFilter === mode) return;
+		this.plugin.settings.noteListFloatOpenFilter = mode;
+		await this.plugin.saveSettings();
+		this.syncFloatOpenToolbarActive();
 		this.listPageIndex = 0;
 		void this.renderList();
 	}
@@ -870,6 +917,7 @@ export class StickyNoteListView extends ItemView {
 				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
 				this.colorFilterBarEl?.hide();
+				this.floatOpenBarEl?.hide();
 				return;
 			}
 			if (!(folderAbs instanceof TFolder)) {
@@ -882,10 +930,12 @@ export class StickyNoteListView extends ItemView {
 				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
 				this.colorFilterBarEl?.hide();
+				this.floatOpenBarEl?.hide();
 				return;
 			}
 
 			this.colorFilterBarEl?.show();
+			this.floatOpenBarEl?.show();
 
 			const keywords = query
 				.split(/\s+/)
@@ -896,6 +946,17 @@ export class StickyNoteListView extends ItemView {
 			let filtered =
 				keywords.length === 0 ? files : await filterStickyFilesByKeywords(this.app, files, keywords);
 			filtered = await filterStickyFilesByColors(this.app, filtered, this.plugin.settings.noteListColorFilters);
+
+			const floatMode = this.plugin.settings.noteListFloatOpenFilter;
+			if (floatMode !== 'all') {
+				const rawOpen = this.plugin.stickies.getOpenStickyNotePaths();
+				const openNorm = new Set([...rawOpen].map(p => normalizePath(p)));
+				if (floatMode === 'open') {
+					filtered = filtered.filter(f => openNorm.has(normalizePath(f.path)));
+				} else {
+					filtered = filtered.filter(f => !openNorm.has(normalizePath(f.path)));
+				}
+			}
 
 			const pinnedNorm = this.plugin.settings.noteListPinnedPaths.map(p => normalizePath(p));
 			const pinnedSet = new Set(pinnedNorm);
@@ -938,6 +999,7 @@ export class StickyNoteListView extends ItemView {
 				sortMode,
 				query,
 				this.plugin.settings.noteListColorFilters,
+				floatMode,
 				pageSize,
 				prio,
 				filtered,
@@ -1040,6 +1102,8 @@ export class StickyNoteListView extends ItemView {
 		this.paginationMetaEl = null;
 		this.colorFilterBarEl = null;
 		this.colorFilterBtnById.clear();
+		this.floatOpenBarEl = null;
+		this.floatOpenBtnByMode.clear();
 		this.contentEl.empty();
 	}
 }

@@ -3,7 +3,7 @@ import { formatStickyNoteRelativePath } from './filename-template';
 import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
 import { SHEET_COLOR_ORDER } from './sticky/sticky-color-order';
-import type { NoteListOpenLocation, NoteListSort, StickyColorId } from './types';
+import type { NoteListFloatOpenFilter, NoteListOpenLocation, NoteListSort, StickyColorId } from './types';
 
 /** 便笺窗口与列表预览正文的 zoom 范围（与设置项一致）。 */
 export const VIEW_CONTENT_ZOOM_MIN = 0.3;
@@ -44,6 +44,8 @@ export interface ColorfulStickyNotesSettings {
 	noteListPinnedPaths: string[];
 	/** 便笺列表按背景色多选筛选（空数组表示显示全部）。 */
 	noteListColorFilters: StickyColorId[];
+	/** 便笺列表：仅显示已打开浮动窗口 / 未打开 / 全部。 */
+	noteListFloatOpenFilter: NoteListFloatOpenFilter;
 	/** 便笺列表首次打开时的挂载位置。 */
 	noteListOpenLocation: NoteListOpenLocation;
 	/** 关闭空白便笺移入回收站前是否弹出确认框（默认开启）。 */
@@ -73,6 +75,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	noteListSort: 'ctime-desc',
 	noteListPinnedPaths: [],
 	noteListColorFilters: [],
+	noteListFloatOpenFilter: 'all',
 	noteListOpenLocation: 'right-sidebar',
 	confirmBlankStickyTrashOnClose: true,
 	defaultNewStickyWidth: 420,

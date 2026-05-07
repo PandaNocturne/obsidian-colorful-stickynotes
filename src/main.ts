@@ -8,7 +8,13 @@ import {
 import { WorkspacePanelModal } from './modals/WorkspacePanelModal';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
-import { VIEW_STICKY_NOTE_LIST, type NoteListOpenLocation, type NoteListSort, type StickyColorId } from './types';
+import {
+	VIEW_STICKY_NOTE_LIST,
+	type NoteListFloatOpenFilter,
+	type NoteListOpenLocation,
+	type NoteListSort,
+	type StickyColorId
+} from './types';
 
 const VALID_NEW_STICKY_BG: readonly StickyColorId[] = [
 	'default',
@@ -32,6 +38,8 @@ const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [
 	'right-sidebar',
 	'new-tab'
 ];
+
+const VALID_NOTE_LIST_FLOAT_OPEN_FILTER: readonly NoteListFloatOpenFilter[] = ['all', 'open', 'closed'];
 
 function normalizeNoteListColorFilters(value: unknown): StickyColorId[] {
 	if (!Array.isArray(value)) return [];
@@ -207,6 +215,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			this.settings.noteListSort = DEFAULT_SETTINGS.noteListSort;
 		}
 
+		const nf = this.settings.noteListFloatOpenFilter;
+		if (
+			typeof nf !== 'string' ||
+			!VALID_NOTE_LIST_FLOAT_OPEN_FILTER.includes(nf as NoteListFloatOpenFilter)
+		) {
+			this.settings.noteListFloatOpenFilter = DEFAULT_SETTINGS.noteListFloatOpenFilter;
+		}
+
 		const hasNewColorFilters = 'noteListColorFilters' in raw;
 		if (hasNewColorFilters) {
 			this.settings.noteListColorFilters = normalizeNoteListColorFilters(raw.noteListColorFilters);
@@ -304,7 +320,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 				const v = leaf.view;
 				if (v instanceof StickyNoteListView) {
-					v.syncOpenStickyCornerIndicators();
+					/* 非「全部」时打开/关闭便笺会改变列表成员，需整表重绘；仅「全部」时只更新卷角标记 */
+					if (this.settings.noteListFloatOpenFilter !== 'all') {
+						v.requestRedraw();
+					} else {
+						v.syncOpenStickyCornerIndicators();
+					}
 				}
 			}
 		});
