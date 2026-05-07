@@ -45,6 +45,8 @@ export interface StickyNotePopoverOptions {
 	onColorChange: (c: StickyColorId) => void;
 	onCollapseChange?: (c: boolean) => void;
 	onYamlVisibilityChange?: (v: boolean) => void;
+	/** 阅读/编辑模式切换并落盘后由管理器写入工作区。 */
+	onMarkdownModeChange?: () => void;
 	onOpenNoteList: () => void;
 	/** 删除便笺：由管理器激活当前叶视图并执行 Obsidian 默认「删除当前笔记」命令。 */
 	onDeleteCurrentSticky: () => void;
@@ -254,6 +256,16 @@ export class StickyNotePopover {
 
 	getYamlVisible(): boolean {
 		return this.yamlVisible;
+	}
+
+	/** 当前 Markdown 视图模式；非 md 或未打开文件时回退为创建时默认。 */
+	getMarkdownMode(): 'preview' | 'source' {
+		const v = this.leaf?.view;
+		if (v instanceof MarkdownView && v.file?.extension === 'md') {
+			const m = v.getMode();
+			if (m === 'source' || m === 'preview') return m;
+		}
+		return this.options.defaultMarkdownMode;
 	}
 
 	setBottomBarSettings(autoHide: boolean): void {
@@ -658,6 +670,7 @@ export class StickyNotePopover {
 		await leaf.loadIfDeferred?.();
 		this.syncModeToggleUi();
 		this.requestLeafMeasure();
+		this.options.onMarkdownModeChange?.();
 	}
 
 	private scheduleSyncModeToggleUiAfterLayout(): void {

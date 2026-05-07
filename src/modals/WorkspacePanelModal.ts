@@ -30,7 +30,9 @@ export class WorkspacePanelModal extends Modal {
 
 		new Setting(this.contentEl)
 			.setName('当前工作区')
-			.setDesc('切换后下次启动将默认恢复该工作区布局。')
+			.setDesc(
+				'切换后下次启动将默认恢复该工作区布局。各便笺窗口的位置、折叠、YAML 区显示、阅读/编辑模式会写入 workspaces.json。'
+			)
 			.addDropdown(dd => {
 				for (const w of data.workspaces) {
 					dd.addOption(w.id, w.name);

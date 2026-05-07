@@ -21,6 +21,8 @@ export interface SerializedStickyWindow {
 	collapsed?: boolean;
 	color?: StickyColorId;
 	yamlVisible?: boolean;
+	/** Markdown 便笺的阅读 / 编辑视图（`preview` | `source`）。 */
+	markdownMode?: 'preview' | 'source';
 }
 
 export interface StickyWorkspace {

@@ -103,14 +103,18 @@ export class StickyNoteManager {
 			const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
 			if (!file) continue;
 			const bounds = pop.getBounds();
-			ser.push({
+			const row: SerializedStickyWindow = {
 				id,
 				path: file.path,
 				bounds,
 				collapsed: pop.getCollapsed(),
 				color: pop.getColor(),
 				yamlVisible: pop.getYamlVisible()
-			});
+			};
+			if (file.extension === 'md') {
+				row.markdownMode = pop.getMarkdownMode();
+			}
+			ser.push(row);
 		}
 		ws.windows = ser;
 		this.scheduleSaveWorkspaces();
@@ -266,7 +270,11 @@ export class StickyNoteManager {
 			bounds,
 			initialColor: color,
 			initialCollapsed: collapsed,
-			initialYamlVisible: yamlVisible
+			initialYamlVisible: yamlVisible,
+			defaultMarkdownMode:
+				initial?.markdownMode === 'preview' || initial?.markdownMode === 'source'
+					? initial.markdownMode
+					: undefined
 		});
 
 		this.popovers.set(id, pop);
@@ -354,13 +362,14 @@ export class StickyNoteManager {
 			initialColor: StickyColorId;
 			initialCollapsed: boolean;
 			initialYamlVisible: boolean;
+			defaultMarkdownMode?: 'preview' | 'source';
 		}
 	): StickyNotePopover {
 		return new StickyNotePopover({
 			plugin: this.plugin,
 			mountEl: this.mount,
 			bounds: extra.bounds,
-			defaultMarkdownMode: this.plugin.settings.defaultViewMode,
+			defaultMarkdownMode: extra.defaultMarkdownMode ?? this.plugin.settings.defaultViewMode,
 			initialColor: extra.initialColor,
 			initialCollapsed: extra.initialCollapsed,
 			initialYamlVisible: extra.initialYamlVisible,
@@ -372,6 +381,7 @@ export class StickyNoteManager {
 			onColorChange: c => void this.applyColorToFile(id, c),
 			onCollapseChange: () => this.persistOpenWindows(),
 			onYamlVisibilityChange: () => this.persistOpenWindows(),
+			onMarkdownModeChange: () => this.persistOpenWindows(),
 			onOpenNoteList: () => void this.plugin.openNoteListView(),
 			onDeleteCurrentSticky: () => void this.deleteCurrentStickyNote(id),
 			onActivate: () => this.bringStickyToFrontById(id)
@@ -547,11 +557,17 @@ export class StickyNoteManager {
 		const savedColor = serial.color;
 		const initialColor: StickyColorId =
 			savedColor ?? (await resolveStickyBgColorForFile(this.app, file)) ?? 'default';
+		const restoredMdMode: 'preview' | 'source' | undefined =
+			file.extension === 'md' &&
+			(serial.markdownMode === 'preview' || serial.markdownMode === 'source')
+				? serial.markdownMode
+				: undefined;
 		const pop = this.createPopoverShell(id, {
 			bounds: b,
 			initialColor,
 			initialCollapsed: !!serial.collapsed,
-			initialYamlVisible: !!serial.yamlVisible
+			initialYamlVisible: !!serial.yamlVisible,
+			defaultMarkdownMode: restoredMdMode
 		});
 		this.popovers.set(id, pop);
 		return { pop, file, bounds: b, savedColor };
