@@ -36,3 +36,6 @@ export interface WorkspacesFile {
 }
 
 export const VIEW_STICKY_NOTE_LIST = 'colorful-sticky-notes-list';
+
+/** 便笺列表排序方式（时间均为 vault 文件 stat）。 */
+export type NoteListSort = 'ctime-desc' | 'ctime-asc' | 'mtime-desc' | 'mtime-asc';

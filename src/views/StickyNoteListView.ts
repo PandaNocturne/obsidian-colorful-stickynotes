@@ -14,7 +14,7 @@ import {
 	type Debouncer
 } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
-import { VIEW_STICKY_NOTE_LIST } from '../types';
+import { VIEW_STICKY_NOTE_LIST, type NoteListSort } from '../types';
 import { previewMarkdownSlice } from '../utils/preview-markdown-slice';
 import '../obsidian-augmentations';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
@@ -24,6 +24,41 @@ import type { StickyColorId } from '../types';
 const LIST_PAGE_SIZE = 12;
 /** 单卡传入渲染器的 Markdown 最大字符数（含换行），避免超大笔记阻塞 UI。 */
 const PREVIEW_MARKDOWN_MAX = 8000;
+
+/** 工具栏排序按钮：与 `settings.noteListSort` 一一对应。 */
+const NOTE_LIST_SORT_SPECS: readonly { mode: NoteListSort; icon: string; title: string }[] = [
+	{ mode: 'ctime-desc', icon: 'calendar-arrow-down', title: '创建时间 · 新的在前' },
+	{ mode: 'ctime-asc', icon: 'calendar-arrow-up', title: '创建时间 · 旧的在先' },
+	{ mode: 'mtime-desc', icon: 'clock-arrow-down', title: '修改时间 · 新的在前' },
+	{ mode: 'mtime-asc', icon: 'clock-arrow-up', title: '修改时间 · 旧的在先' }
+];
+
+function compareStickyListFiles(a: TFile, b: TFile, sort: NoteListSort): number {
+	switch (sort) {
+		case 'ctime-desc': {
+			const d = b.stat.ctime - a.stat.ctime;
+			if (d !== 0) return d;
+			return a.path.localeCompare(b.path);
+		}
+		case 'ctime-asc': {
+			const d = a.stat.ctime - b.stat.ctime;
+			if (d !== 0) return d;
+			return a.path.localeCompare(b.path);
+		}
+		case 'mtime-desc': {
+			const d = b.stat.mtime - a.stat.mtime;
+			if (d !== 0) return d;
+			return a.path.localeCompare(b.path);
+		}
+		case 'mtime-asc': {
+			const d = a.stat.mtime - b.stat.mtime;
+			if (d !== 0) return d;
+			return a.path.localeCompare(b.path);
+		}
+		default:
+			return a.path.localeCompare(b.path);
+	}
+}
 
 function buildStickyBgSubmenuTitle(
 	doc: Document,
@@ -64,6 +99,7 @@ export class StickyNoteListView extends ItemView {
 	private listItemsEl: HTMLElement | null = null;
 	private layoutColumnBtn: HTMLButtonElement | null = null;
 	private layoutGridBtn: HTMLButtonElement | null = null;
+	private readonly sortBtnByMode = new Map<NoteListSort, HTMLButtonElement>();
 	private searchInput: HTMLInputElement | null = null;
 	private paginationEl: HTMLElement | null = null;
 	private paginationPrevBtn: HTMLButtonElement | null = null;
@@ -222,6 +258,23 @@ export class StickyNoteListView extends ItemView {
 			void this.setListLayout('grid');
 		});
 
+		const sortLabel = toolbar.createSpan({ cls: 'csn-list-toolbar-label', text: '排序' });
+		sortLabel.setAttr('aria-hidden', 'true');
+		const sortWrap = toolbar.createDiv({ cls: 'csn-list-toolbar-btns' });
+		this.sortBtnByMode.clear();
+		for (const spec of NOTE_LIST_SORT_SPECS) {
+			const btn = sortWrap.createEl('button', {
+				type: 'button',
+				cls: 'clickable-icon csn-list-sort-btn',
+				attr: { 'aria-label': spec.title, title: spec.title }
+			});
+			setIcon(btn, spec.icon);
+			this.sortBtnByMode.set(spec.mode, btn);
+			this.registerDomEvent(btn, 'click', () => {
+				void this.setListSort(spec.mode);
+			});
+		}
+
 		toolbar.createDiv({ cls: 'csn-list-toolbar-spacer' });
 		const newStickyBtn = toolbar.createEl('button', {
 			type: 'button',
@@ -282,6 +335,7 @@ export class StickyNoteListView extends ItemView {
 		this.registerDomEvent(this.searchInput, 'input', render);
 		this.registerVaultListRefresh();
 		this.syncLayoutToolbarActive();
+		this.syncSortToolbarActive();
 		void this.renderList();
 	}
 
@@ -304,6 +358,22 @@ export class StickyNoteListView extends ItemView {
 		await this.plugin.saveSettings();
 		this.applyListLayoutClass();
 		this.syncLayoutToolbarActive();
+	}
+
+	private syncSortToolbarActive(): void {
+		const mode = this.plugin.settings.noteListSort;
+		for (const [m, btn] of this.sortBtnByMode) {
+			btn.toggleClass('is-active', m === mode);
+		}
+	}
+
+	private async setListSort(sort: NoteListSort): Promise<void> {
+		if (this.plugin.settings.noteListSort === sort) return;
+		this.plugin.settings.noteListSort = sort;
+		await this.plugin.saveSettings();
+		this.syncSortToolbarActive();
+		this.listPageIndex = 0;
+		void this.renderList();
 	}
 
 	private async renderList(): Promise<void> {
@@ -345,14 +415,13 @@ export class StickyNoteListView extends ItemView {
 					});
 
 			const prio = this.plugin.listPrioritizeStickyPath;
+			const sortMode = this.plugin.settings.noteListSort;
 			filtered.sort((a, b) => {
 				if (prio) {
 					if (a.path === prio && b.path !== prio) return -1;
 					if (b.path === prio && a.path !== prio) return 1;
 				}
-				const mt = b.stat.mtime - a.stat.mtime;
-				if (mt !== 0) return mt;
-				return b.path.localeCompare(a.path);
+				return compareStickyListFiles(a, b, sortMode);
 			});
 
 			if (filtered.length === 0) {
@@ -384,12 +453,15 @@ export class StickyNoteListView extends ItemView {
 					const zoom = Math.max(0.5, Math.min(1, this.plugin.settings.viewContentZoom));
 					card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 
+					const listDateTs =
+						sortMode.startsWith('ctime') ? f.stat.ctime : f.stat.mtime;
+
 					const head = card.createDiv({ cls: 'csn-list-card-head' });
 					head.createDiv({ cls: 'csn-list-card-title', text: f.basename });
 					const headRight = head.createDiv({ cls: 'csn-list-card-head-right' });
 					headRight.createDiv({
 						cls: 'csn-list-card-date',
-						text: moment(f.stat.mtime).format('M月D日')
+						text: moment(listDateTs).format('M月D日')
 					});
 					const menuBtn = headRight.createEl('button', {
 						type: 'button',

@@ -3,7 +3,7 @@ import { ColorfulStickyNotesSettingTab, DEFAULT_SETTINGS, type ColorfulStickyNot
 import { WorkspacePanelModal } from './modals/WorkspacePanelModal';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
-import { VIEW_STICKY_NOTE_LIST, type StickyColorId } from './types';
+import { VIEW_STICKY_NOTE_LIST, type NoteListSort, type StickyColorId } from './types';
 
 const VALID_NEW_STICKY_BG: readonly StickyColorId[] = [
 	'default',
@@ -13,6 +13,13 @@ const VALID_NEW_STICKY_BG: readonly StickyColorId[] = [
 	'blue',
 	'lavender',
 	'gray'
+];
+
+const VALID_NOTE_LIST_SORT: readonly NoteListSort[] = [
+	'ctime-desc',
+	'ctime-asc',
+	'mtime-desc',
+	'mtime-asc'
 ];
 
 export default class ColorfulStickyNotesPlugin extends Plugin {
@@ -106,6 +113,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		const layout = this.settings.noteListLayout;
 		if (layout !== 'column' && layout !== 'grid') {
 			this.settings.noteListLayout = DEFAULT_SETTINGS.noteListLayout;
+		}
+		const nls = this.settings.noteListSort;
+		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.includes(nls as NoteListSort)) {
+			this.settings.noteListSort = DEFAULT_SETTINGS.noteListSort;
 		}
 		const delaySec = this.settings.restoreStickySessionDelaySec;
 		if (typeof delaySec !== 'number' || !Number.isFinite(delaySec)) {
