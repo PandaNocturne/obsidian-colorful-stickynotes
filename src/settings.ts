@@ -2,6 +2,8 @@ import { App, PluginSettingTab, Setting } from 'obsidian';
 import { formatStickyNoteRelativePath } from './filename-template';
 import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
+import { SHEET_COLOR_ORDER } from './sticky/sticky-color-order';
+import type { StickyColorId } from './types';
 
 export interface ColorfulStickyNotesSettings {
 	stickyFolder: string;
@@ -22,6 +24,12 @@ export interface ColorfulStickyNotesSettings {
 	noteListLayout: 'column' | 'grid';
 	/** 关闭空白便笺移入回收站前是否弹出确认框（默认开启）。 */
 	confirmBlankStickyTrashOnClose: boolean;
+	/** 新建便笺窗口默认宽度（px）。 */
+	defaultNewStickyWidth: number;
+	/** 新建便笺窗口默认高度（px）。 */
+	defaultNewStickyHeight: number;
+	/** 新建便笺默认背景（写入 frontmatter；与色条顺序第一项一致时为「亮黄」）。 */
+	defaultNewStickyBackground: StickyColorId;
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -37,7 +45,10 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
 	noteListLayout: 'column',
-	confirmBlankStickyTrashOnClose: true
+	confirmBlankStickyTrashOnClose: true,
+	defaultNewStickyWidth: 420,
+	defaultNewStickyHeight: 360,
+	defaultNewStickyBackground: 'yellow'
 };
 
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
@@ -264,6 +275,52 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						})
 				);
 		}
+
+		containerEl.createEl('h3', { text: '新建便笺' });
+		new Setting(containerEl)
+			.setName('默认宽度')
+			.setDesc('新建便笺浮动窗口的初始宽度（像素）。从已有便笺旁新建时仍沿用当前窗口尺寸。')
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.defaultNewStickyWidth))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.defaultNewStickyWidth = Number.isFinite(n)
+							? Math.max(200, Math.min(1600, n))
+							: DEFAULT_SETTINGS.defaultNewStickyWidth;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName('默认高度')
+			.setDesc('新建便笺浮动窗口的初始高度（像素）。')
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.defaultNewStickyHeight))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.defaultNewStickyHeight = Number.isFinite(n)
+							? Math.max(200, Math.min(1200, n))
+							: DEFAULT_SETTINGS.defaultNewStickyHeight;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName('默认背景')
+			.setDesc(
+				'无模板或模板未指定 colorful-sticky-bg 时，写入便笺的默认背景色（与便笺底部色条一致）。'
+			)
+			.addDropdown(dd => {
+				for (const c of SHEET_COLOR_ORDER) {
+					dd.addOption(c.id, c.label);
+				}
+				return dd
+					.setValue(this.plugin.settings.defaultNewStickyBackground)
+					.onChange(async v => {
+						this.plugin.settings.defaultNewStickyBackground = v as StickyColorId;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		containerEl.createEl('h3', { text: '便笺列表' });
 		new Setting(containerEl)

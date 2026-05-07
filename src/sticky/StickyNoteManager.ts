@@ -138,9 +138,9 @@ export class StickyNoteManager {
 	}
 
 	private getDefaultBounds(): FloatingBounds {
-		const w = 420;
-		const h = 360;
 		const s = this.plugin.settings;
+		const w = Math.max(200, Math.min(1600, s.defaultNewStickyWidth ?? 420));
+		const h = Math.max(200, Math.min(1200, s.defaultNewStickyHeight ?? 360));
 		const margin = 12;
 		if (s.defaultPositionMode === 'custom') {
 			return {
@@ -230,8 +230,9 @@ export class StickyNoteManager {
 		}
 
 		const id = initial?.id ?? this.newId();
+		const fallbackBg = this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
 		const color =
-			initial?.color ?? (sourcePopover ? sourcePopover.getColor() : undefined) ?? 'yellow';
+			initial?.color ?? (sourcePopover ? sourcePopover.getColor() : undefined) ?? fallbackBg;
 		const collapsed = initial?.collapsed ?? false;
 		const yamlVisible = initial?.yamlVisible ?? false;
 
@@ -265,7 +266,17 @@ export class StickyNoteManager {
 			}
 		} else {
 			const y = await resolveStickyBgColorForFile(this.app, f);
-			if (y) pop.setColor(y);
+			if (y) {
+				pop.setColor(y);
+			} else {
+				this.plugin.muteStickyListModifyPaths.add(f.path);
+				try {
+					await this.setStickyBackgroundColorForFile(f, color);
+				} finally {
+					requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
+					window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(f.path), 120);
+				}
+			}
 		}
 		this.bringStickyToFront(pop);
 		this.persistOpenWindows();

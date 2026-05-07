@@ -3,7 +3,17 @@ import { ColorfulStickyNotesSettingTab, DEFAULT_SETTINGS, type ColorfulStickyNot
 import { WorkspacePanelModal } from './modals/WorkspacePanelModal';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
-import { VIEW_STICKY_NOTE_LIST } from './types';
+import { VIEW_STICKY_NOTE_LIST, type StickyColorId } from './types';
+
+const VALID_NEW_STICKY_BG: readonly StickyColorId[] = [
+	'default',
+	'yellow',
+	'pink',
+	'mint',
+	'blue',
+	'lavender',
+	'gray'
+];
 
 export default class ColorfulStickyNotesPlugin extends Plugin {
 	settings!: ColorfulStickyNotesSettings;
@@ -47,6 +57,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			name: '打开便笺列表',
 			callback: () => {
 				void this.openNoteListView();
+			}
+		});
+
+		this.addCommand({
+			id: 'create-new-sticky-note',
+			name: '新建便笺',
+			callback: () => {
+				void this.stickies.addStickyWindow();
 			}
 		});
 
@@ -105,6 +123,25 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 		if (typeof this.settings.confirmBlankStickyTrashOnClose !== 'boolean') {
 			this.settings.confirmBlankStickyTrashOnClose = DEFAULT_SETTINGS.confirmBlankStickyTrashOnClose;
+		}
+
+		let dw = this.settings.defaultNewStickyWidth;
+		if (typeof dw !== 'number' || !Number.isFinite(dw)) {
+			dw = DEFAULT_SETTINGS.defaultNewStickyWidth;
+		}
+		this.settings.defaultNewStickyWidth = Math.max(200, Math.min(1600, Math.round(dw)));
+
+		let dh = this.settings.defaultNewStickyHeight;
+		if (typeof dh !== 'number' || !Number.isFinite(dh)) {
+			dh = DEFAULT_SETTINGS.defaultNewStickyHeight;
+		}
+		this.settings.defaultNewStickyHeight = Math.max(200, Math.min(1200, Math.round(dh)));
+
+		const dbg = this.settings.defaultNewStickyBackground;
+		if (typeof dbg !== 'string' || !VALID_NEW_STICKY_BG.includes(dbg as StickyColorId)) {
+			this.settings.defaultNewStickyBackground = DEFAULT_SETTINGS.defaultNewStickyBackground;
+		} else {
+			this.settings.defaultNewStickyBackground = dbg as StickyColorId;
 		}
 	}
 

@@ -223,6 +223,16 @@ export class StickyNoteListView extends ItemView {
 		});
 
 		toolbar.createDiv({ cls: 'csn-list-toolbar-spacer' });
+		const newStickyBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-new-btn',
+			attr: { 'aria-label': '新建便笺', title: '新建便笺' }
+		});
+		setIcon(newStickyBtn, 'plus');
+		this.registerDomEvent(newStickyBtn, 'click', () => {
+			void this.plugin.stickies.addStickyWindow();
+		});
+
 		const refreshBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-refresh-btn',
