@@ -1,0 +1,44 @@
+/* 便笺列表 */
+.csn-list-view {
+	padding: 8px 10px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+}
+
+.csn-list-search-input {
+	width: 100%;
+}
+
+.csn-list-items {
+	overflow: auto;
+	flex: 1 1 auto;
+}
+
+.csn-list-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 6px 4px;
+	border-radius: var(--radius-s);
+	cursor: var(--cursor);
+}
+
+.csn-list-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.csn-list-row-name {
+	font-weight: 500;
+}
+
+.csn-list-row-path {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.csn-list-empty {
+	color: var(--text-muted);
+	padding: 8px 4px;
+}

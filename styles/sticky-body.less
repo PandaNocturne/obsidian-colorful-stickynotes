@@ -1,0 +1,81 @@
+/*
+ * 正文区：用绝对定位铺满 flex 剩余高度，避免 percentage / flex 链条在嵌套 workspace 上断裂。
+ * 底部栏「自动隐藏」若不设 min-height:0，flex 子项按内容最小高度会把正文挤成一条缝（min-height:auto 陷阱）。
+ */
+.csn-sticky-body {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* 打补丁 */
+.csn-sticky-body {
+	--file-line-width: calc(100% - 16px);
+
+	.view-header,
+	.embedded-backlinks,
+	.cg-note-toolbar-container {
+		display: none;
+	}
+
+	.workspace-split .view-content,
+	.workspace-split {
+		width: 100%;
+		height: 100%;
+	}
+
+	.view-content>.markdown-source-view.mod-cm6>.cm-editor>.cm-scroller {
+		padding: 10px;
+	}
+}
+
+// .csn-sticky-body>.workspace-split {
+// 	position: absolute;
+// 	inset: 0;
+// 	display: flex;
+// 	flex-direction: column;
+// 	min-height: 0 !important;
+// 	overflow: hidden;
+// }
+
+// .csn-sticky-body .workspace-tabs {
+// 	flex: 1 1 auto;
+// 	min-height: 0 !important;
+// 	display: flex;
+// 	flex-direction: column;
+// 	overflow: hidden;
+// }
+
+// .csn-sticky-body .workspace-leaf {
+// 	flex: 1 1 auto;
+// 	min-height: 0 !important;
+// 	overflow: hidden;
+// }
+
+// .csn-sticky-body .workspace-leaf-content {
+// 	flex: 1 1 auto;
+// 	min-height: 0 !important;
+// 	display: flex;
+// 	flex-direction: column;
+// 	overflow: hidden;
+// }
+
+/* 正文缩放：由 StickyNotePopover#setViewContentZoom 写入 --csn-sticky-view-content-zoom（默认 0.6） */
+.csn-sticky-body .view-content {
+	zoom: var(--csn-sticky-view-content-zoom, 0.6);
+}
+
+// .csn-sticky-body .workspace-leaf {
+// 	flex: 1 1 auto;
+// 	min-height: 100% !important;
+// 	min-width: 100% !important;
+// 	overflow: auto;
+// }
+
+// .csn-sticky-body .markdown-source-view.mod-cm6,
+// .csn-sticky-body .markdown-preview-view {
+// 	flex: 1 1 auto;
+// 	min-height: 0 !important;
+// 	overflow: auto;
+// }

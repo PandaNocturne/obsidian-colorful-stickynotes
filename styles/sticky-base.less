@@ -1,0 +1,78 @@
+/* 多彩便笺 — 浮动窗口 */
+.csn-sticky {
+	--csn-h: var(--background-secondary);
+	--csn-b: var(--background-primary);
+	--csn-border: var(--background-modifier-border);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--csn-border);
+	background: var(--csn-b);
+	box-shadow: var(--shadow-s);
+}
+
+.csn-sticky-header {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	min-height: 36px;
+	padding: 0 4px 0 6px;
+	background: var(--csn-h);
+	border-bottom: 1px solid var(--csn-border);
+	user-select: none;
+	cursor: grab;
+}
+
+.csn-sticky--active .csn-sticky-header {
+	cursor: grabbing;
+}
+
+.csn-sticky-header-left,
+.csn-sticky-header-right {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.csn-sticky-header-spacer {
+	flex: 1 1 auto;
+	min-width: 8px;
+}
+
+/* 阅读 / 编辑（与主界面 Markdown 叶视图一致，需避免叶内容高度为 0） */
+.csn-sticky-mode-toggle {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	flex: 0 0 auto;
+}
+
+.csn-sticky-header-btn.is-active {
+	background-color: var(--background-modifier-active-hover) !important;
+	color: var(--text-accent);
+}
+
+.csn-sticky-header .csn-sticky-header-btn,
+.csn-sticky-bottombar .csn-sticky-bottom-btn,
+.csn-sticky-bottombar .csn-sticky-add-cmd {
+	background: transparent !important;
+	border: none !important;
+	border-radius: var(--radius-s);
+	box-shadow: none !important;
+	padding: 4px;
+	margin: 0 1px;
+}
+
+.csn-sticky-header .csn-sticky-header-btn:hover,
+.csn-sticky-bottombar .csn-sticky-bottom-btn:hover,
+.csn-sticky-bottombar .csn-sticky-add-cmd:hover {
+	background-color: var(--background-modifier-hover) !important;
+}
+
+.csn-sticky-main {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}
