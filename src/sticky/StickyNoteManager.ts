@@ -526,6 +526,14 @@ export class StickyNoteManager {
 				getStickyBgColorFromMetadataCache(this.app, file) ??
 				(await resolveStickyBgColorForFile(this.app, file));
 			if (after) pop.setColor(after);
+		} else {
+			/* 工作区里记录了便笺颜色，但笔记 frontmatter 无 `colorful-sticky-bg` 时写回，避免仅会话态有颜色。 */
+			const yamlColor =
+				getStickyBgColorFromMetadataCache(this.app, file) ??
+				(await resolveStickyBgColorForFile(this.app, file));
+			if (yamlColor === null && savedColor !== 'default') {
+				await this.setStickyBackgroundColorForFile(file, savedColor);
+			}
 		}
 		this.persistOpenWindows();
 	}
