@@ -18,10 +18,25 @@
 }
 
 .csn-sticky--sheet-open .csn-sticky-sheet-layer {
-	/* 无蒙版：不拦截正文区域点击，仅面板可交互 */
 	pointer-events: none;
 	opacity: 1;
 	visibility: visible;
+}
+
+/* 蒙版：占满抽屉上方区域，半透明；点击由 TS 关闭抽屉 */
+.csn-sticky-sheet-backdrop {
+	flex: 1 1 auto;
+	min-height: 0;
+	width: 100%;
+	pointer-events: none;
+	background: transparent;
+	transition: background 0.18s ease;
+}
+
+.csn-sticky--sheet-open .csn-sticky-sheet-backdrop {
+	pointer-events: auto;
+	cursor: default;
+	background: color-mix(in srgb, var(--background-modifier-cover) 55%, transparent);
 }
 
 .csn-sticky-sheet {
@@ -47,8 +62,11 @@
 
 .csn-sticky-sheet-actions {
 	display: flex;
-	flex-direction: column;
-	gap: 0;
+	// flex-direction:row;
+	flex-flow: row nowrap;
+
+	justify-content: space-between;
+	gap: 10px;
 	padding: 0 12px 8px;
 }
 
@@ -111,32 +129,33 @@
 	position: relative;
 	flex: 1 1 0;
 	min-width: 0;
-	height: 36px;
+	height: 60px;
 	padding: 0;
 	border: none;
 	border-radius: 0;
 	cursor: pointer;
-	box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+	border: none;
+	// box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
 	transition:
 		box-shadow 0.12s ease,
 		filter 0.12s ease;
 }
 
-.theme-dark .csn-sticky-sheet-swatch {
-	box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
-}
+// .theme-dark .csn-sticky-sheet-swatch {
+// 	box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+// }
 
-.csn-sticky-sheet-swatch+.csn-sticky-sheet-swatch {
-	box-shadow:
-		inset 0.5px 0 0 0 rgba(0, 0, 0, 0.12),
-		inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
-}
+// .csn-sticky-sheet-swatch+.csn-sticky-sheet-swatch {
+// 	box-shadow:
+// 		inset 0.5px 0 0 0 rgba(0, 0, 0, 0.12),
+// 		inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+// }
 
-.theme-dark .csn-sticky-sheet-swatch+.csn-sticky-sheet-swatch {
-	box-shadow:
-		inset 0.5px 0 0 0 rgba(255, 255, 255, 0.14),
-		inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
-}
+// .theme-dark .csn-sticky-sheet-swatch+.csn-sticky-sheet-swatch {
+// 	box-shadow:
+// 		inset 0.5px 0 0 0 rgba(255, 255, 255, 0.14),
+// 		inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+// }
 
 .csn-sticky-sheet-swatch:hover {
 	filter: brightness(0.97);

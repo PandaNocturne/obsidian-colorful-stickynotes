@@ -71,6 +71,7 @@ export class StickyNotePopover {
 	private readonly bottomTitleEl: HTMLElement;
 	private readonly settingsBtn: HTMLButtonElement;
 	private readonly sheetLayerEl: HTMLElement;
+	private readonly sheetBackdropEl: HTMLElement;
 	private readonly sheetPanelEl: HTMLElement;
 	private sheetOpen = false;
 	private readonly colorSwatchEls = new Map<StickyColorId, HTMLButtonElement>();
@@ -132,6 +133,7 @@ export class StickyNotePopover {
 		});
 
 		this.sheetLayerEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-sheet-layer' });
+		this.sheetBackdropEl = this.sheetLayerEl.createDiv({ cls: 'csn-sticky-sheet-backdrop' });
 		this.sheetPanelEl = this.sheetLayerEl.createDiv({ cls: 'csn-sticky-sheet' });
 		this.wireSettingsSheet();
 
@@ -342,6 +344,11 @@ export class StickyNotePopover {
 	}
 
 	private wireSettingsSheet(): void {
+		this.plugin.registerDomEvent(this.sheetBackdropEl, 'click', evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.closeSettingsSheet();
+		});
 		this.plugin.registerDomEvent(this.sheetPanelEl, 'click', evt => {
 			evt.stopPropagation();
 		});
