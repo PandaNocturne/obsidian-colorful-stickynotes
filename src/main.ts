@@ -75,6 +75,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		} else {
 			this.settings.viewContentZoom = Math.max(0.5, Math.min(1, z));
 		}
+		const layout = this.settings.noteListLayout;
+		if (layout !== 'column' && layout !== 'grid') {
+			this.settings.noteListLayout = DEFAULT_SETTINGS.noteListLayout;
+		}
 	}
 
 	async saveSettings(): Promise<void> {

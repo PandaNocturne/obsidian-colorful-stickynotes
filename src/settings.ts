@@ -16,6 +16,8 @@ export interface ColorfulStickyNotesSettings {
 	bottomBarAutoHide: boolean;
 	/** 启动 Obsidian 后自动恢复上次便笺浮动窗口（与「打开便笺窗口（恢复上次会话）」一致）。 */
 	restoreStickySessionOnStartup: boolean;
+	/** 便笺列表：纵向卡片列表或自适应网格。 */
+	noteListLayout: 'column' | 'grid';
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -28,7 +30,8 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	defaultPositionY: 80,
 	viewContentZoom: 0.6,
 	bottomBarAutoHide: true,
-	restoreStickySessionOnStartup: false
+	restoreStickySessionOnStartup: false,
+	noteListLayout: 'column'
 };
 
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
@@ -215,6 +218,21 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						})
 				);
 		}
+
+		containerEl.createEl('h3', { text: '便笺列表' });
+		new Setting(containerEl)
+			.setName('默认布局')
+			.setDesc('在便笺列表视图内也可随时切换；此处为打开列表时的默认排布。')
+			.addDropdown(dd =>
+				dd
+					.addOption('column', '纵向列表')
+					.addOption('grid', '自适应网格')
+					.setValue(this.plugin.settings.noteListLayout)
+					.onChange(async v => {
+						this.plugin.settings.noteListLayout = v as 'column' | 'grid';
+						await this.plugin.saveSettings();
+					})
+			);
 
 		containerEl.createEl('h3', { text: '底部工具栏' });
 		new Setting(containerEl)
