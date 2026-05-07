@@ -11,6 +11,7 @@ import {
 	moment,
 	normalizePath,
 	setIcon,
+	type App,
 	type Debouncer
 } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
@@ -93,6 +94,28 @@ function collectMarkdownUnderFolder(folder: TFolder): TFile[] {
 		else if (c instanceof TFolder) out.push(...collectMarkdownUnderFolder(c));
 	}
 	return out;
+}
+
+/** 多个关键词为「且」关系；在标题、路径与全文（cachedRead，不区分大小写子串）中匹配。 */
+async function filterStickyFilesByKeywords(
+	app: App,
+	files: TFile[],
+	keywords: string[]
+): Promise<TFile[]> {
+	if (keywords.length === 0) return files;
+	const flags = await Promise.all(
+		files.map(async f => {
+			let body = '';
+			try {
+				body = (await app.vault.cachedRead(f)).toLowerCase();
+			} catch {
+				/* 读取失败则仅以标题/路径参与匹配 */
+			}
+			const hay = `${f.basename}\n${f.path}\n${body}`.toLowerCase();
+			return keywords.every(k => hay.includes(k));
+		})
+	);
+	return files.filter((_, i) => flags[i]!);
 }
 
 export class StickyNoteListView extends ItemView {
@@ -243,7 +266,7 @@ export class StickyNoteListView extends ItemView {
 		this.searchInput = searchWrap.createEl('input', {
 			type: 'search',
 			cls: 'csn-list-search-input',
-			attr: { placeholder: '搜索（空格分隔多个关键词）' }
+			attr: { placeholder: '搜索标题、路径与正文（空格分隔，需同时包含）' }
 		});
 
 		const toolbar = root.createDiv({ cls: 'csn-list-toolbar' });
@@ -374,12 +397,7 @@ export class StickyNoteListView extends ItemView {
 
 			const files = collectMarkdownUnderFolder(folderAbs);
 			const filtered =
-				keywords.length === 0
-					? files
-					: files.filter(f => {
-						const hay = (f.basename + '\n' + f.path).toLowerCase();
-						return keywords.every(k => hay.includes(k));
-					});
+				keywords.length === 0 ? files : await filterStickyFilesByKeywords(this.app, files, keywords);
 
 			const prio = this.plugin.listPrioritizeStickyPath;
 			const sortMode = this.plugin.settings.noteListSort;
