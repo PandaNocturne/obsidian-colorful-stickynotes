@@ -56,7 +56,11 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		if (this.settings.restoreStickySessionOnStartup) {
 			this.app.workspace.onLayoutReady(() => {
-				void this.restoreStickySession();
+				const ms = Math.max(0, this.settings.restoreStickySessionDelaySec) * 1000;
+				const id = window.setTimeout(() => {
+					void this.restoreStickySession();
+				}, ms);
+				this.register(() => window.clearTimeout(id));
 			});
 		}
 	}
@@ -78,6 +82,15 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		const layout = this.settings.noteListLayout;
 		if (layout !== 'column' && layout !== 'grid') {
 			this.settings.noteListLayout = DEFAULT_SETTINGS.noteListLayout;
+		}
+		const delaySec = this.settings.restoreStickySessionDelaySec;
+		if (typeof delaySec !== 'number' || !Number.isFinite(delaySec)) {
+			this.settings.restoreStickySessionDelaySec = DEFAULT_SETTINGS.restoreStickySessionDelaySec;
+		} else {
+			this.settings.restoreStickySessionDelaySec = Math.max(
+				0,
+				Math.min(10, Math.round(delaySec))
+			);
 		}
 	}
 

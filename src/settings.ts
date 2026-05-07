@@ -16,6 +16,8 @@ export interface ColorfulStickyNotesSettings {
 	bottomBarAutoHide: boolean;
 	/** 启动 Obsidian 后自动恢复上次便笺浮动窗口（与「打开便笺窗口（恢复上次会话）」一致）。 */
 	restoreStickySessionOnStartup: boolean;
+	/** 启动恢复便笺前的等待秒数（0–10），仅在开启「启动时打开上次便笺」时生效。 */
+	restoreStickySessionDelaySec: number;
 	/** 便笺列表：纵向卡片列表或自适应网格。 */
 	noteListLayout: 'column' | 'grid';
 }
@@ -31,6 +33,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	viewContentZoom: 0.6,
 	bottomBarAutoHide: true,
 	restoreStickySessionOnStartup: false,
+	restoreStickySessionDelaySec: 3,
 	noteListLayout: 'column'
 };
 
@@ -148,6 +151,32 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					this.plugin.settings.restoreStickySessionOnStartup = v;
 					await this.plugin.saveSettings();
 				})
+			);
+
+		new Setting(containerEl)
+			.setName('启动恢复延迟')
+			.setDesc('布局就绪后再等待若干秒再打开便笺；仅在「启动时打开上次便笺」开启时生效。')
+			.addSlider(slider =>
+				slider
+					.setLimits(0, 10, 1)
+					.setValue(this.plugin.settings.restoreStickySessionDelaySec)
+					.setDynamicTooltip()
+					.setInstant(true)
+					.onChange(async v => {
+						this.plugin.settings.restoreStickySessionDelaySec = Math.round(v);
+						await this.plugin.saveSettings();
+					})
+			)
+			.addExtraButton(btn =>
+				btn
+					.setIcon('rotate-ccw')
+					.setTooltip('重置为默认 3 秒')
+					.onClick(async () => {
+						this.plugin.settings.restoreStickySessionDelaySec =
+							DEFAULT_SETTINGS.restoreStickySessionDelaySec;
+						await this.plugin.saveSettings();
+						this.display();
+					})
 			);
 
 		new Setting(containerEl)
