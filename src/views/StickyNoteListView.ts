@@ -147,8 +147,12 @@ export class StickyNoteListView extends ItemView {
 	private paginationPrevBtn: HTMLButtonElement | null = null;
 	private paginationNextBtn: HTMLButtonElement | null = null;
 	private paginationMetaEl: HTMLElement | null = null;
-	/** 当前页 Markdown 渲染子组件挂载点，整页替换前 unload。 */
-	private listMarkdownHost: Component | null = null;
+	/** 每张列表卡片嵌入预览各自一个 Component，便于翻页时按路径卸载/复用。 */
+	private readonly listCardMarkdownHosts = new Map<string, Component>();
+	private listItemsDelegatedEvents = false;
+	/** 上次渲染的列表结构指纹（排序、筛选、便笺集等）；一致时翻页可走 DOM 增量。 */
+	private lastListStructureKey = '';
+	private lastRenderedPageIndex: number | null = null;
 	private listPageIndex = 0;
 	private debouncedListStructureRefresh: Debouncer<[], void> | null = null;
 	private debouncedListContentRefresh: Debouncer<[], void> | null = null;
@@ -211,11 +215,124 @@ export class StickyNoteListView extends ItemView {
 		this.contentEl.style.setProperty('--csn-list-grid-min-width', `${w}px`);
 	}
 
-	private disposeListMarkdownHost(): void {
-		if (this.listMarkdownHost) {
-			this.removeChild(this.listMarkdownHost);
-			this.listMarkdownHost = null;
+	private disposeMarkdownHostForPath(path: string): void {
+		const c = this.listCardMarkdownHosts.get(path);
+		if (c) {
+			this.removeChild(c);
+			this.listCardMarkdownHosts.delete(path);
 		}
+	}
+
+	private disposeAllListCardMarkdownHosts(): void {
+		for (const p of [...this.listCardMarkdownHosts.keys()]) {
+			this.disposeMarkdownHostForPath(p);
+		}
+	}
+
+	private ensureMarkdownHostForPath(path: string): Component {
+		let c = this.listCardMarkdownHosts.get(path);
+		if (!c) {
+			c = new Component();
+			this.listCardMarkdownHosts.set(path, c);
+			this.addChild(c);
+		}
+		return c;
+	}
+
+	private buildListStructureKey(
+		sortMode: NoteListSort,
+		query: string,
+		colorFilters: readonly StickyColorId[],
+		pageSize: number,
+		prioPath: string | null,
+		filtered: TFile[]
+	): string {
+		return JSON.stringify({
+			sort: sortMode,
+			query,
+			colors: [...colorFilters].sort(),
+			pageSize,
+			prio: prioPath ?? '',
+			paths: filtered.map(f => f.path)
+		});
+	}
+
+	private registerListItemsDelegatedEvents(): void {
+		if (this.listItemsDelegatedEvents || !this.listItemsEl) return;
+		this.listItemsDelegatedEvents = true;
+
+		this.registerDomEvent(this.listItemsEl, 'click', (evt: MouseEvent) => {
+			const t = evt.target;
+			if (!(t instanceof Element)) return;
+			const btn = t.closest('.csn-list-card-menu-btn');
+			if (!btn || !this.listItemsEl?.contains(btn)) return;
+			const card = btn.closest('.csn-list-card');
+			if (!card) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			const color =
+				((card as HTMLElement).dataset.csnListColor as StickyColorId | undefined) ?? 'default';
+			const menu = new Menu();
+			menu.addItem(item => {
+				item.setTitle('打开笔记')
+					.setIcon('file-text')
+					.onClick(() => {
+						void this.app.workspace.getLeaf('tab').openFile(f);
+					});
+			});
+			menu.addItem(item => {
+				item.setTitle('打开便笺窗口')
+					.setIcon('square-pen')
+					.onClick(() => {
+						void this.plugin.openStickyForFile(f);
+					});
+			});
+			menu.addSeparator();
+			menu.addItem(item => {
+				item.setTitle('修改背景').setIcon('palette');
+				const sub = item.setSubmenu();
+				for (const c of SHEET_COLOR_ORDER) {
+					const selected = c.id === color;
+					sub.addItem(si => {
+						si.setTitle(buildStickyBgSubmenuTitle(document, c.id, c.label, selected));
+						si.setIcon(null);
+						si.onClick(() => {
+							void this.plugin.stickies.setStickyBackgroundColorForFile(f, c.id).then(() => {
+								(card as HTMLElement).setAttr('data-csn-list-color', c.id);
+							});
+						});
+					});
+				}
+			});
+			menu.addSeparator();
+			menu.addItem(item => {
+				item.setTitle('删除笔记')
+					.setIcon('trash-2')
+					.onClick(() => {
+						void this.plugin.stickies.trashStickyNoteFile(f);
+					});
+			});
+			menu.showAtMouseEvent(evt);
+		});
+
+		this.registerDomEvent(this.listItemsEl, 'dblclick', (evt: MouseEvent) => {
+			const t = evt.target;
+			if (!(t instanceof Element)) return;
+			if (t.closest('.csn-list-card-menu-btn')) return;
+			const card = t.closest('.csn-list-card');
+			if (!card || !this.listItemsEl?.contains(card)) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			void this.plugin.openStickyForFile(f);
+		});
 	}
 
 	private stickyFolderRoot(): string {
@@ -361,10 +478,13 @@ export class StickyNoteListView extends ItemView {
 		setIcon(refreshBtn, 'refresh-ccw');
 		this.registerDomEvent(refreshBtn, 'click', () => {
 			this.cancelListRefreshDebouncers();
+			this.lastListStructureKey = '';
+			this.lastRenderedPageIndex = null;
 			void this.renderList();
 		});
 
 		this.listItemsEl = root.createDiv({ cls: 'csn-list-items' });
+		this.registerListItemsDelegatedEvents();
 		this.syncListGridMetricsFromSettings();
 
 		this.paginationEl = root.createDiv({ cls: 'csn-list-pagination' });
@@ -441,6 +561,159 @@ export class StickyNoteListView extends ItemView {
 		void this.renderList();
 	}
 
+	private async renderCardPreview(previewEl: HTMLElement, f: TFile): Promise<void> {
+		previewEl.empty();
+		const md = listPreviewEmbedMarkdown(f);
+		const host = this.ensureMarkdownHostForPath(f.path);
+		await MarkdownRenderer.render(this.app, md, previewEl, f.path, host);
+	}
+
+	private updateListCardChrome(card: HTMLElement, f: TFile, sortMode: NoteListSort, color: StickyColorId): void {
+		card.setAttr('data-csn-note-path', f.path);
+		card.setAttr('data-csn-list-color', color);
+		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
+		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
+		const listDateTs = sortMode.startsWith('ctime') ? f.stat.ctime : f.stat.mtime;
+		const titleEl = card.querySelector('.csn-list-card-title');
+		if (titleEl) titleEl.setText(f.basename);
+		const dateEl = card.querySelector('.csn-list-card-date');
+		if (dateEl) dateEl.setText(moment(listDateTs).format('M月D日'));
+	}
+
+	private async createListCardElement(
+		f: TFile,
+		sortMode: NoteListSort,
+		color: StickyColorId
+	): Promise<HTMLElement> {
+		const card = this.contentEl.createDiv({
+			cls: 'csn-list-card',
+			attr: {
+				'data-csn-note-path': f.path,
+				'data-csn-list-color': color,
+				title: '双击打开便笺'
+			}
+		});
+		card.remove();
+		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
+		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
+		const listDateTs = sortMode.startsWith('ctime') ? f.stat.ctime : f.stat.mtime;
+		const head = card.createDiv({ cls: 'csn-list-card-head' });
+		head.createDiv({ cls: 'csn-list-card-title', text: f.basename });
+		const headRight = head.createDiv({ cls: 'csn-list-card-head-right' });
+		headRight.createDiv({
+			cls: 'csn-list-card-date',
+			text: moment(listDateTs).format('M月D日')
+		});
+		headRight.createEl(
+			'button',
+			{
+				type: 'button',
+				cls: 'clickable-icon csn-list-card-menu-btn',
+				attr: { 'aria-label': '更多操作', 'aria-haspopup': 'true' }
+			},
+			(btn: HTMLButtonElement) => setIcon(btn, 'more-horizontal')
+		);
+		const main = card.createDiv({ cls: 'csn-list-card-main' });
+		const previewEl = main.createDiv({
+			cls: 'csn-list-card-body csn-list-card-body--rendered csn-list-card-body--embed markdown-rendered'
+		});
+		await this.renderCardPreview(previewEl, f);
+		card.dataset.csnEmbedMtime = String(f.stat.mtime);
+		return card;
+	}
+
+	private async maybeRefreshCardPreview(card: HTMLElement, f: TFile): Promise<void> {
+		const cur = card.dataset.csnEmbedMtime ?? '';
+		const next = String(f.stat.mtime);
+		if (cur === next) return;
+		const previewEl = card.querySelector(
+			'.csn-list-card-body.csn-list-card-body--rendered'
+		) as HTMLElement | null;
+		if (!previewEl) return;
+		await this.renderCardPreview(previewEl, f);
+		card.dataset.csnEmbedMtime = next;
+	}
+
+	private async renderListCardsFull(
+		container: HTMLElement,
+		pageFiles: TFile[],
+		sortMode: NoteListSort
+	): Promise<void> {
+		for (const f of pageFiles) {
+			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
+			const card = await this.createListCardElement(f, sortMode, color);
+			container.appendChild(card);
+		}
+	}
+
+	private async syncListPageIncremental(
+		container: HTMLElement,
+		pageFiles: TFile[],
+		sortMode: NoteListSort
+	): Promise<void> {
+		const wantedPaths = new Set(pageFiles.map(x => x.path));
+		const pool = new Map<string, HTMLElement>();
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (!p) continue;
+			if (!wantedPaths.has(p)) {
+				this.disposeMarkdownHostForPath(p);
+				el.remove();
+			} else {
+				pool.set(p, el);
+				el.remove();
+			}
+		}
+		for (const f of pageFiles) {
+			let card = pool.get(f.path);
+			pool.delete(f.path);
+			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
+			if (!card) {
+				card = await this.createListCardElement(f, sortMode, color);
+			} else {
+				this.updateListCardChrome(card, f, sortMode, color);
+				await this.maybeRefreshCardPreview(card, f);
+			}
+			container.appendChild(card);
+		}
+		for (const [p, el] of pool) {
+			this.disposeMarkdownHostForPath(p);
+			el.remove();
+		}
+	}
+
+	private async syncListPageContentOnly(
+		container: HTMLElement,
+		pageFiles: TFile[],
+		sortMode: NoteListSort
+	): Promise<void> {
+		const byPath = new Map<string, HTMLElement>();
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (p) byPath.set(p, el);
+		}
+		if (byPath.size !== pageFiles.length) {
+			this.disposeAllListCardMarkdownHosts();
+			container.empty();
+			await this.renderListCardsFull(container, pageFiles, sortMode);
+			return;
+		}
+		for (const f of pageFiles) {
+			const card = byPath.get(f.path);
+			if (!card) {
+				this.disposeAllListCardMarkdownHosts();
+				container.empty();
+				await this.renderListCardsFull(container, pageFiles, sortMode);
+				return;
+			}
+			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
+			this.updateListCardChrome(card, f, sortMode, color);
+			await this.maybeRefreshCardPreview(card, f);
+		}
+	}
+
 	private async renderList(): Promise<void> {
 		const container = this.listItemsEl;
 		if (!container || !this.paginationEl || !this.paginationMetaEl) return;
@@ -448,18 +721,23 @@ export class StickyNoteListView extends ItemView {
 		const query = (this.searchInput?.value ?? '').trim();
 
 		try {
-			this.disposeListMarkdownHost();
-			container.empty();
-
 			const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 			const folderAbs = this.app.vault.getAbstractFileByPath(folder);
 			if (!folderAbs) {
+				this.disposeAllListCardMarkdownHosts();
+				this.lastListStructureKey = '';
+				this.lastRenderedPageIndex = null;
+				container.empty();
 				container.createDiv({ text: `文件夹不存在：${folder}`, cls: 'csn-list-empty' });
 				this.paginationEl.hide();
 				this.colorFilterBarEl?.hide();
 				return;
 			}
 			if (!(folderAbs instanceof TFolder)) {
+				this.disposeAllListCardMarkdownHosts();
+				this.lastListStructureKey = '';
+				this.lastRenderedPageIndex = null;
+				container.empty();
 				container.createDiv({ text: `便笺目录不是文件夹：${folder}`, cls: 'csn-list-empty' });
 				this.paginationEl.hide();
 				this.colorFilterBarEl?.hide();
@@ -489,6 +767,10 @@ export class StickyNoteListView extends ItemView {
 			});
 
 			if (filtered.length === 0) {
+				this.disposeAllListCardMarkdownHosts();
+				this.lastListStructureKey = '';
+				this.lastRenderedPageIndex = null;
+				container.empty();
 				container.createDiv({ text: '没有匹配的便笺', cls: 'csn-list-empty' });
 				this.paginationEl.hide();
 				return;
@@ -504,100 +786,41 @@ export class StickyNoteListView extends ItemView {
 			const start = this.listPageIndex * pageSize;
 			const pageFiles = filtered.slice(start, start + pageSize);
 
-			const mdHost = new Component();
-			this.listMarkdownHost = mdHost;
-			this.addChild(mdHost);
-
-			await Promise.all(
-				pageFiles.map(async f => {
-					const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
-					const card = container.createDiv({
-						cls: 'csn-list-card',
-						attr: { 'data-csn-list-color': color, title: '双击打开便笺' }
-					});
-					const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
-					card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
-
-					const listDateTs =
-						sortMode.startsWith('ctime') ? f.stat.ctime : f.stat.mtime;
-
-					const head = card.createDiv({ cls: 'csn-list-card-head' });
-					head.createDiv({ cls: 'csn-list-card-title', text: f.basename });
-					const headRight = head.createDiv({ cls: 'csn-list-card-head-right' });
-					headRight.createDiv({
-						cls: 'csn-list-card-date',
-						text: moment(listDateTs).format('M月D日')
-					});
-					const menuBtn = headRight.createEl('button', {
-						type: 'button',
-						cls: 'clickable-icon csn-list-card-menu-btn',
-						attr: { 'aria-label': '更多操作', 'aria-haspopup': 'true' }
-					});
-					setIcon(menuBtn, 'more-horizontal');
-					this.registerDomEvent(menuBtn, 'click', (evt: MouseEvent) => {
-						evt.preventDefault();
-						evt.stopPropagation();
-						const menu = new Menu();
-						menu.addItem(item => {
-							item.setTitle('打开笔记')
-								.setIcon('file-text')
-								.onClick(() => {
-									void this.app.workspace.getLeaf('tab').openFile(f);
-								});
-						});
-						menu.addItem(item => {
-							item.setTitle('打开便笺窗口')
-								.setIcon('square-pen')
-								.onClick(() => {
-									void this.plugin.openStickyForFile(f);
-								});
-						});
-						menu.addSeparator();
-						menu.addItem(item => {
-							item.setTitle('修改背景').setIcon('palette');
-							const sub = item.setSubmenu();
-							for (const c of SHEET_COLOR_ORDER) {
-								const selected = c.id === color;
-								sub.addItem(si => {
-									si.setTitle(buildStickyBgSubmenuTitle(document, c.id, c.label, selected));
-									/* 标题里已含色块与勾选，左侧不再用 Lucide 占位 */
-									si.setIcon(null);
-									si.onClick(() => {
-										void this.plugin.stickies
-											.setStickyBackgroundColorForFile(f, c.id)
-											.then(() => {
-												card.setAttr('data-csn-list-color', c.id);
-											});
-									});
-								});
-							}
-						});
-						menu.addSeparator();
-						menu.addItem(item => {
-							item.setTitle('删除笔记')
-								.setIcon('trash-2')
-								.onClick(() => {
-									void this.plugin.stickies.trashStickyNoteFile(f);
-								});
-						});
-						menu.showAtMouseEvent(evt);
-					});
-
-					const main = card.createDiv({ cls: 'csn-list-card-main' });
-					const previewEl = main.createDiv({
-						cls: 'csn-list-card-body csn-list-card-body--rendered csn-list-card-body--embed markdown-rendered'
-					});
-
-					this.registerDomEvent(card, 'dblclick', evt => {
-						evt.preventDefault();
-						evt.stopPropagation();
-						void this.plugin.openStickyForFile(f);
-					});
-
-					const md = listPreviewEmbedMarkdown(f);
-					await MarkdownRenderer.render(this.app, md, previewEl, f.path, mdHost);
-				})
+			const structureKey = this.buildListStructureKey(
+				sortMode,
+				query,
+				this.plugin.settings.noteListColorFilters,
+				pageSize,
+				prio,
+				filtered
 			);
+
+			const structureChanged = structureKey !== this.lastListStructureKey;
+			const paginationOnly =
+				!structureChanged &&
+				this.lastRenderedPageIndex !== null &&
+				this.lastRenderedPageIndex !== this.listPageIndex;
+			const samePageContentTouch =
+				!structureChanged &&
+				this.lastRenderedPageIndex !== null &&
+				this.lastRenderedPageIndex === this.listPageIndex;
+
+			if (structureChanged) {
+				this.lastListStructureKey = structureKey;
+				this.disposeAllListCardMarkdownHosts();
+				container.empty();
+				await this.renderListCardsFull(container, pageFiles, sortMode);
+			} else if (paginationOnly) {
+				await this.syncListPageIncremental(container, pageFiles, sortMode);
+			} else if (samePageContentTouch) {
+				await this.syncListPageContentOnly(container, pageFiles, sortMode);
+			} else {
+				this.disposeAllListCardMarkdownHosts();
+				container.empty();
+				await this.renderListCardsFull(container, pageFiles, sortMode);
+			}
+
+			this.lastRenderedPageIndex = this.listPageIndex;
 
 			this.paginationMetaEl.setText(
 				`第 ${this.listPageIndex + 1} / ${totalPages} 页 · 本页 ${pageFiles.length} 条 · 共 ${filtered.length} 条`
@@ -617,7 +840,10 @@ export class StickyNoteListView extends ItemView {
 		this.cancelListRefreshDebouncers();
 		this.debouncedListStructureRefresh = null;
 		this.debouncedListContentRefresh = null;
-		this.disposeListMarkdownHost();
+		this.disposeAllListCardMarkdownHosts();
+		this.listItemsDelegatedEvents = false;
+		this.lastListStructureKey = '';
+		this.lastRenderedPageIndex = null;
 		this.listItemsEl = null;
 		this.searchInput = null;
 		this.paginationEl = null;
