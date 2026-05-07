@@ -681,7 +681,11 @@ export class StickyNotePopover {
 		if (emit) {
 			this.onBoundsChange(this.getBounds());
 		}
-		this.emitResize();
+		/* 拖动/缩放过程中跳过：每帧触发 leaf.onResize 会让 Markdown 阅读模式反复重排闪烁；
+		 * 松手时 onPointerUp 会 flushResizeReflow 做一次最终测量。 */
+		if (!this.isDragging && !this.isResizing) {
+			this.emitResize();
+		}
 	}
 
 	private runResizeReflow(): void {
