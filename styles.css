@@ -40,6 +40,19 @@
 	min-width: 8px;
 }
 
+/* 阅读 / 编辑（与主界面 Markdown 叶视图一致，需避免叶内容高度为 0） */
+.csn-sticky-mode-toggle {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	flex: 0 0 auto;
+}
+
+.csn-sticky-header-btn.is-active {
+	background-color: var(--background-modifier-active-hover) !important;
+	color: var(--text-accent);
+}
+
 .csn-sticky-header .csn-sticky-header-btn,
 .csn-sticky-bottombar .csn-sticky-bottom-btn,
 .csn-sticky-bottombar .csn-sticky-add-cmd {
@@ -64,16 +77,79 @@
 	min-height: 0;
 }
 
+/*
+ * 正文区：用绝对定位铺满 flex 剩余高度，避免 percentage / flex 链条在嵌套 workspace 上断裂。
+ * 底部栏「自动隐藏」若不设 min-height:0，flex 子项按内容最小高度会把正文挤成一条缝（min-height:auto 陷阱）。
+ */
 .csn-sticky-body {
+	position: relative;
 	flex: 1 1 auto;
 	min-height: 0;
-	display: flex;
-	flex-direction: column;
+	overflow: hidden;
+	
 }
 
-.csn-sticky-body .workspace-split.mod-vertical,
-.csn-sticky-body .workspace-split.mod-vertical .workspace-leaf {
+/* 打补丁 */
+
+.csn-sticky-body {
+  --file-line-width:calc(100% - 16px);
+  .cg-note-toolbar-container {
+    display: none;
+  }
+}
+
+.csn-sticky-body > .workspace-split {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
 	min-height: 0 !important;
+	overflow: hidden;
+}
+
+.csn-sticky-body .workspace-tabs {
+	flex: 1 1 auto;
+	min-height: 0 !important;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.csn-sticky-body .workspace-leaf {
+	flex: 1 1 auto;
+	min-height: 0 !important;
+	overflow: hidden;
+}
+
+.csn-sticky-body .workspace-leaf-content {
+	flex: 1 1 auto;
+	min-height: 0 !important;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+/* 正文缩放：由 StickyNotePopover#setViewContentZoom 写入 --csn-sticky-view-content-zoom（默认 0.6） */
+.csn-sticky-body .view-content {
+	zoom: var(--csn-sticky-view-content-zoom, 0.6);
+}
+
+.csn-sticky-body .view-header {
+	flex-shrink: 0;
+}
+
+.csn-sticky-body .workspace-leaf {
+	flex: 1 1 auto;
+	min-height: 100% !important;
+	min-width: 100% !important;
+	overflow: auto;
+}
+
+.csn-sticky-body .markdown-source-view.mod-cm6,
+.csn-sticky-body .markdown-preview-view {
+	flex: 1 1 auto;
+	min-height: 0 !important;
+	overflow: auto;
 }
 
 .csn-sticky-bottombar {
@@ -94,12 +170,14 @@
 
 .csn-sticky--bar-autohide .csn-sticky-bottombar {
 	opacity: 0;
+	min-height: 0 !important;
 	max-height: 0;
 	padding-top: 0;
 	padding-bottom: 0;
 	border-top-color: transparent;
 	pointer-events: none;
 	overflow: hidden;
+	flex-shrink: 1;
 	transition:
 		opacity 0.15s ease,
 		max-height 0.2s ease;
@@ -108,10 +186,12 @@
 .csn-sticky--bar-autohide:hover .csn-sticky-bottombar,
 .csn-sticky--bar-autohide .csn-sticky-bottombar:focus-within {
 	opacity: 1;
+	min-height: unset;
 	max-height: 48px;
 	padding: 2px 4px 4px;
 	border-top: 1px solid var(--csn-border);
 	pointer-events: auto;
+	flex-shrink: 0;
 }
 
 .csn-sticky--collapsed .csn-sticky-body,

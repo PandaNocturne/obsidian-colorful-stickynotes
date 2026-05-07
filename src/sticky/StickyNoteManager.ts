@@ -229,6 +229,7 @@ export class StickyNoteManager {
 			initialYamlVisible: extra.initialYamlVisible,
 			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
 			bottomCommands: this.plugin.settings.bottomBarCommands,
+			viewContentZoom: this.plugin.settings.viewContentZoom,
 			onClose: () => this.closeSticky(id),
 			onBoundsChange: () => this.persistOpenWindows(),
 			onBoundsDelta: d => this.onBoundsDelta(id, d),
@@ -404,6 +405,13 @@ export class StickyNoteManager {
 	updateBottomBarsFromSettings(): void {
 		for (const p of this.popovers.values()) {
 			p.setBottomBarSettings(this.plugin.settings.bottomBarAutoHide, this.plugin.settings.bottomBarCommands);
+		}
+	}
+
+	updateViewContentZoomFromSettings(): void {
+		const z = this.plugin.settings.viewContentZoom;
+		for (const p of this.popovers.values()) {
+			p.setViewContentZoom(z);
 		}
 	}
 

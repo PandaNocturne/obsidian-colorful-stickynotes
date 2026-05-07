@@ -17,6 +17,8 @@ export interface ColorfulStickyNotesSettings {
 	defaultPositionMode: 'center' | 'custom';
 	defaultPositionX: number;
 	defaultPositionY: number;
+	/** 便笺内 `.view-content` 的 `zoom`（0.5–1），与阅读/编辑正文显示比例一致。 */
+	viewContentZoom: number;
 	bottomBarAutoHide: boolean;
 	bottomBarCommands: BottomBarCommand[];
 }
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	defaultPositionMode: 'center',
 	defaultPositionX: 80,
 	defaultPositionY: 80,
+	viewContentZoom: 0.6,
 	bottomBarAutoHide: true,
 	bottomBarCommands: [
 		{ id: 'editor:toggle-bold', icon: 'bold', tooltip: '加粗' },
@@ -153,6 +156,22 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					.onChange(async v => {
 						this.plugin.settings.defaultViewMode = v as 'preview' | 'source';
 						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName('内容缩放')
+			.setDesc('便笺窗口内笔记正文的显示比例（50%–100%），通过 CSS zoom 作用于阅读/编辑区域。')
+			.addSlider(slider =>
+				slider
+					.setLimits(0.5, 1, 0.05)
+					.setValue(this.plugin.settings.viewContentZoom)
+					.setInstant(true)
+					.setDynamicTooltip()
+					.onChange(async v => {
+						this.plugin.settings.viewContentZoom = v;
+						await this.plugin.saveSettings();
+						this.plugin.stickies.updateViewContentZoomFromSettings();
 					})
 			);
 

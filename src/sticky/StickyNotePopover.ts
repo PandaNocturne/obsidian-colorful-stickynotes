@@ -38,6 +38,8 @@ export interface StickyNotePopoverOptions {
 	initialYamlVisible: boolean;
 	bottomBarAutoHide: boolean;
 	bottomCommands: Array<{ id: string; icon: string; tooltip: string }>;
+	/** 正文区域 zoom（0.5–1），作用于 `.view-content`。 */
+	viewContentZoom: number;
 	onClose: () => void;
 	onBoundsChange: (bounds: FloatingBounds) => void;
 	/** 拖动移动增量（同簇窗口一起移动）。 */
@@ -85,6 +87,9 @@ export class StickyNotePopover {
 	private disposed = false;
 	private collapsed: boolean;
 	private yamlVisible: boolean;
+	private modeToggleWrap!: HTMLElement;
+	private previewModeBtn!: HTMLButtonElement;
+	private sourceModeBtn!: HTMLButtonElement;
 	constructor(private readonly options: StickyNotePopoverOptions) {
 		this.plugin = options.plugin;
 		this.onBoundsChange = options.onBoundsChange;
@@ -93,8 +98,9 @@ export class StickyNotePopover {
 		this.yamlVisible = options.initialYamlVisible;
 
 		const mount = options.mountEl;
+		/* 勿使用 mod-root：会与主工作区根节点样式冲突，导致叶视图高度为 0、内容不可见 */
 		this.rootEl = mount.createDiv({
-			cls: 'mod-root csn-sticky',
+			cls: 'csn-sticky',
 			attr: { 'data-csn-sticky': 'true', 'data-csn-color': options.initialColor }
 		});
 
@@ -108,6 +114,11 @@ export class StickyNotePopover {
 		this.mainColumnEl = this.rootEl.createDiv({ cls: 'csn-sticky-main' });
 		this.bodyWrapEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-body' });
 		this.bodyWrapEl.appendChild((this.rootSplit as WorkspaceSplitWithDom).containerEl);
+		this.plugin.registerDomEvent(this.bodyWrapEl, 'mousedown', () => {
+			const leaf = this.leaf;
+			if (!leaf || this.disposed) return;
+			void this.plugin.app.workspace.setActiveLeaf(leaf, { focus: true });
+		});
 
 		this.bottomBarEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-bottombar' });
 		this.wireBottomBar();
@@ -115,6 +126,8 @@ export class StickyNotePopover {
 
 		this.attachLeaf();
 		this.wireLeafModeSync();
+
+		this.setViewContentZoom(options.viewContentZoom);
 
 		const defaultWidth = Math.min(420, window.innerWidth - VIEWPORT_MARGIN);
 		const defaultHeight = Math.min(360, window.innerHeight - VIEWPORT_MARGIN);
@@ -202,6 +215,12 @@ export class StickyNotePopover {
 		this.applyBottomBarAutoHideClass();
 	}
 
+	/** 与 HoverNoteLeafPopover#setPreviewScale 相同思路：根节点 CSS 变量 + `.view-content` 的 zoom。 */
+	setViewContentZoom(scale: number): void {
+		const s = Math.max(0.5, Math.min(1, scale));
+		this.rootEl.style.setProperty('--csn-sticky-view-content-zoom', String(s));
+	}
+
 	private createAddCommandButton(): HTMLButtonElement {
 		const btn = this.bottomBarEl.createEl('button', {
 			cls: 'clickable-icon csn-sticky-add-cmd',
@@ -236,6 +255,28 @@ export class StickyNotePopover {
 		});
 
 		this.headerEl.createDiv({ cls: 'csn-sticky-header-spacer' });
+
+		this.modeToggleWrap = this.headerEl.createDiv({ cls: 'csn-sticky-mode-toggle' });
+		this.previewModeBtn = this.modeToggleWrap.createEl('button', {
+			cls: 'clickable-icon csn-sticky-header-btn',
+			attr: { type: 'button', 'aria-label': '阅读模式' }
+		});
+		setIcon(this.previewModeBtn, 'book-open');
+		this.plugin.registerDomEvent(this.previewModeBtn, 'click', async evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			await this.setMarkdownMode('preview');
+		});
+		this.sourceModeBtn = this.modeToggleWrap.createEl('button', {
+			cls: 'clickable-icon csn-sticky-header-btn',
+			attr: { type: 'button', 'aria-label': '编辑模式' }
+		});
+		setIcon(this.sourceModeBtn, 'pencil');
+		this.plugin.registerDomEvent(this.sourceModeBtn, 'click', async evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			await this.setMarkdownMode('source');
+		});
 
 		const right = this.headerEl.createDiv({ cls: 'csn-sticky-header-right' });
 		const yamlBtn = right.createEl('button', {
@@ -444,7 +485,32 @@ export class StickyNotePopover {
 		const view = this.leaf?.view;
 		const md = view instanceof MarkdownView ? view : null;
 		const show = !!md?.file && md.file.extension === 'md';
-		void show;
+		this.modeToggleWrap.style.display = show ? '' : 'none';
+		if (!show || !md) {
+			this.previewModeBtn.removeClass('is-active');
+			this.sourceModeBtn.removeClass('is-active');
+			return;
+		}
+		const mode = md.getMode();
+		this.previewModeBtn.toggleClass('is-active', mode === 'preview');
+		this.sourceModeBtn.toggleClass('is-active', mode === 'source');
+	}
+
+	private async setMarkdownMode(mode: 'source' | 'preview'): Promise<void> {
+		const leaf = this.leaf;
+		if (!leaf || this.disposed) return;
+		const view = leaf.view;
+		if (!(view instanceof MarkdownView) || !view.file || view.file.extension !== 'md') return;
+		const cur = leaf.getViewState();
+		if (cur.type !== 'markdown') return;
+		await leaf.setViewState({
+			type: 'markdown',
+			state: { ...cur.state, file: view.file.path, mode },
+			active: true
+		});
+		await leaf.loadIfDeferred?.();
+		this.syncModeToggleUi();
+		this.requestLeafMeasure();
 	}
 
 	private scheduleSyncModeToggleUiAfterLayout(): void {

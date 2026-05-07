@@ -49,6 +49,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (!Array.isArray(this.settings.bottomBarCommands)) {
 			this.settings.bottomBarCommands = [...DEFAULT_SETTINGS.bottomBarCommands];
 		}
+		const z = this.settings.viewContentZoom;
+		if (typeof z !== 'number' || !Number.isFinite(z)) {
+			this.settings.viewContentZoom = DEFAULT_SETTINGS.viewContentZoom;
+		} else {
+			this.settings.viewContentZoom = Math.max(0.5, Math.min(1, z));
+		}
 	}
 
 	async saveSettings(): Promise<void> {
