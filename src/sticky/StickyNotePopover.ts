@@ -37,6 +37,8 @@ export interface StickyNotePopoverOptions {
 	initialCollapsed: boolean;
 	initialYamlVisible: boolean;
 	bottomBarAutoHide: boolean;
+	/** 将要打开 Markdown 便笺时，外壳阶段即显示阅读/编辑切换（占位为阅读），叶视图就绪后再同步真实模式。 */
+	expectMarkdownOpen?: boolean;
 	/** 正文区域 zoom（0.3–1），作用于 `.view-content`。 */
 	viewContentZoom: number;
 	onClose: () => void;
@@ -102,11 +104,14 @@ export class StickyNotePopover {
 	private modeToggleWrap!: HTMLElement;
 	private markdownModeToggleBtn!: HTMLButtonElement;
 	private foldBtn!: HTMLButtonElement;
+	/** 目标为 Markdown 且尚未完成 openFile / 叶视图尚未挂上文件时为 true；占位 UI 固定为阅读（预览）。 */
+	private markdownModeTogglePending = false;
 	constructor(private readonly options: StickyNotePopoverOptions) {
 		this.plugin = options.plugin;
 		this.onBoundsChange = options.onBoundsChange;
 		this.collapsed = options.initialCollapsed;
 		this.yamlVisible = options.initialYamlVisible;
+		this.markdownModeTogglePending = options.expectMarkdownOpen === true;
 
 		const mount = options.mountEl;
 		/* 勿使用 mod-root：会与主工作区根节点样式冲突，导致叶视图高度为 0、内容不可见 */
@@ -597,6 +602,9 @@ export class StickyNotePopover {
 		if (!leaf) return;
 		const workspaceActive = openOpts?.workspaceActive !== false;
 
+		this.markdownModeTogglePending = file.extension === 'md';
+		this.syncModeToggleUi();
+
 		if (file.extension === 'md') {
 			await leaf.setViewState({
 				type: 'markdown',
@@ -611,6 +619,7 @@ export class StickyNotePopover {
 		await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 		await leaf.loadIfDeferred?.();
 		if (this.disposed) return;
+		this.markdownModeTogglePending = false;
 		this.syncModeToggleUi();
 		this.syncBottomBarHeightCss();
 		this.requestLeafMeasure();
@@ -659,15 +668,23 @@ export class StickyNotePopover {
 	private syncModeToggleUi(): void {
 		const view = this.leaf?.view;
 		const md = view instanceof MarkdownView ? view : null;
-		const show = !!md?.file && md.file.extension === 'md';
+		const hasMdFile = !!md?.file && md.file.extension === 'md';
+		const show = hasMdFile || this.markdownModeTogglePending;
 		this.modeToggleWrap.style.display = show ? '' : 'none';
-		if (show && md) {
+		if (!show) {
+			this.syncBottomBarTitle();
+			return;
+		}
+		if (hasMdFile && md) {
 			const mode = md.getMode();
 			setIcon(this.markdownModeToggleBtn, mode === 'preview' ? 'book-open' : 'pencil');
 			this.markdownModeToggleBtn.setAttr(
 				'aria-label',
 				mode === 'preview' ? '阅读模式，点击进入编辑' : '编辑模式，点击进入阅读'
 			);
+		} else if (this.markdownModeTogglePending) {
+			setIcon(this.markdownModeToggleBtn, 'book-open');
+			this.markdownModeToggleBtn.setAttr('aria-label', '阅读模式，点击进入编辑');
 		}
 		this.syncBottomBarTitle();
 	}

@@ -290,6 +290,7 @@ export class StickyNoteManager {
 			initialColor: color,
 			initialCollapsed: collapsed,
 			initialYamlVisible: yamlVisible,
+			expectMarkdownOpen: true,
 			defaultMarkdownMode:
 				initial?.markdownMode === 'preview' || initial?.markdownMode === 'source'
 					? initial.markdownMode
@@ -386,6 +387,7 @@ export class StickyNoteManager {
 			initialCollapsed: boolean;
 			initialYamlVisible: boolean;
 			defaultMarkdownMode?: 'preview' | 'source';
+			expectMarkdownOpen?: boolean;
 		}
 	): StickyNotePopover {
 		return new StickyNotePopover({
@@ -396,6 +398,7 @@ export class StickyNoteManager {
 			initialColor: extra.initialColor,
 			initialCollapsed: extra.initialCollapsed,
 			initialYamlVisible: extra.initialYamlVisible,
+			expectMarkdownOpen: extra.expectMarkdownOpen,
 			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
 			viewContentZoom: this.plugin.settings.stickyViewContentZoom,
 			onClose: () => void this.handleStickyCloseRequest(id),
@@ -592,6 +595,7 @@ export class StickyNoteManager {
 			initialColor,
 			initialCollapsed: !!serial.collapsed,
 			initialYamlVisible: !!serial.yamlVisible,
+			expectMarkdownOpen: file.extension === 'md',
 			defaultMarkdownMode: restoredMdMode
 		});
 		this.popovers.set(id, pop);
