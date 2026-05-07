@@ -320,22 +320,20 @@
 	font-size: var(--font-ui-small);
 }
 
-.csn-setting-filename-block .csn-setting-filename-preview {
-	margin-top: -4px;
+/* 文件名格式预览：外层占位 + 内层可视容器 */
+.csn-setting-filename-preview-wrap {
+	margin-top: 6px;
 	margin-bottom: 10px;
-	padding: 6px 0 2px;
-	font-size: var(--font-ui-small);
 }
 
-.csn-setting-filename-block .csn-filename-preview-code {
+.csn-setting-filename-preview-box {
 	font-size: var(--font-ui-small);
-	word-break: break-all;
 }
 
 .csn-filename-sample-line {
-	font-size: var(--font-ui-small);
 	color: var(--text-muted);
-	margin-top: 2px;
+	line-height: 1.5;
+	word-break: break-word;
 }
 
 .csn-filename-sample-value {

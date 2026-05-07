@@ -77,7 +77,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					});
 			});
 
-		const filenameBlock = containerEl.createDiv({ cls: 'csn-setting-filename-block' });
 		const filenameDesc = document.createDocumentFragment();
 		filenameDesc.append(
 			'与「核心插件 → 日记」一致：整段即 ',
@@ -98,11 +97,11 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			' 的模板仍可使用。'
 		);
 
-		const refreshFilenamePreview = (previewEl: HTMLElement): void => {
-			previewEl.empty();
+		const refreshFilenamePreview = (box: HTMLElement): void => {
+			box.empty();
 			const raw = (this.plugin.settings.filenameTemplate || '').trim() || 'YYYY/YYYY-MM-DD';
 			const sample = formatStickyNoteRelativePath(raw);
-			const line = previewEl.createDiv({ cls: 'csn-filename-sample-line' });
+			const line = box.createDiv({ cls: 'csn-filename-sample-line' });
 			line.appendText('这是当前所用格式的样例：');
 			line.createEl('strong', {
 				cls: 'csn-filename-sample-value',
@@ -110,7 +109,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			});
 		};
 
-		new Setting(filenameBlock)
+		const filenameSetting = new Setting(containerEl)
 			.setName('便笺文件名格式')
 			.setDesc(filenameDesc)
 			.addText(text =>
@@ -119,11 +118,16 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					.onChange(async v => {
 						this.plugin.settings.filenameTemplate = v;
 						await this.plugin.saveSettings();
-						refreshFilenamePreview(previewEl);
+						refreshFilenamePreview(previewBox);
 					})
 			);
-		const previewEl = filenameBlock.createDiv({ cls: 'csn-setting-filename-preview' });
-		refreshFilenamePreview(previewEl);
+
+		const infoParent =
+			filenameSetting.settingEl.querySelector('.setting-item-info') ?? filenameSetting.settingEl;
+		const previewBox = infoParent
+			.createDiv({ cls: 'csn-setting-filename-preview-wrap' })
+			.createDiv({ cls: 'csn-setting-filename-preview-box' });
+		refreshFilenamePreview(previewBox);
 
 		new Setting(containerEl)
 			.setName('默认 Template 模板')
