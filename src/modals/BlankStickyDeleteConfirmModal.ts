@@ -4,7 +4,6 @@ export class BlankStickyDeleteConfirmModal extends Modal {
 	constructor(
 		app: App,
 		private readonly opts: {
-			fileName: string;
 			onConfirm: () => void;
 		}
 	) {
@@ -16,13 +15,13 @@ export class BlankStickyDeleteConfirmModal extends Modal {
 		contentEl.empty();
 		this.titleEl.setText('确认删除空白便笺');
 		contentEl.createEl('p', {
-			text: `「${this.opts.fileName}」尚无正文。关闭该便笺后将移入回收站。`
+			text: '当前便笺无正文，是否自动移入回收站'
 		});
 		new Setting(contentEl)
 			.setName('')
 			.addButton(btn => btn.setButtonText('取消').onClick(() => this.close()))
 			.addButton(btn =>
-				btn.setButtonText('确定删除').setCta().onClick(() => {
+				btn.setButtonText('确定').setCta().onClick(() => {
 					this.opts.onConfirm();
 					this.close();
 				})

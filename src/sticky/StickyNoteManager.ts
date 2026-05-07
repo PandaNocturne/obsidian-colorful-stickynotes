@@ -477,7 +477,6 @@ export class StickyNoteManager {
 
 		if (this.plugin.settings.confirmBlankStickyTrashOnClose) {
 			new BlankStickyDeleteConfirmModal(this.app, {
-				fileName: file.name,
 				onConfirm: () => {
 					if (!this.popovers.has(id)) return;
 					this.finalizeUserCloseSticky(id, file, true);
