@@ -5,13 +5,26 @@ import { FolderPickerModal } from './modals/FolderPickerModal';
 import { SHEET_COLOR_ORDER } from './sticky/sticky-color-order';
 import type { NoteListOpenLocation, NoteListSort, StickyColorId } from './types';
 
+/** 便笺窗口与列表预览正文的 zoom 范围（与设置项一致）。 */
+export const VIEW_CONTENT_ZOOM_MIN = 0.3;
+export const VIEW_CONTENT_ZOOM_MAX = 1;
+export const VIEW_CONTENT_ZOOM_DEFAULT = 0.65;
+export const VIEW_CONTENT_ZOOM_STEP = 0.05;
+
+export function clampViewContentZoom(value: number): number {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return VIEW_CONTENT_ZOOM_DEFAULT;
+	return Math.max(VIEW_CONTENT_ZOOM_MIN, Math.min(VIEW_CONTENT_ZOOM_MAX, value));
+}
+
 export interface ColorfulStickyNotesSettings {
 	stickyFolder: string;
 	filenameTemplate: string;
 	defaultTemplatePath: string;
 	defaultViewMode: 'preview' | 'source';
-	/** 便笺内 `.view-content` 的 `zoom`（0.5–1），与阅读/编辑正文显示比例一致。 */
-	viewContentZoom: number;
+	/** 浮动便笺内 `.view-content` 的 `zoom`。 */
+	stickyViewContentZoom: number;
+	/** 便笺列表预览卡片正文的 `zoom`。 */
+	noteListViewContentZoom: number;
 	bottomBarAutoHide: boolean;
 	/** 启动 Obsidian 后自动恢复上次便笺浮动窗口（与「打开便笺窗口（恢复上次会话）」一致）。 */
 	restoreStickySessionOnStartup: boolean;
@@ -21,6 +34,8 @@ export interface ColorfulStickyNotesSettings {
 	noteListCardHeight: number;
 	/** 便笺列表网格单列最小宽度（像素，`minmax` 下限）。 */
 	noteListGridMinWidth: number;
+	/** 便笺列表分页：每页显示的卡片数量。 */
+	noteListPageSize: number;
 	/** 便笺列表排序（默认：创建时间新在前）。 */
 	noteListSort: NoteListSort;
 	/** 便笺列表首次打开时的挂载位置。 */
@@ -40,12 +55,14 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	filenameTemplate: 'YYYY/YYYY-MM-DD',
 	defaultTemplatePath: '',
 	defaultViewMode: 'source',
-	viewContentZoom: 0.6,
+	stickyViewContentZoom: VIEW_CONTENT_ZOOM_DEFAULT,
+	noteListViewContentZoom: VIEW_CONTENT_ZOOM_DEFAULT,
 	bottomBarAutoHide: true,
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
 	noteListCardHeight: 160,
 	noteListGridMinWidth: 320,
+	noteListPageSize: 12,
 	noteListSort: 'ctime-desc',
 	noteListOpenLocation: 'right-sidebar',
 	confirmBlankStickyTrashOnClose: true,
@@ -222,20 +239,31 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('内容缩放')
+			.setName('便笺窗口内容缩放')
 			.setDesc(
-				'便笺窗口与列表预览卡片共用同一比例（50%–100%）。列表仅预览区嵌套与内边距与便笺不同，观感可能略有差异。'
+				`浮动便笺正文显示比例（${Math.round(VIEW_CONTENT_ZOOM_MIN * 100)}%–${Math.round(VIEW_CONTENT_ZOOM_MAX * 100)}%）。`
 			)
 			.addSlider(slider =>
 				slider
-					.setLimits(0.5, 1, 0.05)
-					.setValue(this.plugin.settings.viewContentZoom)
+					.setLimits(VIEW_CONTENT_ZOOM_MIN, VIEW_CONTENT_ZOOM_MAX, VIEW_CONTENT_ZOOM_STEP)
+					.setValue(this.plugin.settings.stickyViewContentZoom)
 					.setInstant(true)
 					.setDynamicTooltip()
 					.onChange(async v => {
-						this.plugin.settings.viewContentZoom = v;
+						this.plugin.settings.stickyViewContentZoom = v;
 						await this.plugin.saveSettings();
-						this.plugin.syncViewContentZoomToOpenViews();
+						this.plugin.syncStickyViewContentZoomToOpenViews();
+					})
+			)
+			.addExtraButton(btn =>
+				btn
+					.setIcon('rotate-ccw')
+					.setTooltip(`重置为默认 ${VIEW_CONTENT_ZOOM_DEFAULT}`)
+					.onClick(async () => {
+						this.plugin.settings.stickyViewContentZoom = DEFAULT_SETTINGS.stickyViewContentZoom;
+						await this.plugin.saveSettings();
+						this.plugin.syncStickyViewContentZoomToOpenViews();
+						this.display();
 					})
 			);
 
@@ -332,6 +360,51 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 							: DEFAULT_SETTINGS.noteListGridMinWidth;
 						await this.plugin.saveSettings();
 						this.plugin.syncNoteListGridMetricsToOpenViews();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName('每页卡片数量')
+			.setDesc('便笺列表分页时每一页最多显示的卡片数（4–48）；数值越大单页加载越多，滚动区可能略卡。')
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.noteListPageSize))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.noteListPageSize = Number.isFinite(n)
+							? Math.max(4, Math.min(48, Math.round(n)))
+							: DEFAULT_SETTINGS.noteListPageSize;
+						await this.plugin.saveSettings();
+						this.plugin.refreshStickyListPageSizeChanged();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName('列表预览内容缩放')
+			.setDesc(
+				`列表卡片内 Markdown 预览比例（${Math.round(VIEW_CONTENT_ZOOM_MIN * 100)}%–${Math.round(VIEW_CONTENT_ZOOM_MAX * 100)}%），与浮动便笺窗口独立。`
+			)
+			.addSlider(slider =>
+				slider
+					.setLimits(VIEW_CONTENT_ZOOM_MIN, VIEW_CONTENT_ZOOM_MAX, VIEW_CONTENT_ZOOM_STEP)
+					.setValue(this.plugin.settings.noteListViewContentZoom)
+					.setInstant(true)
+					.setDynamicTooltip()
+					.onChange(async v => {
+						this.plugin.settings.noteListViewContentZoom = v;
+						await this.plugin.saveSettings();
+						this.plugin.syncNoteListViewContentZoomToOpenViews();
+					})
+			)
+			.addExtraButton(btn =>
+				btn
+					.setIcon('rotate-ccw')
+					.setTooltip(`重置为默认 ${VIEW_CONTENT_ZOOM_DEFAULT}`)
+					.onClick(async () => {
+						this.plugin.settings.noteListViewContentZoom = DEFAULT_SETTINGS.noteListViewContentZoom;
+						await this.plugin.saveSettings();
+						this.plugin.syncNoteListViewContentZoomToOpenViews();
+						this.display();
 					})
 			);
 

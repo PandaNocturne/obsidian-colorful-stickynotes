@@ -104,7 +104,7 @@
 /* 正文区：与便笺纸面同色；缩放由 StickyNotePopover#setViewContentZoom 写入 --csn-sticky-view-content-zoom */
 .csn-sticky .view-content {
   --background-primary: var(--csn-b);
-  zoom: var(--csn-sticky-view-content-zoom, 0.6);
+  zoom: var(--csn-sticky-view-content-zoom, 0.65);
 }
 .csn-sticky-bottombar {
   display: flex;
@@ -722,7 +722,7 @@
   font-size: var(--font-text-size);
   line-height: var(--line-height-normal);
   word-break: break-word;
-  zoom: var(--csn-sticky-view-content-zoom, 0.6);
+  zoom: var(--csn-sticky-view-content-zoom, 0.65);
 }
 .csn-list-card-body--rendered .markdown-preview-view,
 .csn-list-card-body--rendered .markdown-preview-sizer {

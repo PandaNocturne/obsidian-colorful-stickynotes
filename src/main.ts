@@ -1,5 +1,10 @@
 import { Notice, Plugin, TFile } from 'obsidian';
-import { ColorfulStickyNotesSettingTab, DEFAULT_SETTINGS, type ColorfulStickyNotesSettings } from './settings';
+import {
+	clampViewContentZoom,
+	ColorfulStickyNotesSettingTab,
+	DEFAULT_SETTINGS,
+	type ColorfulStickyNotesSettings
+} from './settings';
 import { WorkspacePanelModal } from './modals/WorkspacePanelModal';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
@@ -112,18 +117,27 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()) as ColorfulStickyNotesSettings;
+		const raw = (await this.loadData()) as Record<string, unknown>;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw) as ColorfulStickyNotesSettings;
 		const st = this.settings as unknown as Record<string, unknown>;
 		delete st.bottomBarCommands;
 		delete st.defaultPositionMode;
 		delete st.defaultPositionX;
 		delete st.defaultPositionY;
-		const z = this.settings.viewContentZoom;
-		if (typeof z !== 'number' || !Number.isFinite(z)) {
-			this.settings.viewContentZoom = DEFAULT_SETTINGS.viewContentZoom;
-		} else {
-			this.settings.viewContentZoom = Math.max(0.5, Math.min(1, z));
+
+		const legacyZoom = raw.viewContentZoom;
+		if (typeof legacyZoom === 'number' && Number.isFinite(legacyZoom)) {
+			const c = clampViewContentZoom(legacyZoom);
+			if (!('stickyViewContentZoom' in raw) && !('noteListViewContentZoom' in raw)) {
+				this.settings.stickyViewContentZoom = c;
+				this.settings.noteListViewContentZoom = c;
+			}
 		}
+		delete st.viewContentZoom;
+
+		this.settings.stickyViewContentZoom = clampViewContentZoom(this.settings.stickyViewContentZoom);
+		this.settings.noteListViewContentZoom = clampViewContentZoom(this.settings.noteListViewContentZoom);
+
 		delete st.noteListLayout;
 		let listH = this.settings.noteListCardHeight;
 		if (typeof listH !== 'number' || !Number.isFinite(listH)) {
@@ -136,6 +150,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			listMinW = DEFAULT_SETTINGS.noteListGridMinWidth;
 		}
 		this.settings.noteListGridMinWidth = Math.max(180, Math.min(800, Math.round(listMinW)));
+
+		let listPs = this.settings.noteListPageSize;
+		if (typeof listPs !== 'number' || !Number.isFinite(listPs)) {
+			listPs = DEFAULT_SETTINGS.noteListPageSize;
+		}
+		this.settings.noteListPageSize = Math.max(4, Math.min(48, Math.round(listPs)));
 
 		const nls = this.settings.noteListSort;
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.includes(nls as NoteListSort)) {
@@ -204,9 +224,23 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 	}
 
-	/** 将「内容缩放」同步到所有浮动便笺与已打开的便笺列表卡片（不重渲列表正文）。 */
-	syncViewContentZoomToOpenViews(): void {
+	/** 每页条数变更：回到第一页并重绘已打开的列表。 */
+	refreshStickyListPageSizeChanged(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteListView) {
+				v.resetPageAndRedraw();
+			}
+		}
+	}
+
+	/** 将便笺窗口内容缩放同步到已打开的浮动便笺。 */
+	syncStickyViewContentZoomToOpenViews(): void {
 		this.stickies.updateViewContentZoomFromSettings();
+	}
+
+	/** 将列表预览缩放同步到已打开的便笺列表（不重渲 Markdown）。 */
+	syncNoteListViewContentZoomToOpenViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) {

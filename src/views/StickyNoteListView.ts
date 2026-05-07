@@ -14,6 +14,7 @@ import {
 	type Debouncer
 } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
+import { clampViewContentZoom } from '../settings';
 import { VIEW_STICKY_NOTE_LIST, type NoteListSort } from '../types';
 import { previewMarkdownSlice } from '../utils/preview-markdown-slice';
 import '../obsidian-augmentations';
@@ -21,7 +22,6 @@ import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
 import type { StickyColorId } from '../types';
 
-const LIST_PAGE_SIZE = 12;
 /** 单卡传入渲染器的 Markdown 最大字符数（含换行），避免超大笔记阻塞 UI。 */
 const PREVIEW_MARKDOWN_MAX = 8000;
 
@@ -135,10 +135,16 @@ export class StickyNoteListView extends ItemView {
 		void this.renderList();
 	}
 
-	/** 与浮动便笺共用设置里的 `viewContentZoom`，仅更新已渲染卡片上的 CSS 变量，不重渲 Markdown。 */
+	/** 每页条数等变更时回到第一页并重绘。 */
+	resetPageAndRedraw(): void {
+		this.listPageIndex = 0;
+		void this.renderList();
+	}
+
+	/** 按设置里的 `noteListViewContentZoom` 更新已渲染卡片上的 CSS 变量，不重渲 Markdown。 */
 	syncViewContentZoomFromSettings(): void {
 		if (!this.listItemsEl) return;
-		const zoom = Math.max(0.5, Math.min(1, this.plugin.settings.viewContentZoom));
+		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		this.listItemsEl.querySelectorAll('.csn-list-card').forEach(card => {
 			if (card instanceof HTMLElement) {
 				card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
@@ -393,12 +399,13 @@ export class StickyNoteListView extends ItemView {
 
 			this.paginationEl.show();
 
-			const totalPages = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
+			const pageSize = Math.max(4, Math.min(48, Math.round(this.plugin.settings.noteListPageSize)));
+			const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 			if (this.listPageIndex >= totalPages) this.listPageIndex = totalPages - 1;
 			if (this.listPageIndex < 0) this.listPageIndex = 0;
 
-			const start = this.listPageIndex * LIST_PAGE_SIZE;
-			const pageFiles = filtered.slice(start, start + LIST_PAGE_SIZE);
+			const start = this.listPageIndex * pageSize;
+			const pageFiles = filtered.slice(start, start + pageSize);
 
 			const mdHost = new Component();
 			this.listMarkdownHost = mdHost;
@@ -411,7 +418,7 @@ export class StickyNoteListView extends ItemView {
 						cls: 'csn-list-card',
 						attr: { 'data-csn-list-color': color, title: '双击打开便笺' }
 					});
-					const zoom = Math.max(0.5, Math.min(1, this.plugin.settings.viewContentZoom));
+					const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 					card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 
 					const listDateTs =

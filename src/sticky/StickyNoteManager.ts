@@ -12,7 +12,7 @@ import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfir
 import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
 import { StickyNotePopover } from './StickyNotePopover';
 
-/** 批量恢复：外壳已挂载，待 setViewState / 对齐颜色。 */
+/** 批量恢复：外壳已挂载，待 setViewState；无会话色时已在创建前解析 YAML 色。 */
 type PreparedExistingStickyOpen = {
 	pop: StickyNotePopover;
 	file: TFile;
@@ -365,7 +365,7 @@ export class StickyNoteManager {
 			initialCollapsed: extra.initialCollapsed,
 			initialYamlVisible: extra.initialYamlVisible,
 			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
-			viewContentZoom: this.plugin.settings.viewContentZoom,
+			viewContentZoom: this.plugin.settings.stickyViewContentZoom,
 			onClose: () => void this.handleStickyCloseRequest(id),
 			onBoundsChange: () => this.persistOpenWindows(),
 			onRequestNewSticky: () => void this.addStickyWindow(undefined, this.popovers.get(id)),
@@ -533,8 +533,10 @@ export class StickyNoteManager {
 		return new Promise(resolve => requestAnimationFrame(() => resolve()));
 	}
 
-	/** 同步创建 DOM/叶视图占位，不打开文件。 */
-	private prepareExistingStickyShell(serial: SerializedStickyWindow): PreparedExistingStickyOpen | null {
+	/** 创建 DOM/叶视图占位，不打开文件。无会话 `color` 时先解析笔记色再挂载，避免首帧默认色闪烁。 */
+	private async prepareExistingStickyShell(
+		serial: SerializedStickyWindow
+	): Promise<PreparedExistingStickyOpen | null> {
 		const file = this.app.vault.getAbstractFileByPath(serial.path);
 		if (!(file instanceof TFile)) {
 			new Notice(`找不到便笺：${serial.path}`);
@@ -543,10 +545,11 @@ export class StickyNoteManager {
 		const id = serial.id || this.newId();
 		const b = serial.bounds ?? this.getDefaultBounds();
 		const savedColor = serial.color;
-		/* 不在创建窗口前 await 读 YAML：外壳先出现，颜色在 openFile 后再对齐（可能短暂为默认色）。 */
+		const initialColor: StickyColorId =
+			savedColor ?? (await resolveStickyBgColorForFile(this.app, file)) ?? 'default';
 		const pop = this.createPopoverShell(id, {
 			bounds: b,
-			initialColor: savedColor ?? 'default',
+			initialColor,
 			initialCollapsed: !!serial.collapsed,
 			initialYamlVisible: !!serial.yamlVisible
 		});
@@ -561,12 +564,7 @@ export class StickyNoteManager {
 		const { pop, file, bounds: b, savedColor } = prepared;
 		await pop.openFile(file, { workspaceActive: opts.workspaceActive });
 		pop.setBounds(b);
-		if (savedColor === undefined) {
-			const after =
-				getStickyBgColorFromMetadataCache(this.app, file) ??
-				(await resolveStickyBgColorForFile(this.app, file));
-			if (after) pop.setColor(after);
-		} else {
+		if (savedColor !== undefined) {
 			/* 工作区里记录了便笺颜色，但笔记 frontmatter 无 `colorful-sticky-bg` 时写回，避免仅会话态有颜色。 */
 			const yamlColor =
 				getStickyBgColorFromMetadataCache(this.app, file) ??
@@ -579,7 +577,7 @@ export class StickyNoteManager {
 	}
 
 	async openExistingSticky(serial: SerializedStickyWindow): Promise<void> {
-		const prepared = this.prepareExistingStickyShell(serial);
+		const prepared = await this.prepareExistingStickyShell(serial);
 		if (!prepared) return;
 		await this.yieldForStickyChromePaint();
 		await this.finalizeExistingStickyOpen(prepared, { workspaceActive: true });
@@ -599,11 +597,9 @@ export class StickyNoteManager {
 		}
 		const pending = ws.windows.filter(w => !openPaths.has(w.path));
 		if (pending.length === 0) return;
-		const preparedList: PreparedExistingStickyOpen[] = [];
-		for (const w of pending) {
-			const p = this.prepareExistingStickyShell(w);
-			if (p) preparedList.push(p);
-		}
+		const preparedList = (
+			await Promise.all(pending.map(w => this.prepareExistingStickyShell(w)))
+		).filter((p): p is PreparedExistingStickyOpen => p !== null);
 		if (preparedList.length === 0) return;
 		/* 所有外壳同一帧后再并行加载内容，且不以 active 叶抢主编辑器焦点。 */
 		await this.yieldForStickyChromePaint();
@@ -619,7 +615,7 @@ export class StickyNoteManager {
 	}
 
 	updateViewContentZoomFromSettings(): void {
-		const z = this.plugin.settings.viewContentZoom;
+		const z = this.plugin.settings.stickyViewContentZoom;
 		for (const p of this.popovers.values()) {
 			p.setViewContentZoom(z);
 		}

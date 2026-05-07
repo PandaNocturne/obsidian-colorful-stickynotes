@@ -12,6 +12,7 @@ import {
 } from 'obsidian';
 import type { TFile } from 'obsidian';
 import type { FloatingBounds, StickyColorId } from '../types';
+import { clampViewContentZoom } from '../settings';
 import { SHEET_COLOR_ORDER } from './sticky-color-order';
 
 type WorkspaceSplitCtor = new (ws: Workspace, dir: 'horizontal' | 'vertical') => WorkspaceSplit;
@@ -36,7 +37,7 @@ export interface StickyNotePopoverOptions {
 	initialCollapsed: boolean;
 	initialYamlVisible: boolean;
 	bottomBarAutoHide: boolean;
-	/** 正文区域 zoom（0.5–1），作用于 `.view-content`。 */
+	/** 正文区域 zoom（0.3–1），作用于 `.view-content`。 */
 	viewContentZoom: number;
 	onClose: () => void;
 	onBoundsChange: (bounds: FloatingBounds) => void;
@@ -263,7 +264,7 @@ export class StickyNotePopover {
 
 	/** 与 HoverNoteLeafPopover#setPreviewScale 相同思路：根节点 CSS 变量 + `.view-content` 的 zoom。 */
 	setViewContentZoom(scale: number): void {
-		const s = Math.max(0.5, Math.min(1, scale));
+		const s = clampViewContentZoom(scale);
 		this.rootEl.style.setProperty('--csn-sticky-view-content-zoom', String(s));
 	}
 
