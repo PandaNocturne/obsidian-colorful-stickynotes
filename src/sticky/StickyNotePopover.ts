@@ -329,7 +329,12 @@ export class StickyNotePopover {
 
 		this.foldBtn = right.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',
-			attr: { type: 'button', 'aria-label': '折叠窗口' }
+			attr: {
+				type: 'button',
+				'aria-label': '折叠/展开',
+				title: '折叠/展开',
+				'aria-expanded': 'true'
+			}
 		});
 		this.plugin.registerDomEvent(this.foldBtn, 'click', evt => {
 			evt.preventDefault();
@@ -478,17 +483,12 @@ export class StickyNotePopover {
 		}
 	}
 
-	/** 折叠：chevrons-down-up；展开：chevrons-up-down */
+	/** 图标固定为「展开」态 chevrons-up-down；提示统一为「折叠/展开」。 */
 	private syncFoldButtonUi(): void {
-		if (this.collapsed) {
-			setIcon(this.foldBtn, 'chevrons-up-down');
-			this.foldBtn.setAttr('aria-label', '展开窗口');
-			this.foldBtn.setAttr('title', '展开窗口');
-		} else {
-			setIcon(this.foldBtn, 'chevrons-down-up');
-			this.foldBtn.setAttr('aria-label', '折叠窗口');
-			this.foldBtn.setAttr('title', '折叠窗口');
-		}
+		setIcon(this.foldBtn, 'chevrons-up-down');
+		this.foldBtn.setAttr('aria-label', '折叠/展开');
+		this.foldBtn.setAttr('title', '折叠/展开');
+		this.foldBtn.setAttr('aria-expanded', this.collapsed ? 'false' : 'true');
 	}
 
 	/**

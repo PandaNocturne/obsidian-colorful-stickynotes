@@ -101,8 +101,9 @@
 .csn-sticky-body .view-content > .markdown-source-view.mod-cm6 > .cm-editor > .cm-scroller {
   padding: 15px !important;
 }
-/* 正文缩放：由 StickyNotePopover#setViewContentZoom 写入 --csn-sticky-view-content-zoom（默认 0.6） */
-.csn-sticky-body .view-content {
+/* 正文区：与便笺纸面同色；缩放由 StickyNotePopover#setViewContentZoom 写入 --csn-sticky-view-content-zoom */
+.csn-sticky .view-content {
+  --background-primary: var(--csn-b);
   zoom: var(--csn-sticky-view-content-zoom, 0.6);
 }
 .csn-sticky-bottombar {
