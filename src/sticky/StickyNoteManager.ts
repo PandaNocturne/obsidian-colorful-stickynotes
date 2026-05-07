@@ -3,7 +3,6 @@ import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
 import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
-import { matchWidthsIfVerticalPair, snapBounds, type SnapPartner } from './snap-groups';
 import { StickyNotePopover } from './StickyNotePopover';
 
 const FM_COLOR_KEY = 'colorful-sticky-bg';
@@ -23,8 +22,6 @@ export class StickyNoteManager {
 	/** 等待内置删除命令完成时挂起的 vault 监听，避免重复注册。 */
 	private pendingDeleteListener: EventRef | null = null;
 	private pendingDeleteSafetyTimer: number | null = null;
-	private dragCluster = new Set<string>();
-	private draggingId: string | null = null;
 
 	workspaces: WorkspacesFile = {
 		version: 1,
@@ -228,9 +225,6 @@ export class StickyNoteManager {
 			viewContentZoom: this.plugin.settings.viewContentZoom,
 			onClose: () => this.closeSticky(id),
 			onBoundsChange: () => this.persistOpenWindows(),
-			onBoundsDelta: d => this.onBoundsDelta(id, d),
-			onDragStart: () => this.onDragStart(id),
-			onInteractionEnd: () => this.runSnapForAll(),
 			onRequestNewSticky: () => void this.addStickyWindow(),
 			onColorChange: c => void this.applyColorToFile(id, c),
 			onCollapseChange: () => this.persistOpenWindows(),
@@ -258,91 +252,6 @@ export class StickyNoteManager {
 				pop.setColor(c as StickyColorId);
 			}
 		}
-	}
-
-	private onDragStart(id: string): void {
-		this.draggingId = id;
-		this.dragCluster = this.computeMovementCluster(id);
-	}
-
-	private computeMovementCluster(leaderId: string): Set<string> {
-		const visited = new Set<string>();
-		const stack = [leaderId];
-		while (stack.length > 0) {
-			const cur = stack.pop()!;
-			if (visited.has(cur)) continue;
-			visited.add(cur);
-			const bc = this.popovers.get(cur)?.getBounds();
-			if (!bc) continue;
-			for (const [oid, op] of this.popovers) {
-				if (oid === cur || visited.has(oid)) continue;
-				const ob = op.getBounds();
-				if (this.areSnapped(bc, ob)) stack.push(oid);
-			}
-		}
-		return visited;
-	}
-
-	private onBoundsDelta(fromId: string, d: { dx: number; dy: number }): void {
-		if (d.dx === 0 && d.dy === 0) return;
-		if (!this.draggingId || fromId !== this.draggingId) return;
-		for (const id of this.dragCluster) {
-			if (id === fromId) continue;
-			const pop = this.popovers.get(id);
-			if (!pop) continue;
-			const b = pop.getBounds();
-			pop.setBounds({ ...b, left: b.left + d.dx, top: b.top + d.dy });
-		}
-	}
-
-	private runSnapForAll(): void {
-		this.draggingId = null;
-		this.dragCluster.clear();
-
-		const ids = [...this.popovers.keys()];
-		const partners: SnapPartner[] = ids.map(id => ({
-			id,
-			bounds: this.popovers.get(id)!.getBounds()
-		}));
-
-		for (const id of ids) {
-			const pop = this.popovers.get(id)!;
-			let b = pop.getBounds();
-			const others = partners.filter(p => p.id !== id);
-			b = snapBounds(b, others, id);
-			pop.setBounds(b);
-			const pr = partners.find(p => p.id === id);
-			if (pr) pr.bounds = b;
-		}
-
-		for (let i = 0; i < ids.length; i++) {
-			for (let j = i + 1; j < ids.length; j++) {
-				const a = ids[i]!;
-				const b = ids[j]!;
-				const ba = this.popovers.get(a)!.getBounds();
-				const bb = this.popovers.get(b)!.getBounds();
-				if (this.areSnapped(ba, bb)) {
-					const mw = matchWidthsIfVerticalPair(ba, bb);
-					if (mw.a !== ba.width || mw.b !== bb.width) {
-						this.popovers.get(a)!.setBounds({ ...ba, width: mw.a });
-						this.popovers.get(b)!.setBounds({ ...bb, width: mw.b });
-					}
-				}
-			}
-		}
-
-		this.persistOpenWindows();
-	}
-
-	private areSnapped(a: FloatingBounds, b: FloatingBounds): boolean {
-		const ar = a.left + a.width;
-		const br = b.left + b.width;
-		return (
-			Math.abs(a.left - br) <= 16 ||
-			Math.abs(ar - b.left) <= 16 ||
-			Math.abs(a.top + a.height - b.top) <= 16 ||
-			Math.abs(b.top + b.height - a.top) <= 16
-		);
 	}
 
 	private clearPendingDeleteListener(): void {
@@ -395,10 +304,6 @@ export class StickyNoteManager {
 		if (!pop) return;
 		pop.destroy();
 		this.popovers.delete(id);
-		if (this.draggingId === id) {
-			this.draggingId = null;
-			this.dragCluster.clear();
-		}
 		this.persistOpenWindows();
 	}
 

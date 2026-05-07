@@ -39,10 +39,6 @@ export interface StickyNotePopoverOptions {
 	viewContentZoom: number;
 	onClose: () => void;
 	onBoundsChange: (bounds: FloatingBounds) => void;
-	/** 拖动移动增量（同簇窗口一起移动）。 */
-	onBoundsDelta?: (delta: { dx: number; dy: number }) => void;
-	onDragStart?: () => void;
-	onInteractionEnd?: () => void;
 	onRequestNewSticky: () => void;
 	onColorChange: (c: StickyColorId) => void;
 	onCollapseChange?: (c: boolean) => void;
@@ -78,7 +74,6 @@ export class StickyNotePopover {
 	private readonly rootSplit: WorkspaceSplit;
 	private readonly plugin: Plugin;
 	private readonly onBoundsChange: (bounds: FloatingBounds) => void;
-	private readonly onBoundsDelta?: (d: { dx: number; dy: number }) => void;
 	leaf: WorkspaceLeaf | null = null;
 	private isDragging = false;
 	private isResizing = false;
@@ -87,8 +82,6 @@ export class StickyNotePopover {
 	private resizeDirection: ResizeDirection | null = null;
 	private dragOffsetX = 0;
 	private dragOffsetY = 0;
-	private lastDragClientX = 0;
-	private lastDragClientY = 0;
 	private resizeStartX = 0;
 	private resizeStartY = 0;
 	private resizeStartBounds: FloatingBounds | null = null;
@@ -105,7 +98,6 @@ export class StickyNotePopover {
 	constructor(private readonly options: StickyNotePopoverOptions) {
 		this.plugin = options.plugin;
 		this.onBoundsChange = options.onBoundsChange;
-		this.onBoundsDelta = options.onBoundsDelta;
 		this.collapsed = options.initialCollapsed;
 		this.yamlVisible = options.initialYamlVisible;
 
@@ -686,9 +678,6 @@ export class StickyNotePopover {
 		const r = this.rootEl.getBoundingClientRect();
 		this.dragOffsetX = e.clientX - r.left;
 		this.dragOffsetY = e.clientY - r.top;
-		this.lastDragClientX = e.clientX;
-		this.lastDragClientY = e.clientY;
-		this.options.onDragStart?.();
 		this.headerEl.setPointerCapture(e.pointerId);
 		e.preventDefault();
 		e.stopPropagation();
@@ -718,12 +707,7 @@ export class StickyNotePopover {
 			const height = this.rootEl.offsetHeight;
 			const left = Math.min(Math.max(0, e.clientX - this.dragOffsetX), window.innerWidth - width);
 			const top = Math.min(Math.max(0, e.clientY - this.dragOffsetY), window.innerHeight - height);
-			const dx = e.clientX - this.lastDragClientX;
-			const dy = e.clientY - this.lastDragClientY;
-			this.lastDragClientX = e.clientX;
-			this.lastDragClientY = e.clientY;
 			this.applyBounds({ left, top, width, height }, false);
-			this.onBoundsDelta?.({ dx, dy });
 		} else if (this.isResizing && e.pointerId === this.resizePointerId && this.resizeDirection && this.resizeStartBounds) {
 			const b = this.getResizedBounds(e);
 			if (b) this.applyBounds(b, false);
@@ -744,7 +728,6 @@ export class StickyNotePopover {
 			if (endedDrag) {
 				this.flushResizeReflow();
 				this.onBoundsChange(this.getBounds());
-				this.options.onInteractionEnd?.();
 			}
 		}
 		if (e.pointerId === this.resizePointerId) {
@@ -761,7 +744,6 @@ export class StickyNotePopover {
 			if (endedResize) {
 				this.flushResizeReflow();
 				this.onBoundsChange(this.getBounds());
-				this.options.onInteractionEnd?.();
 			}
 		}
 	};
