@@ -2,6 +2,14 @@ import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian'
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
+
+/** 批量恢复：外壳已挂载，待 setViewState / 对齐颜色。 */
+type PreparedExistingStickyOpen = {
+	pop: StickyNotePopover;
+	file: TFile;
+	bounds: FloatingBounds;
+	savedColor: StickyColorId | undefined;
+};
 import { getStickyBgColorFromMetadataCache, resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
 import { StickyNotePopover } from './StickyNotePopover';
@@ -361,11 +369,12 @@ export class StickyNoteManager {
 		return new Promise(resolve => requestAnimationFrame(() => resolve()));
 	}
 
-	async openExistingSticky(serial: SerializedStickyWindow): Promise<void> {
+	/** 同步创建 DOM/叶视图占位，不打开文件。 */
+	private prepareExistingStickyShell(serial: SerializedStickyWindow): PreparedExistingStickyOpen | null {
 		const file = this.app.vault.getAbstractFileByPath(serial.path);
 		if (!(file instanceof TFile)) {
 			new Notice(`找不到便笺：${serial.path}`);
-			return;
+			return null;
 		}
 		const id = serial.id || this.newId();
 		const b = serial.bounds ?? this.getDefaultBounds();
@@ -378,15 +387,30 @@ export class StickyNoteManager {
 			initialYamlVisible: !!serial.yamlVisible
 		});
 		this.popovers.set(id, pop);
-		await this.yieldForStickyChromePaint();
-		await pop.openFile(file);
+		return { pop, file, bounds: b, savedColor };
+	}
+
+	private async finalizeExistingStickyOpen(
+		prepared: PreparedExistingStickyOpen,
+		opts: { workspaceActive: boolean }
+	): Promise<void> {
+		const { pop, file, bounds: b, savedColor } = prepared;
+		await pop.openFile(file, { workspaceActive: opts.workspaceActive });
 		pop.setBounds(b);
 		if (savedColor === undefined) {
 			const after =
-				getStickyBgColorFromMetadataCache(this.app, file) ?? (await resolveStickyBgColorForFile(this.app, file));
+				getStickyBgColorFromMetadataCache(this.app, file) ??
+				(await resolveStickyBgColorForFile(this.app, file));
 			if (after) pop.setColor(after);
 		}
 		this.persistOpenWindows();
+	}
+
+	async openExistingSticky(serial: SerializedStickyWindow): Promise<void> {
+		const prepared = this.prepareExistingStickyShell(serial);
+		if (!prepared) return;
+		await this.yieldForStickyChromePaint();
+		await this.finalizeExistingStickyOpen(prepared, { workspaceActive: true });
 	}
 
 	async restoreWorkspaceWindows(): Promise<void> {
@@ -401,15 +425,19 @@ export class StickyNoteManager {
 			await this.addStickyWindow();
 			return;
 		}
-		let yieldBeforeNext = false;
-		for (const w of ws.windows) {
-			if (openPaths.has(w.path)) continue;
-			if (yieldBeforeNext) {
-				await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-			}
-			await this.openExistingSticky(w);
-			yieldBeforeNext = true;
+		const pending = ws.windows.filter(w => !openPaths.has(w.path));
+		if (pending.length === 0) return;
+		const preparedList: PreparedExistingStickyOpen[] = [];
+		for (const w of pending) {
+			const p = this.prepareExistingStickyShell(w);
+			if (p) preparedList.push(p);
 		}
+		if (preparedList.length === 0) return;
+		/* 所有外壳同一帧后再并行加载内容，且不以 active 叶抢主编辑器焦点。 */
+		await this.yieldForStickyChromePaint();
+		await Promise.all(
+			preparedList.map(p => this.finalizeExistingStickyOpen(p, { workspaceActive: false }))
+		);
 	}
 
 	updateBottomBarsFromSettings(): void {

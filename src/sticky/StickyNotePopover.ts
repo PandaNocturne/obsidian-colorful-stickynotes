@@ -496,18 +496,22 @@ export class StickyNotePopover {
 		this.applyBounds(bounds, false);
 	}
 
-	async openFile(file: TFile): Promise<void> {
+	/**
+	 * @param openOpts.workspaceActive 为 false 时不把工作区活动叶切到本便笺（批量恢复时用，避免抢焦点/光标）。
+	 */
+	async openFile(file: TFile, openOpts?: { workspaceActive?: boolean }): Promise<void> {
 		const leaf = this.leaf;
 		if (!leaf) return;
+		const workspaceActive = openOpts?.workspaceActive !== false;
 
 		if (file.extension === 'md') {
 			await leaf.setViewState({
 				type: 'markdown',
 				state: { file: file.path, mode: this.options.defaultMarkdownMode === 'source' ? 'source' : 'preview' },
-				active: true
+				active: workspaceActive
 			});
 		} else {
-			await leaf.openFile(file, { active: true });
+			await leaf.openFile(file, { active: workspaceActive });
 		}
 
 		/* setViewState 后先交出一帧，让便笺窗口与叶视图占位先上屏，再跑 loadIfDeferred 的重排版。 */
