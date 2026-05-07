@@ -16,7 +16,11 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.registerView(VIEW_STICKY_NOTE_LIST, leaf => new StickyNoteListView(leaf, this));
 
-		this.addRibbonIcon('layout-list', '便笺列表（右侧栏）', () => {
+		this.addRibbonIcon('square-pen', '打开便笺', () => {
+			void this.restoreStickySession();
+		});
+
+		this.addRibbonIcon('layout-list', '便笺列表', () => {
 			void this.openNoteListView();
 		});
 
