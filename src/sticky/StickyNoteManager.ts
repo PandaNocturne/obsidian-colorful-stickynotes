@@ -51,7 +51,7 @@ export class StickyNoteManager {
 		private readonly app: App
 	) {}
 
-	/** 当前已打开浮动便笺对应的笔记路径（用于便笺列表卡片右下角卷角）。 */
+	/** 当前已打开浮动便笺对应的笔记路径（用于便笺列表「已打开 / 未打开」筛选）。 */
 	getOpenStickyNotePaths(): ReadonlySet<string> {
 		const s = new Set<string>();
 		for (const pop of this.popovers.values()) {

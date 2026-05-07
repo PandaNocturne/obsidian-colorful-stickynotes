@@ -499,13 +499,6 @@
   --csn-list-preview-bg: var(--background-primary);
   --csn-list-preview-border: var(--background-modifier-border);
   --csn-list-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
-  /* 已打开便笺卡片右下角卷角：下层「反面」浅色 + 上层折痕阴影 */
-  --csn-list-fold-under: rgba(255, 255, 255, 0.93);
-  --csn-list-fold-shadow: rgba(0, 0, 0, 0.13);
-}
-.theme-dark .csn-list-card {
-  --csn-list-fold-under: rgba(255, 255, 255, 0.09);
-  --csn-list-fold-shadow: rgba(0, 0, 0, 0.42);
 }
 /* 便笺列表 */
 .workspace-leaf-content .view-content.csn-list-view {
@@ -699,30 +692,6 @@
   overflow: hidden;
   transition: box-shadow 0.12s ease, transform 0.12s ease;
 }
-/* 浮动便笺已打开：右下角纸页卷角（伪元素叠在卡片内容之上） */
-.csn-list-card.csn-list-card--sticky-open::before {
-  content: '';
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 8;
-  border-style: solid;
-  border-width: 0 0 26px 26px;
-  border-color: transparent transparent var(--csn-list-fold-under) transparent;
-  pointer-events: none;
-}
-.csn-list-card.csn-list-card--sticky-open::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 9;
-  border-style: solid;
-  border-width: 0 0 17px 17px;
-  border-color: transparent transparent var(--csn-list-fold-shadow) transparent;
-  pointer-events: none;
-  opacity: 0.88;
-}
 .csn-list-card:hover {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 4px 14px rgba(0, 0, 0, 0.06);
   transform: translateY(-1px);
@@ -834,19 +803,28 @@
   gap: 4px;
   flex-shrink: 0;
 }
-.csn-list-card-date {
-  flex-shrink: 0;
-  font-size: var(--font-ui-smaller);
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
+/* 置顶：未置顶时仅悬停卡片（或焦点在卡片内）时显示；置顶后常驻显示 */
+.csn-list-card-pin-btn {
+  transition: opacity 0.12s ease;
+}
+.csn-list-card-pin-btn:not(.is-active) {
+  opacity: 0;
+}
+.csn-list-card:hover .csn-list-card-pin-btn:not(.is-active),
+.csn-list-card:focus-within .csn-list-card-pin-btn:not(.is-active) {
+  opacity: 1;
 }
 .csn-list-card-pin-btn.is-active {
+  opacity: 1;
   color: var(--text-success);
 }
 .csn-list-card-menu-btn {
   transition: opacity 0.12s ease;
 }
 @media (hover: none) {
+  .csn-list-card-pin-btn:not(.is-active) {
+    opacity: 0.5;
+  }
   .csn-list-card-menu-btn {
     opacity: 0.55;
   }

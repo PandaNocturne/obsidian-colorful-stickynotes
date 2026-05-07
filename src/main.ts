@@ -310,8 +310,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 	}
 
-	/** 同步便笺列表卡片上「已打开浮动便笺」的右下角卷角标记（requestAnimationFrame 合并多次触发）。 */
+	/**
+	 * 浮动便笺打开/关闭时刷新列表（requestAnimationFrame 合并多次触发）。
+	 * 仅在「已打开 / 未打开」筛选下需要重绘；「全部」下列成员不变则无需刷新。
+	 */
 	refreshStickyListOpenIndicatorsIfOpen(): void {
+		if (this.settings.noteListFloatOpenFilter === 'all') return;
 		if (this.listOpenIndicatorRaf !== null) {
 			window.cancelAnimationFrame(this.listOpenIndicatorRaf);
 		}
@@ -320,12 +324,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 				const v = leaf.view;
 				if (v instanceof StickyNoteListView) {
-					/* 非「全部」时打开/关闭便笺会改变列表成员，需整表重绘；仅「全部」时只更新卷角标记 */
-					if (this.settings.noteListFloatOpenFilter !== 'all') {
-						v.requestRedraw();
-					} else {
-						v.syncOpenStickyCornerIndicators();
-					}
+					v.requestRedraw();
 				}
 			}
 		});
