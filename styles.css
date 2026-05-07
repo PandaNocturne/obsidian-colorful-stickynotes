@@ -869,6 +869,10 @@
   word-break: break-word;
   zoom: var(--csn-sticky-view-content-zoom, 0.65);
 }
+/* 设置「预览区裁剪溢出」关闭：嵌入预览不再在区域内滚动，可溢出显示 */
+.csn-list-view.csn-list-view--card-overflow-visible .csn-list-card-body--rendered {
+  overflow: visible;
+}
 .csn-list-card-body--rendered .markdown-preview-view,
 .csn-list-card-body--rendered .markdown-preview-sizer {
   font-family: inherit;

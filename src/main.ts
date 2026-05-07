@@ -157,6 +157,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.settings.stickyViewContentZoom = clampViewContentZoom(this.settings.stickyViewContentZoom);
 		this.settings.noteListViewContentZoom = clampViewContentZoom(this.settings.noteListViewContentZoom);
 
+		if (typeof this.settings.noteListCardOverflowHidden !== 'boolean') {
+			this.settings.noteListCardOverflowHidden = DEFAULT_SETTINGS.noteListCardOverflowHidden;
+		}
+
 		delete st.noteListLayout;
 		let listH = this.settings.noteListCardHeight;
 		if (typeof listH !== 'number' || !Number.isFinite(listH)) {

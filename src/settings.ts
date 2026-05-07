@@ -30,6 +30,8 @@ export interface ColorfulStickyNotesSettings {
 	restoreStickySessionOnStartup: boolean;
 	/** 启动恢复便笺前的等待秒数（0–10），仅在开启「启动时打开上次便笺」时生效。 */
 	restoreStickySessionDelaySec: number;
+	/** 便笺列表卡片预览区（`.csn-list-card-body--rendered`）是否使用 `overflow: auto` 在区域内滚动（默认开启）。关闭后为 `overflow: visible`。 */
+	noteListCardOverflowHidden: boolean;
 	/** 便笺列表卡片高度（像素，预览区所在整卡高度）。 */
 	noteListCardHeight: number;
 	/** 便笺列表网格单列最小宽度（像素，`minmax` 下限）。 */
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	bottomBarAutoHide: true,
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
+	noteListCardOverflowHidden: true,
 	noteListCardHeight: 160,
 	noteListGridMinWidth: 320,
 	noteListPageSize: 12,
@@ -331,6 +334,21 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					.onChange(async v => {
 						this.plugin.settings.noteListOpenLocation = v as NoteListOpenLocation;
 						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName('预览区裁剪溢出')
+			.setDesc(
+				'开启时列表卡片内预览区域使用 overflow: auto，超出固定高度时在区域内滚动；关闭后为 overflow: visible，预览可溢出（若外层卡片仍为 hidden，整体仍可能被裁切）。'
+			)
+			.addToggle(toggle =>
+				toggle
+					.setValue(this.plugin.settings.noteListCardOverflowHidden)
+					.onChange(async v => {
+						this.plugin.settings.noteListCardOverflowHidden = v;
+						await this.plugin.saveSettings();
+						this.plugin.syncNoteListGridMetricsToOpenViews();
 					})
 			);
 

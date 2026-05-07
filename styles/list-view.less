@@ -421,9 +421,6 @@
 }
 
 .csn-list-card-body--rendered {
-	// height: var(--csn-list-card-height, 160px);
-	// min-height: var(--csn-list-card-height, 160px);
-	// max-height: var(--csn-list-card-height, 160px);
 	overflow: auto;
 	padding: 6px 8px;
 	border: 1px solid var(--csn-list-preview-border);
@@ -438,6 +435,11 @@
 	line-height: var(--line-height-normal);
 	word-break: break-word;
 	zoom: var(--csn-sticky-view-content-zoom, 0.65);
+}
+
+/* 设置「预览区裁剪溢出」关闭：嵌入预览不再在区域内滚动，可溢出显示 */
+.csn-list-view.csn-list-view--card-overflow-visible .csn-list-card-body--rendered {
+	overflow: visible;
 }
 
 .csn-list-card-body--rendered .markdown-preview-view,
