@@ -42,6 +42,9 @@ const NOTE_LIST_FLOAT_OPEN_SPECS: readonly { mode: NoteListFloatOpenFilter; icon
 	{ mode: 'closed', icon: 'file', title: '仅未打开浮动便笺' }
 ];
 
+/** 侧栏较窄时，小于此宽度则切换为「窗口 / 排序 / 颜色」图标按钮 + 菜单 / 浮层。 */
+const TOOLBAR_COMPACT_MAX_WIDTH_PX = 600;
+
 /** `pinnedNorm` 为已 normalize 的路径数组，顺序即置顶顺序；不在数组中为未置顶。 */
 function pinnedSortRank(notePath: string, pinnedNorm: readonly string[]): number {
 	const i = pinnedNorm.indexOf(normalizePath(notePath));
@@ -180,6 +183,8 @@ export class StickyNoteListView extends ItemView {
 	private readonly colorFilterBtnById = new Map<StickyColorId, HTMLButtonElement>();
 	private colorFilterBarEl: HTMLElement | null = null;
 	private searchInput: HTMLInputElement | null = null;
+	private searchInnerEl: HTMLElement | null = null;
+	private searchClearBtn: HTMLButtonElement | null = null;
 	private paginationEl: HTMLElement | null = null;
 	private paginationRowEl: HTMLElement | null = null;
 	private paginationPagesEl: HTMLElement | null = null;
@@ -195,6 +200,14 @@ export class StickyNoteListView extends ItemView {
 	private listPageIndex = 0;
 	private debouncedListStructureRefresh: Debouncer<[], void> | null = null;
 	private debouncedListContentRefresh: Debouncer<[], void> | null = null;
+	private toolbarLayoutObserver: ResizeObserver | null = null;
+	private compactSortBtn: HTMLButtonElement | null = null;
+	private compactFloatBtn: HTMLButtonElement | null = null;
+	private compactColorBtn: HTMLButtonElement | null = null;
+	/** 紧凑工具栏「颜色」：水平色块浮层（非 Menu，可多选、点选不关）。 */
+	private colorPopoverEl: HTMLElement | null = null;
+	private colorPopoverOutsidePointerDown: ((e: PointerEvent) => void) | null = null;
+	private colorPopoverResizeBound: (() => void) | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -485,31 +498,42 @@ export class StickyNoteListView extends ItemView {
 		root.addClass('csn-list-view');
 
 		const searchWrap = root.createDiv({ cls: 'csn-list-search' });
-		this.searchInput = searchWrap.createEl('input', {
-			type: 'search',
+		const searchInner = searchWrap.createDiv({ cls: 'csn-list-search-inner' });
+		this.searchInnerEl = searchInner;
+		this.searchInput = searchInner.createEl('input', {
+			type: 'text',
 			cls: 'csn-list-search-input',
-			attr: { placeholder: '搜索标题、路径与正文（空格分隔，需同时包含）' }
+			attr: {
+				placeholder: '搜索标题、路径与正文（空格分隔，需同时包含）',
+				spellcheck: 'false',
+				'aria-label': '搜索便笺',
+				role: 'searchbox',
+				autocomplete: 'off'
+			}
+		});
+		this.searchClearBtn = searchInner.createEl('button', {
+			type: 'button',
+			cls: 'csn-list-search-clear csn-list-search-clear--hidden',
+			attr: { 'aria-label': '清除搜索', title: '清除' }
+		});
+		setIcon(this.searchClearBtn, 'x');
+		this.registerDomEvent(this.searchClearBtn, 'click', (e: MouseEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (this.searchInput) {
+				this.searchInput.value = '';
+				this.searchInput.focus();
+			}
+			this.syncSearchClearVisibility();
+			this.listPageIndex = 0;
+			void this.renderList();
 		});
 
 		const toolbar = root.createDiv({ cls: 'csn-list-toolbar' });
-		const sortLabel = toolbar.createSpan({ cls: 'csn-list-toolbar-label', text: '排序' });
-		sortLabel.setAttr('aria-hidden', 'true');
-		const sortWrap = toolbar.createDiv({ cls: 'csn-list-toolbar-btns' });
-		this.sortBtnByMode.clear();
-		for (const spec of NOTE_LIST_SORT_SPECS) {
-			const btn = sortWrap.createEl('button', {
-				type: 'button',
-				cls: 'clickable-icon csn-list-sort-btn',
-				attr: { 'aria-label': spec.title, title: spec.title }
-			});
-			setIcon(btn, spec.icon);
-			this.sortBtnByMode.set(spec.mode, btn);
-			this.registerDomEvent(btn, 'click', () => {
-				void this.setListSort(spec.mode);
-			});
-		}
+		const toolbarMain = toolbar.createDiv({ cls: 'csn-list-toolbar-main' });
 
-		const floatBar = toolbar.createDiv({ cls: 'csn-list-toolbar-float-open' });
+		const expanded = toolbarMain.createDiv({ cls: 'csn-list-toolbar-expanded' });
+		const floatBar = expanded.createDiv({ cls: 'csn-list-toolbar-float-open' });
 		this.floatOpenBarEl = floatBar;
 		const floatLabel = floatBar.createSpan({ cls: 'csn-list-toolbar-label', text: '窗口' });
 		floatLabel.setAttr('aria-hidden', 'true');
@@ -528,7 +552,35 @@ export class StickyNoteListView extends ItemView {
 			});
 		}
 
-		const colorBar = toolbar.createDiv({ cls: 'csn-list-toolbar-color-filter' });
+		expanded.createDiv({
+			cls: 'csn-list-toolbar-divider',
+			attr: { 'aria-hidden': 'true' }
+		});
+
+		const sortModule = expanded.createDiv({ cls: 'csn-list-toolbar-module' });
+		const sortLabel = sortModule.createSpan({ cls: 'csn-list-toolbar-label', text: '排序' });
+		sortLabel.setAttr('aria-hidden', 'true');
+		const sortWrap = sortModule.createDiv({ cls: 'csn-list-toolbar-btns' });
+		this.sortBtnByMode.clear();
+		for (const spec of NOTE_LIST_SORT_SPECS) {
+			const btn = sortWrap.createEl('button', {
+				type: 'button',
+				cls: 'clickable-icon csn-list-sort-btn',
+				attr: { 'aria-label': spec.title, title: spec.title }
+			});
+			setIcon(btn, spec.icon);
+			this.sortBtnByMode.set(spec.mode, btn);
+			this.registerDomEvent(btn, 'click', () => {
+				void this.setListSort(spec.mode);
+			});
+		}
+
+		expanded.createDiv({
+			cls: 'csn-list-toolbar-divider',
+			attr: { 'aria-hidden': 'true' }
+		});
+
+		const colorBar = expanded.createDiv({ cls: 'csn-list-toolbar-color-filter' });
 		this.colorFilterBarEl = colorBar;
 		const colorLabel = colorBar.createSpan({ cls: 'csn-list-toolbar-label', text: '颜色' });
 		colorLabel.setAttr('aria-hidden', 'true');
@@ -550,6 +602,41 @@ export class StickyNoteListView extends ItemView {
 				void this.toggleListColorFilter(c.id);
 			});
 		}
+
+		const compact = toolbarMain.createDiv({ cls: 'csn-list-toolbar-compact' });
+		this.compactFloatBtn = compact.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-chip',
+			attr: { 'aria-haspopup': 'menu' }
+		});
+		this.compactSortBtn = compact.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-chip',
+			attr: { 'aria-haspopup': 'menu' }
+		});
+		this.compactColorBtn = compact.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-chip',
+			attr: { 'aria-haspopup': 'dialog', 'aria-expanded': 'false' }
+		});
+		this.registerDomEvent(this.compactFloatBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openCompactFloatMenu(evt);
+		});
+		this.registerDomEvent(this.compactSortBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openCompactSortMenu(evt);
+		});
+		this.registerDomEvent(this.compactColorBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleCompactColorPopover();
+		});
+
+		this.installToolbarLayoutObserver();
+		this.register(() => {
+			this.closeCompactColorPopover();
+		});
 
 		toolbar.createDiv({ cls: 'csn-list-toolbar-spacer' });
 		const newStickyBtn = toolbar.createEl('button', {
@@ -624,12 +711,220 @@ export class StickyNoteListView extends ItemView {
 			true
 		);
 
-		this.registerDomEvent(this.searchInput, 'input', render);
+		this.registerDomEvent(this.searchInput, 'input', () => {
+			this.syncSearchClearVisibility();
+			render();
+		});
 		this.registerVaultListRefresh();
 		this.syncSortToolbarActive();
 		this.syncFloatOpenToolbarActive();
 		this.syncColorFilterToolbarActive();
+		this.syncToolbarCompactHints();
+		this.syncSearchClearVisibility();
 		void this.renderList();
+	}
+
+	private syncSearchClearVisibility(): void {
+		const has = ((this.searchInput?.value ?? '').length > 0);
+		this.searchInnerEl?.toggleClass('csn-list-search-inner--has-clear', has);
+		this.searchClearBtn?.toggleClass('csn-list-search-clear--hidden', !has);
+		this.searchClearBtn?.setAttr('aria-hidden', has ? 'false' : 'true');
+		this.searchClearBtn?.setAttr('tabindex', has ? '0' : '-1');
+	}
+
+	private installToolbarLayoutObserver(): void {
+		this.toolbarLayoutObserver?.disconnect();
+		const ro = new ResizeObserver(entries => {
+			const w = entries[0]?.contentRect.width ?? this.contentEl.clientWidth;
+			this.applyToolbarCompactForWidth(w);
+		});
+		this.toolbarLayoutObserver = ro;
+		ro.observe(this.contentEl);
+		this.register(() => {
+			ro.disconnect();
+			this.toolbarLayoutObserver = null;
+		});
+		this.applyToolbarCompactForWidth(this.contentEl.clientWidth);
+	}
+
+	private applyToolbarCompactForWidth(width: number): void {
+		const compact = width > 0 && width < TOOLBAR_COMPACT_MAX_WIDTH_PX;
+		this.contentEl.toggleClass('csn-list-view--toolbar-compact', compact);
+	}
+
+	/** 窄工具栏：图标与 title / aria-label 随当前设置更新。 */
+	private syncToolbarCompactHints(): void {
+		const sortSpec =
+			NOTE_LIST_SORT_SPECS.find(s => s.mode === this.plugin.settings.noteListSort) ??
+			NOTE_LIST_SORT_SPECS[0]!;
+		if (this.compactSortBtn) {
+			setIcon(this.compactSortBtn, sortSpec.icon);
+			this.compactSortBtn.setAttr('title', sortSpec.title);
+			this.compactSortBtn.setAttr('aria-label', `排序：${sortSpec.title}`);
+		}
+
+		const floatSpec =
+			NOTE_LIST_FLOAT_OPEN_SPECS.find(
+				s => s.mode === this.plugin.settings.noteListFloatOpenFilter
+			) ?? NOTE_LIST_FLOAT_OPEN_SPECS[0]!;
+		if (this.compactFloatBtn) {
+			setIcon(this.compactFloatBtn, floatSpec.icon);
+			this.compactFloatBtn.setAttr('title', floatSpec.title);
+			this.compactFloatBtn.setAttr('aria-label', `窗口：${floatSpec.title}`);
+		}
+
+		const n = this.plugin.settings.noteListColorFilters.length;
+		if (this.compactColorBtn) {
+			setIcon(this.compactColorBtn, 'palette');
+			const title =
+				n === 0 ? '颜色筛选（未选则显示全部）' : `颜色筛选：已选 ${n} 种（多选）`;
+			this.compactColorBtn.setAttr('title', title);
+			this.compactColorBtn.setAttr('aria-label', title);
+		}
+	}
+
+	private openCompactSortMenu(evt: MouseEvent): void {
+		const menu = new Menu();
+		const cur = this.plugin.settings.noteListSort;
+		for (const spec of NOTE_LIST_SORT_SPECS) {
+			menu.addItem(item => {
+				item
+					.setTitle(spec.title)
+					.setIcon(spec.icon)
+					.setChecked(spec.mode === cur)
+					.onClick(() => {
+						void this.setListSort(spec.mode);
+					});
+			});
+		}
+		menu.showAtMouseEvent(evt);
+	}
+
+	private openCompactFloatMenu(evt: MouseEvent): void {
+		const menu = new Menu();
+		const cur = this.plugin.settings.noteListFloatOpenFilter;
+		for (const spec of NOTE_LIST_FLOAT_OPEN_SPECS) {
+			menu.addItem(item => {
+				item
+					.setTitle(spec.title)
+					.setIcon(spec.icon)
+					.setChecked(spec.mode === cur)
+					.onClick(() => {
+						void this.setListFloatOpenFilter(spec.mode);
+					});
+			});
+		}
+		menu.showAtMouseEvent(evt);
+	}
+
+	private toggleCompactColorPopover(): void {
+		if (this.colorPopoverEl) {
+			this.closeCompactColorPopover();
+			return;
+		}
+		this.openCompactColorPopover();
+	}
+
+	private openCompactColorPopover(): void {
+		if (!this.compactColorBtn) return;
+		this.closeCompactColorPopover();
+
+		const root = document.body.createDiv({ cls: 'csn-list-color-popover' });
+		this.colorPopoverEl = root;
+		const row = root.createDiv({ cls: 'csn-list-color-popover-row' });
+		row.setAttr('role', 'group');
+		row.setAttr('aria-label', '颜色筛选，可多选');
+
+		const sel = new Set(this.plugin.settings.noteListColorFilters);
+		for (const c of SHEET_COLOR_ORDER) {
+			const sw = row.createEl('button', {
+				type: 'button',
+				cls: 'csn-list-color-popover-swatch',
+				attr: {
+					'data-csn-list-color': c.id,
+					'aria-label': c.label,
+					'aria-pressed': sel.has(c.id) ? 'true' : 'false'
+				}
+			});
+			if (sel.has(c.id)) sw.addClass('is-active');
+			this.registerDomEvent(sw, 'click', (e: MouseEvent) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void this.toggleListColorFilter(c.id);
+			});
+		}
+
+		this.compactColorBtn.setAttr('aria-expanded', 'true');
+		this.positionCompactColorPopover();
+
+		const onResize = (): void => {
+			this.positionCompactColorPopover();
+		};
+		this.colorPopoverResizeBound = onResize;
+		window.addEventListener('resize', onResize);
+
+		const onOutside = (e: PointerEvent) => {
+			const t = e.target;
+			if (!(t instanceof Node)) return;
+			if (this.colorPopoverEl?.contains(t)) return;
+			if (this.compactColorBtn?.contains(t)) return;
+			this.closeCompactColorPopover();
+		};
+		this.colorPopoverOutsidePointerDown = onOutside;
+		/* capture：先于子控件，避免与浮层内点击竞态 */
+		window.addEventListener('pointerdown', onOutside, true);
+	}
+
+	private positionCompactColorPopover(): void {
+		const pop = this.colorPopoverEl;
+		const anchor = this.compactColorBtn;
+		if (!pop || !anchor) return;
+		const r = anchor.getBoundingClientRect();
+		const margin = 6;
+		pop.style.setProperty('position', 'fixed');
+		pop.style.setProperty('z-index', 'var(--layer-popover, 65)');
+		let top = r.bottom + margin;
+		let left = r.left;
+		pop.style.setProperty('visibility', 'hidden');
+		pop.style.setProperty('top', `${top}px`);
+		pop.style.setProperty('left', `${left}px`);
+		const pr = pop.getBoundingClientRect();
+		const vw = window.innerWidth;
+		const vh = window.innerHeight;
+		if (left + pr.width > vw - 8) left = Math.max(8, vw - pr.width - 8);
+		if (top + pr.height > vh - 8) top = Math.max(8, r.top - pr.height - margin);
+		pop.style.setProperty('top', `${top}px`);
+		pop.style.setProperty('left', `${left}px`);
+		pop.style.removeProperty('visibility');
+	}
+
+	private closeCompactColorPopover(): void {
+		if (this.colorPopoverResizeBound) {
+			window.removeEventListener('resize', this.colorPopoverResizeBound);
+			this.colorPopoverResizeBound = null;
+		}
+		if (this.colorPopoverOutsidePointerDown) {
+			window.removeEventListener('pointerdown', this.colorPopoverOutsidePointerDown, true);
+			this.colorPopoverOutsidePointerDown = null;
+		}
+		this.compactColorBtn?.setAttr('aria-expanded', 'false');
+		this.colorPopoverEl?.remove();
+		this.colorPopoverEl = null;
+	}
+
+	private syncColorPopoverSelection(): void {
+		const pop = this.colorPopoverEl;
+		if (!pop) return;
+		const sel = new Set(this.plugin.settings.noteListColorFilters);
+		const nodes = pop.querySelectorAll<HTMLButtonElement>('.csn-list-color-popover-swatch');
+		for (let i = 0; i < nodes.length; i++) {
+			const btn = nodes.item(i);
+			const id = btn.dataset.csnListColor as StickyColorId | undefined;
+			if (!id) continue;
+			const on = sel.has(id);
+			btn.toggleClass('is-active', on);
+			btn.setAttr('aria-pressed', on ? 'true' : 'false');
+		}
 	}
 
 	private syncSortToolbarActive(): void {
@@ -637,6 +932,7 @@ export class StickyNoteListView extends ItemView {
 		for (const [m, btn] of this.sortBtnByMode) {
 			btn.toggleClass('is-active', m === mode);
 		}
+		this.syncToolbarCompactHints();
 	}
 
 	private async setListSort(sort: NoteListSort): Promise<void> {
@@ -653,6 +949,7 @@ export class StickyNoteListView extends ItemView {
 		for (const [m, btn] of this.floatOpenBtnByMode) {
 			btn.toggleClass('is-active', m === mode);
 		}
+		this.syncToolbarCompactHints();
 	}
 
 	private async setListFloatOpenFilter(mode: NoteListFloatOpenFilter): Promise<void> {
@@ -669,6 +966,8 @@ export class StickyNoteListView extends ItemView {
 		for (const [id, btn] of this.colorFilterBtnById) {
 			btn.toggleClass('is-active', sel.has(id));
 		}
+		this.syncColorPopoverSelection();
+		this.syncToolbarCompactHints();
 	}
 
 	/** 切换某色是否参与筛选；均未选中时显示全部便笺。 */
@@ -1039,6 +1338,12 @@ export class StickyNoteListView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closeCompactColorPopover();
+		this.toolbarLayoutObserver?.disconnect();
+		this.toolbarLayoutObserver = null;
+		this.compactSortBtn = null;
+		this.compactFloatBtn = null;
+		this.compactColorBtn = null;
 		this.cancelListRefreshDebouncers();
 		this.debouncedListStructureRefresh = null;
 		this.debouncedListContentRefresh = null;
@@ -1048,6 +1353,8 @@ export class StickyNoteListView extends ItemView {
 		this.lastRenderedPageIndex = null;
 		this.listItemsEl = null;
 		this.searchInput = null;
+		this.searchInnerEl = null;
+		this.searchClearBtn = null;
 		this.paginationEl = null;
 		this.paginationRowEl = null;
 		this.paginationPagesEl = null;
