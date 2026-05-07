@@ -12,6 +12,7 @@ import {
 } from 'obsidian';
 import type { TFile } from 'obsidian';
 import type { FloatingBounds, StickyColorId } from '../types';
+import { SHEET_COLOR_ORDER } from './sticky-color-order';
 
 type WorkspaceSplitCtor = new (ws: Workspace, dir: 'horizontal' | 'vertical') => WorkspaceSplit;
 type SplitWithReplace = WorkspaceSplit & {
@@ -49,16 +50,6 @@ export interface StickyNotePopoverOptions {
 	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
 	onActivate: () => void;
 }
-
-const SHEET_COLOR_ORDER: { id: StickyColorId; label: string }[] = [
-	{ id: 'yellow', label: '亮黄' },
-	{ id: 'mint', label: '薄荷' },
-	{ id: 'pink', label: '粉红' },
-	{ id: 'lavender', label: '淡紫' },
-	{ id: 'blue', label: '天蓝' },
-	{ id: 'gray', label: '浅灰' },
-	{ id: 'default', label: '默认' }
-];
 
 export class StickyNotePopover {
 	readonly rootEl: HTMLElement;

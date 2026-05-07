@@ -2,6 +2,7 @@ import {
 	Component,
 	ItemView,
 	MarkdownRenderer,
+	Menu,
 	TAbstractFile,
 	TFile,
 	TFolder,
@@ -15,11 +16,49 @@ import {
 import type ColorfulStickyNotesPlugin from '../main';
 import { VIEW_STICKY_NOTE_LIST } from '../types';
 import { previewMarkdownSlice } from '../utils/preview-markdown-slice';
+import '../obsidian-augmentations';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
+import { SHEET_COLOR_ORDER, STICKY_MENU_SWATCH_HEX } from '../sticky/sticky-color-order';
+import type { StickyColorId } from '../types';
 
 const LIST_PAGE_SIZE = 12;
 /** 单卡传入渲染器的 Markdown 最大字符数（含换行），避免超大笔记阻塞 UI。 */
 const PREVIEW_MARKDOWN_MAX = 8000;
+
+function buildStickyBgSubmenuTitle(
+	doc: Document,
+	colorId: StickyColorId,
+	label: string,
+	selected: boolean
+): DocumentFragment {
+	const frag = doc.createDocumentFragment();
+	const row = doc.createElement('span');
+	row.className = 'csn-list-bg-menu-row';
+	row.dataset.csnBg = colorId;
+	if (selected) row.classList.add('csn-list-bg-menu-row--selected');
+
+	const dark = doc.body?.classList.contains('theme-dark') ?? false;
+	const hex = STICKY_MENU_SWATCH_HEX[colorId];
+	if (colorId === 'default' || !hex) {
+		row.classList.add('csn-list-bg-menu-row--theme');
+	} else {
+		row.style.background = dark ? hex.dark : hex.light;
+		row.style.color = dark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.88)';
+	}
+
+	const lab = doc.createElement('span');
+	lab.className = 'csn-list-bg-menu-label';
+	lab.textContent = label;
+	row.appendChild(lab);
+	if (selected) {
+		const check = doc.createElement('span');
+		check.className = 'csn-list-bg-menu-check';
+		setIcon(check, 'check');
+		row.appendChild(check);
+	}
+	frag.appendChild(row);
+	return frag;
+}
 
 function collectMarkdownUnderFolder(folder: TFolder): TFile[] {
 	const out: TFile[] = [];
@@ -307,7 +346,7 @@ export class StickyNoteListView extends ItemView {
 
 			await Promise.all(
 				pageFiles.map(async f => {
-					const color = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
+					const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
 					const card = container.createDiv({
 						cls: 'csn-list-card',
 						attr: { 'data-csn-list-color': color, title: '双击打开便笺' }
@@ -317,9 +356,64 @@ export class StickyNoteListView extends ItemView {
 
 					const head = card.createDiv({ cls: 'csn-list-card-head' });
 					head.createDiv({ cls: 'csn-list-card-title', text: f.basename });
-					head.createDiv({
+					const headRight = head.createDiv({ cls: 'csn-list-card-head-right' });
+					headRight.createDiv({
 						cls: 'csn-list-card-date',
 						text: moment(f.stat.mtime).format('M月D日')
+					});
+					const menuBtn = headRight.createEl('button', {
+						type: 'button',
+						cls: 'clickable-icon csn-list-card-menu-btn',
+						attr: { 'aria-label': '更多操作', 'aria-haspopup': 'true' }
+					});
+					setIcon(menuBtn, 'more-horizontal');
+					this.registerDomEvent(menuBtn, 'click', (evt: MouseEvent) => {
+						evt.preventDefault();
+						evt.stopPropagation();
+						const menu = new Menu();
+						menu.addItem(item => {
+							item.setTitle('打开笔记')
+								.setIcon('file-text')
+								.onClick(() => {
+									void this.app.workspace.getLeaf('tab').openFile(f);
+								});
+						});
+						menu.addItem(item => {
+							item.setTitle('打开便笺窗口')
+								.setIcon('square-pen')
+								.onClick(() => {
+									void this.plugin.openStickyForFile(f);
+								});
+						});
+						menu.addSeparator();
+						menu.addItem(item => {
+							item.setTitle('修改背景').setIcon('palette');
+							const sub = item.setSubmenu();
+							for (const c of SHEET_COLOR_ORDER) {
+								const selected = c.id === color;
+								sub.addItem(si => {
+									si.setTitle(buildStickyBgSubmenuTitle(document, c.id, c.label, selected));
+									/* 标题里已含色块与勾选，左侧不再用 Lucide 占位 */
+									si.setIcon(null);
+									si.onClick(() => {
+										void this.plugin.stickies
+											.setStickyBackgroundColorForFile(f, c.id)
+											.then(() => {
+												card.setAttr('data-csn-list-color', c.id);
+											});
+									});
+								});
+							}
+						});
+						menu.addSeparator();
+						menu.addItem(item => {
+							item.setTitle('删除笔记')
+								.setIcon('trash-2')
+								.onClick(() => {
+									void this.plugin.stickies.trashStickyNoteFile(f);
+								});
+						});
+						menu.showAtMouseEvent(evt);
 					});
 
 					const main = card.createDiv({ cls: 'csn-list-card-main' });

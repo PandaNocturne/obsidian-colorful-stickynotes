@@ -271,10 +271,36 @@ export class StickyNoteManager {
 		const pop = this.popovers.get(popoverId);
 		const file = pop?.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
 		if (!(file instanceof TFile)) return;
+		await this.setStickyBackgroundColorForFile(file, color);
+	}
+
+	/** 写入 frontmatter 并同步已打开的便笺窗口颜色（便笺列表等也可调用）。 */
+	async setStickyBackgroundColorForFile(file: TFile, color: StickyColorId): Promise<void> {
 		await this.app.fileManager.processFrontMatter(file, fm => {
 			(fm as Record<string, unknown>)[FM_COLOR_KEY] = color;
 		});
+		for (const pop of this.popovers.values()) {
+			const vf =
+				pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
+			if (vf?.path === file.path) pop.setColor(color);
+		}
 		this.persistOpenWindows();
+	}
+
+	/** 移入库回收站并关闭对应便笺窗口（若有）。 */
+	async trashStickyNoteFile(file: TFile): Promise<void> {
+		const ids: string[] = [];
+		for (const [id, pop] of this.popovers) {
+			const vf =
+				pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
+			if (vf?.path === file.path) ids.push(id);
+		}
+		for (const id of ids) this.closeSticky(id);
+		try {
+			await this.app.vault.trash(file, false);
+		} catch {
+			new Notice('无法删除该便笺');
+		}
 	}
 
 	private clearPendingDeleteListener(): void {
