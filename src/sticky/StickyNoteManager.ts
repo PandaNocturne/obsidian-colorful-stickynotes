@@ -2,6 +2,11 @@ import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian'
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
+import { getStickyBgColorFromMetadataCache, resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
+import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
+import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
+import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
+import { StickyNotePopover } from './StickyNotePopover';
 
 /** 批量恢复：外壳已挂载，待 setViewState / 对齐颜色。 */
 type PreparedExistingStickyOpen = {
@@ -10,9 +15,6 @@ type PreparedExistingStickyOpen = {
 	bounds: FloatingBounds;
 	savedColor: StickyColorId | undefined;
 };
-import { getStickyBgColorFromMetadataCache, resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
-import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
-import { StickyNotePopover } from './StickyNotePopover';
 
 const FM_COLOR_KEY = 'colorful-sticky-bg';
 
@@ -263,7 +265,7 @@ export class StickyNoteManager {
 			initialYamlVisible: extra.initialYamlVisible,
 			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
 			viewContentZoom: this.plugin.settings.viewContentZoom,
-			onClose: () => this.closeSticky(id),
+			onClose: () => void this.handleStickyCloseRequest(id),
 			onBoundsChange: () => this.persistOpenWindows(),
 			onRequestNewSticky: () => void this.addStickyWindow(),
 			onColorChange: c => void this.applyColorToFile(id, c),
@@ -362,6 +364,68 @@ export class StickyNoteManager {
 		pop.destroy();
 		this.popovers.delete(id);
 		this.persistOpenWindows();
+	}
+
+	/** 路径是否在「便笺文件夹」下（含根目录下同名 .md）。 */
+	private isPathUnderStickyFolder(filePath: string): boolean {
+		const root = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+		const p = normalizePath(filePath);
+		return p === root || p.startsWith(`${root}/`);
+	}
+
+	/** 关闭便笺 DOM，并在需要时将已判定为空白的文件移入回收站。 */
+	private finalizeUserCloseSticky(id: string, file: TFile | undefined, trashIfBlank: boolean): void {
+		const pop = this.popovers.get(id);
+		if (!pop) return;
+		pop.destroy();
+		this.popovers.delete(id);
+		this.persistOpenWindows();
+		if (!trashIfBlank || !(file instanceof TFile)) return;
+		if (!this.app.vault.getAbstractFileByPath(file.path)) return;
+		void this.app.vault.trash(file, false).catch(() => {
+			new Notice('无法自动删除空白便笺');
+		});
+	}
+
+	/** 用户点击关闭：非空白直接关；空白则视设置弹出确认或立即删除。 */
+	private async handleStickyCloseRequest(id: string): Promise<void> {
+		const pop = this.popovers.get(id);
+		if (!pop) return;
+		const file =
+			pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
+
+		if (!(file instanceof TFile)) {
+			this.finalizeUserCloseSticky(id, file, false);
+			return;
+		}
+
+		let trashIfBlank = false;
+		if (file.extension === 'md' && this.isPathUnderStickyFolder(file.path)) {
+			try {
+				const raw = await this.app.vault.cachedRead(file);
+				trashIfBlank = isBlankStickyMarkdown(raw);
+			} catch {
+				/* 读取失败则不自动删除 */
+			}
+		}
+
+		if (!trashIfBlank) {
+			this.finalizeUserCloseSticky(id, file, false);
+			return;
+		}
+
+		if (this.plugin.settings.confirmBlankStickyTrashOnClose) {
+			new BlankStickyDeleteConfirmModal(this.app, {
+				fileName: file.name,
+				onConfirm: () => {
+					if (!this.popovers.has(id)) return;
+					this.finalizeUserCloseSticky(id, file, true);
+				}
+			}).open();
+			return;
+		}
+
+		this.finalizeUserCloseSticky(id, file, true);
 	}
 
 	/** 让便笺外壳先完成一帧绘制，再执行叶视图 setViewState / 读盘等重活。 */

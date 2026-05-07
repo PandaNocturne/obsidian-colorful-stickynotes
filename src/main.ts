@@ -92,6 +92,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				Math.min(10, Math.round(delaySec))
 			);
 		}
+		const rawSettings = this.settings as unknown as Record<string, unknown>;
+		if (typeof rawSettings.notifyBlankStickyTrashOnClose === 'boolean') {
+			this.settings.confirmBlankStickyTrashOnClose = rawSettings.notifyBlankStickyTrashOnClose;
+			delete rawSettings.notifyBlankStickyTrashOnClose;
+		}
+		if (typeof this.settings.confirmBlankStickyTrashOnClose !== 'boolean') {
+			this.settings.confirmBlankStickyTrashOnClose = DEFAULT_SETTINGS.confirmBlankStickyTrashOnClose;
+		}
 	}
 
 	async saveSettings(): Promise<void> {

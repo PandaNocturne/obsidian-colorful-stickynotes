@@ -20,6 +20,8 @@ export interface ColorfulStickyNotesSettings {
 	restoreStickySessionDelaySec: number;
 	/** 便笺列表：纵向卡片列表或自适应网格。 */
 	noteListLayout: 'column' | 'grid';
+	/** 关闭空白便笺移入回收站前是否弹出确认框（默认开启）。 */
+	confirmBlankStickyTrashOnClose: boolean;
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -34,7 +36,8 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	bottomBarAutoHide: true,
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
-	noteListLayout: 'column'
+	noteListLayout: 'column',
+	confirmBlankStickyTrashOnClose: true
 };
 
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
@@ -177,6 +180,18 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 						this.display();
 					})
+			);
+
+		new Setting(containerEl)
+			.setName('关闭空白便笺前确认删除')
+			.setDesc(
+				'关闭位于「便笺文件夹」下的空白 Markdown 便笺时，会先弹出确认再移入回收站。关闭本项则不再询问并直接删除。'
+			)
+			.addToggle(t =>
+				t.setValue(this.plugin.settings.confirmBlankStickyTrashOnClose).onChange(async v => {
+					this.plugin.settings.confirmBlankStickyTrashOnClose = v;
+					await this.plugin.saveSettings();
+				})
 			);
 
 		new Setting(containerEl)
