@@ -811,6 +811,27 @@
 .csn-list-card-body--rendered ol {
   margin: 0.25em 0;
 }
+/* 嵌入文档预览：与阅读视图 transclusion 一致，隐藏嵌入标题（与卡片抬头重复） */
+.csn-list-card-body--embed .markdown-embed-title {
+  display: none;
+}
+.csn-list-card-body--embed .internal-embed,
+.csn-list-card-body--embed .markdown-embed {
+  width: 100%;
+  min-width: 0;
+}
+/* 便笺列表卡片内嵌入：去掉默认线框与底色，由外层 `.csn-list-card-body--rendered` 承担视觉容器 */
+.csn-list-card-body--embed .markdown-embed {
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+}
+.csn-list-card-body--embed .markdown-embed-content {
+  min-height: 0;
+}
+.csn-list-card-body--embed .markdown-embed-content .markdown-preview-view {
+  padding: 0;
+}
 .csn-list-empty {
   color: var(--text-muted);
   padding: 8px 4px;

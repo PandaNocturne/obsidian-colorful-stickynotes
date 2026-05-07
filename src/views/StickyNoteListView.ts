@@ -17,14 +17,16 @@ import {
 import type ColorfulStickyNotesPlugin from '../main';
 import { clampViewContentZoom } from '../settings';
 import { VIEW_STICKY_NOTE_LIST, type NoteListSort } from '../types';
-import { previewMarkdownSlice } from '../utils/preview-markdown-slice';
 import '../obsidian-augmentations';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
 import type { StickyColorId } from '../types';
 
-/** 单卡传入渲染器的 Markdown 最大字符数（含换行），避免超大笔记阻塞 UI。 */
-const PREVIEW_MARKDOWN_MAX = 8000;
+/** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
+function listPreviewEmbedMarkdown(file: TFile): string {
+	const pathNoExt = file.path.replace(/\.md$/i, '');
+	return `![[${pathNoExt}]]\n`;
+}
 
 /** 工具栏排序按钮：与 `settings.noteListSort` 一一对应。 */
 const NOTE_LIST_SORT_SPECS: readonly { mode: NoteListSort; icon: string; title: string }[] = [
@@ -150,8 +152,6 @@ export class StickyNoteListView extends ItemView {
 	private listPageIndex = 0;
 	private debouncedListStructureRefresh: Debouncer<[], void> | null = null;
 	private debouncedListContentRefresh: Debouncer<[], void> | null = null;
-	/** 手动刷新时用 `vault.read` 拉预览，避免缓存未失效时仍显示旧内容。 */
-	private previewForceDiskRead = false;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -343,12 +343,11 @@ export class StickyNoteListView extends ItemView {
 		const refreshBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-refresh-btn',
-			attr: { 'aria-label': '刷新', title: '立即刷新列表与预览（从磁盘读取正文）' }
+			attr: { 'aria-label': '刷新', title: '立即刷新列表与嵌入预览' }
 		});
 		setIcon(refreshBtn, 'refresh-ccw');
 		this.registerDomEvent(refreshBtn, 'click', () => {
 			this.cancelListRefreshDebouncers();
-			this.previewForceDiskRead = true;
 			void this.renderList();
 		});
 
@@ -434,7 +433,6 @@ export class StickyNoteListView extends ItemView {
 		if (!container || !this.paginationEl || !this.paginationMetaEl) return;
 
 		const query = (this.searchInput?.value ?? '').trim();
-		const forceDisk = this.previewForceDiskRead;
 
 		try {
 			this.disposeListMarkdownHost();
@@ -574,7 +572,7 @@ export class StickyNoteListView extends ItemView {
 
 					const main = card.createDiv({ cls: 'csn-list-card-main' });
 					const previewEl = main.createDiv({
-						cls: 'csn-list-card-body csn-list-card-body--rendered markdown-rendered'
+						cls: 'csn-list-card-body csn-list-card-body--rendered csn-list-card-body--embed markdown-rendered'
 					});
 
 					this.registerDomEvent(card, 'dblclick', evt => {
@@ -583,15 +581,7 @@ export class StickyNoteListView extends ItemView {
 						void this.plugin.openStickyForFile(f);
 					});
 
-					let md = '';
-					try {
-						const raw = forceDisk ? await this.app.vault.read(f) : await this.app.vault.cachedRead(f);
-						md = previewMarkdownSlice(raw, PREVIEW_MARKDOWN_MAX);
-					} catch {
-						md = '*（无法读取预览）*';
-					}
-					if (!md.trim()) md = '*（空白）*';
-
+					const md = listPreviewEmbedMarkdown(f);
 					await MarkdownRenderer.render(this.app, md, previewEl, f.path, mdHost);
 				})
 			);
@@ -604,7 +594,6 @@ export class StickyNoteListView extends ItemView {
 
 			container.scrollTop = 0;
 		} finally {
-			this.previewForceDiskRead = false;
 			if (this.plugin.listPrioritizeStickyPath) {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
