@@ -53,6 +53,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new ColorfulStickyNotesSettingTab(this.app, this));
+
+		if (this.settings.restoreStickySessionOnStartup) {
+			this.app.workspace.onLayoutReady(() => {
+				void this.restoreStickySession();
+			});
+		}
 	}
 
 	onunload(): void {

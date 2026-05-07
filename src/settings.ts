@@ -14,6 +14,8 @@ export interface ColorfulStickyNotesSettings {
 	/** 便笺内 `.view-content` 的 `zoom`（0.5–1），与阅读/编辑正文显示比例一致。 */
 	viewContentZoom: number;
 	bottomBarAutoHide: boolean;
+	/** 启动 Obsidian 后自动恢复上次便笺浮动窗口（与「打开便笺窗口（恢复上次会话）」一致）。 */
+	restoreStickySessionOnStartup: boolean;
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -25,7 +27,8 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	defaultPositionX: 80,
 	defaultPositionY: 80,
 	viewContentZoom: 0.6,
-	bottomBarAutoHide: true
+	bottomBarAutoHide: true,
+	restoreStickySessionOnStartup: false
 };
 
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
@@ -132,6 +135,18 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			);
 
 		containerEl.createEl('h3', { text: '窗口' });
+		new Setting(containerEl)
+			.setName('启动时打开上次便笺')
+			.setDesc(
+				'Obsidian 启动并完成布局后，自动恢复上次会话中的便笺窗口（与命令「打开便笺窗口（恢复上次会话）」相同）。'
+			)
+			.addToggle(t =>
+				t.setValue(this.plugin.settings.restoreStickySessionOnStartup).onChange(async v => {
+					this.plugin.settings.restoreStickySessionOnStartup = v;
+					await this.plugin.saveSettings();
+				})
+			);
+
 		new Setting(containerEl)
 			.setName('默认视图')
 			.addDropdown(dd =>
