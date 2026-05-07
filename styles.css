@@ -556,7 +556,7 @@
   --csn-list-card-bg: var(--background-primary);
   --csn-list-card-head-bg: var(--background-modifier-hover);
   --csn-list-card-head-border: var(--background-modifier-border);
-  --csn-list-preview-bg: var(--background-secondary);
+  --csn-list-preview-bg: var(--background-primary);
   --csn-list-preview-border: var(--background-modifier-border);
   --csn-list-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
   border: 1px solid var(--background-modifier-border);
@@ -682,30 +682,18 @@
 }
 .csn-list-card-main {
   display: flex;
-  align-items: flex-start;
-  padding: 8px 10px 10px;
+  align-items: stretch;
+  padding: 0;
   cursor: default;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
 }
-.csn-list-card-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 0;
+/* Obsidian MarkdownRenderer：固定高度，内部滚动；zoom 与便笺正文一致（--csn-sticky-view-content-zoom 由 TS 写在卡片上） */
+.csn-list-card-body {
+  width: 100%;
+  background-color: var(--background-primary);
 }
-.csn-list-card-path {
-  font-size: var(--font-ui-smaller);
-  color: var(--text-muted);
-  line-height: var(--line-height-tight);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Obsidian MarkdownRenderer：固定高度，内部滚动 */
 .csn-list-card-body--rendered {
   --csn-list-preview-h: 112px;
   height: var(--csn-list-preview-h);
@@ -716,9 +704,9 @@
   border: 1px solid var(--csn-list-preview-border);
   border-radius: var(--radius-s);
   background: var(--csn-list-preview-bg);
-  font-size: calc(var(--font-text-size) * 0.88);
   line-height: var(--line-height-normal);
   word-break: break-word;
+  zoom: var(--csn-sticky-view-content-zoom, 0.6);
 }
 .csn-list-card-body--rendered .markdown-preview-sizer {
   min-height: 0 !important;

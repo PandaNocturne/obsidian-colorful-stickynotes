@@ -312,6 +312,8 @@ export class StickyNoteListView extends ItemView {
 						cls: 'csn-list-card',
 						attr: { 'data-csn-list-color': color, title: '双击打开便笺' }
 					});
+					const zoom = Math.max(0.5, Math.min(1, this.plugin.settings.viewContentZoom));
+					card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 
 					const head = card.createDiv({ cls: 'csn-list-card-head' });
 					head.createDiv({ cls: 'csn-list-card-title', text: f.basename });
@@ -321,9 +323,7 @@ export class StickyNoteListView extends ItemView {
 					});
 
 					const main = card.createDiv({ cls: 'csn-list-card-main' });
-					const col = main.createDiv({ cls: 'csn-list-card-text' });
-					col.createDiv({ cls: 'csn-list-card-path', text: f.path });
-					const previewEl = col.createDiv({
+					const previewEl = main.createDiv({
 						cls: 'csn-list-card-body csn-list-card-body--rendered markdown-rendered'
 					});
 
