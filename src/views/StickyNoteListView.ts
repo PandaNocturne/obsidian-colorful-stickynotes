@@ -233,6 +233,11 @@ export class StickyNoteListView extends ItemView {
 		this.debouncedListContentRefresh?.cancel();
 	}
 
+	/** 取消防抖中的列表刷新（不重绘）。新建便笺时先调用，再延迟 `flushListRedraw`，避免与 `vault.create` 触发的结构防抖叠在 `openFile` 同一时段执行。 */
+	cancelPendingListRefresh(): void {
+		this.cancelListRefreshDebouncers();
+	}
+
 	private registerVaultListRefresh(): void {
 		this.debouncedListStructureRefresh = debounce(() => {
 			this.listPageIndex = 0;

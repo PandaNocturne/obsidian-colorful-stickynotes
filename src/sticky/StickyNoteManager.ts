@@ -253,6 +253,9 @@ export class StickyNoteManager {
 			return;
 		}
 
+		/* `create` 已同步触发列表的结构防抖；取消后由下方延迟刷新统一重绘，避免与 openFile 争抢主线程（列表嵌入预览极重） */
+		this.plugin.cancelStickyListDebouncedRefresh();
+
 		const id = initial?.id ?? this.newId();
 		const color = resolvedNewColor;
 		const collapsed = initial?.collapsed ?? false;
@@ -288,10 +291,12 @@ export class StickyNoteManager {
 		}
 		await pop.openFile(f);
 
+		/** 与新建 Markdown 叶 `loadIfDeferred` 错开，降低「列表已打开时新建便笺」的卡顿 */
+		const LIST_REFRESH_AFTER_NEW_STICKY_MS = 500;
 		const scheduleListRefreshSoon = (): void => {
 			window.setTimeout(() => {
 				requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
-			}, 0);
+			}, LIST_REFRESH_AFTER_NEW_STICKY_MS);
 		};
 		const endMuteAfterList = (p: string): void => {
 			window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(p), 120);

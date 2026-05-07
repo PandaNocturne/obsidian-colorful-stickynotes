@@ -244,6 +244,16 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		new WorkspacePanelModal(this.app, this).open();
 	}
 
+	/** 取消已打开便笺列表上排队的结构/正文防抖（不重绘）。供新建便笺在延迟刷新前调用。 */
+	cancelStickyListDebouncedRefresh(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteListView) {
+				v.cancelPendingListRefresh();
+			}
+		}
+	}
+
 	/** 若便笺列表已打开：取消 create 等已排队的防抖并立即重绘，避免与 vault 事件叠成两次整表渲染 */
 	refreshStickyListIfOpen(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
