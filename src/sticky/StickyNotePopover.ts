@@ -75,6 +75,14 @@ export class StickyNotePopover {
 	private resizeDirection: ResizeDirection | null = null;
 	private dragOffsetX = 0;
 	private dragOffsetY = 0;
+	/** 拖动开始时记录的完整宽高（折叠态下仍读 inline，供 applyBounds 不写矮高度）。 */
+	private dragPersistBounds: FloatingBounds | null = null;
+	/**
+	 * 展开状态下的逻辑宽高。折叠时 CSS 为 height:auto，offsetHeight 仅为标题条，
+	 * 不能再用于 getBounds/持久化，否则会把 inline 高度写成矮值并丢失原始高度。
+	 */
+	private expandedW = MIN_WIDTH;
+	private expandedH = MIN_HEIGHT;
 	private resizeStartX = 0;
 	private resizeStartY = 0;
 	private resizeStartBounds: FloatingBounds | null = null;
@@ -90,6 +98,7 @@ export class StickyNotePopover {
 	private yamlVisible: boolean;
 	private modeToggleWrap!: HTMLElement;
 	private markdownModeToggleBtn!: HTMLButtonElement;
+	private foldBtn!: HTMLButtonElement;
 	constructor(private readonly options: StickyNotePopoverOptions) {
 		this.plugin = options.plugin;
 		this.onBoundsChange = options.onBoundsChange;
@@ -318,12 +327,11 @@ export class StickyNotePopover {
 			this.options.onYamlVisibilityChange?.(this.yamlVisible);
 		});
 
-		const foldBtn = right.createEl('button', {
+		this.foldBtn = right.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',
 			attr: { type: 'button', 'aria-label': '折叠窗口' }
 		});
-		setIcon(foldBtn, 'chevrons-down-up');
-		this.plugin.registerDomEvent(foldBtn, 'click', evt => {
+		this.plugin.registerDomEvent(this.foldBtn, 'click', evt => {
 			evt.preventDefault();
 			evt.stopPropagation();
 			this.collapsed = !this.collapsed;
@@ -341,6 +349,8 @@ export class StickyNotePopover {
 			evt.stopPropagation();
 			this.options.onClose();
 		});
+
+		this.syncFoldButtonUi();
 	}
 
 	private wireSettingsSheet(): void {
@@ -456,8 +466,65 @@ export class StickyNotePopover {
 	}
 
 	private applyCollapsedClass(): void {
+		const expanding = this.rootEl.hasClass('csn-sticky--collapsed') && !this.collapsed;
 		this.rootEl.toggleClass('csn-sticky--collapsed', this.collapsed);
 		if (this.collapsed) this.closeSettingsSheet();
+		this.syncFoldButtonUi();
+		if (expanding) {
+			window.requestAnimationFrame(() => {
+				if (this.disposed) return;
+				this.fitExpandedStickyToViewport();
+			});
+		}
+	}
+
+	/** 折叠：chevrons-down-up；展开：chevrons-up-down */
+	private syncFoldButtonUi(): void {
+		if (this.collapsed) {
+			setIcon(this.foldBtn, 'chevrons-up-down');
+			this.foldBtn.setAttr('aria-label', '展开窗口');
+			this.foldBtn.setAttr('title', '展开窗口');
+		} else {
+			setIcon(this.foldBtn, 'chevrons-down-up');
+			this.foldBtn.setAttr('aria-label', '折叠窗口');
+			this.foldBtn.setAttr('title', '折叠窗口');
+		}
+	}
+
+	/**
+	 * 展开后若底部超出视口，则上移 top，保证完整窗口落在可视区域内。
+	 *（折叠态 CSS 为 height:auto，展开后恢复存储高度，可能瞬间超出下边沿。）
+	 */
+	private fitExpandedStickyToViewport(): void {
+		/* 展开后首帧 layout 可能尚未更新 offsetHeight，双 rAF + 读 inline 保证用到完整高度 */
+		window.requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
+				if (this.disposed || this.collapsed) return;
+				const margin = VIEWPORT_MARGIN;
+				const sw = this.rootEl.style.width;
+				const sh = this.rootEl.style.height;
+				const pw = sw ? parseFloat(sw) : NaN;
+				const ph = sh ? parseFloat(sh) : NaN;
+				let width = Math.max(MIN_WIDTH, Number.isFinite(pw) ? pw : this.rootEl.offsetWidth);
+				let height = Math.max(MIN_HEIGHT, Number.isFinite(ph) ? ph : this.rootEl.offsetHeight);
+				height = Math.min(height, window.innerHeight - margin);
+				width = Math.min(width, window.innerWidth - margin);
+				let left = this.rootEl.offsetLeft;
+				let top = this.rootEl.offsetTop;
+				if (top + height > window.innerHeight - margin) {
+					top = window.innerHeight - margin - height;
+				}
+				if (top < margin) top = margin;
+				const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+				left = Math.min(Math.max(margin, left), maxLeft);
+				this.applyBounds({ left, top, width, height }, true);
+			});
+		});
+	}
+
+	/** 折叠态 root 为 height:auto，夹紧位移时用实际渲染框（可视占位）尺寸。 */
+	private getViewportClampRect(): DOMRect {
+		return this.rootEl.getBoundingClientRect();
 	}
 
 	private applyYamlClass(): void {
@@ -484,9 +551,14 @@ export class StickyNotePopover {
 	}
 
 	getBounds(): FloatingBounds {
+		const left = this.rootEl.offsetLeft;
+		const top = this.rootEl.offsetTop;
+		if (this.collapsed) {
+			return { left, top, width: this.expandedW, height: this.expandedH };
+		}
 		return {
-			left: this.rootEl.offsetLeft,
-			top: this.rootEl.offsetTop,
+			left,
+			top,
 			width: this.rootEl.offsetWidth,
 			height: this.rootEl.offsetHeight
 		};
@@ -658,8 +730,17 @@ export class StickyNotePopover {
 	private applyBounds(bounds: FloatingBounds, emit: boolean): void {
 		const width = Math.max(MIN_WIDTH, Math.min(bounds.width, window.innerWidth - VIEWPORT_MARGIN));
 		const height = Math.max(MIN_HEIGHT, Math.min(bounds.height, window.innerHeight - VIEWPORT_MARGIN));
+		/*
+		 * 折叠态 CSS 为 height:auto，实际占位远低于存储 height；若用完整 height 算 maxTop，
+		 * 会把 top 夹死在「大屏顶部」，表现为无法拖到视口最下方。
+		 */
+		let viewportClampHeight = height;
+		if (this.collapsed) {
+			const rh = this.rootEl.getBoundingClientRect().height;
+			if (rh > 1) viewportClampHeight = Math.min(height, Math.ceil(rh));
+		}
 		const maxLeft = Math.max(0, window.innerWidth - width);
-		const maxTop = Math.max(0, window.innerHeight - height);
+		const maxTop = Math.max(0, window.innerHeight - viewportClampHeight);
 		const left = Math.min(maxLeft, Math.max(0, bounds.left));
 		const top = Math.min(maxTop, Math.max(0, bounds.top));
 
@@ -681,6 +762,9 @@ export class StickyNotePopover {
 			position: 'fixed',
 			'z-index': zIndex
 		});
+
+		this.expandedW = width;
+		this.expandedH = height;
 
 		if (emit) {
 			this.onBoundsChange(this.getBounds());
@@ -726,6 +810,16 @@ export class StickyNotePopover {
 		const r = this.rootEl.getBoundingClientRect();
 		this.dragOffsetX = e.clientX - r.left;
 		this.dragOffsetY = e.clientY - r.top;
+		const sw = this.rootEl.style.width;
+		const sh = this.rootEl.style.height;
+		const pw = sw ? parseFloat(sw) : NaN;
+		const ph = sh ? parseFloat(sh) : NaN;
+		this.dragPersistBounds = {
+			left: this.rootEl.offsetLeft,
+			top: this.rootEl.offsetTop,
+			width: Math.max(MIN_WIDTH, Number.isFinite(pw) ? pw : this.expandedW),
+			height: Math.max(MIN_HEIGHT, Number.isFinite(ph) ? ph : this.expandedH)
+		};
 		this.headerEl.setPointerCapture(e.pointerId);
 		e.preventDefault();
 		e.stopPropagation();
@@ -751,11 +845,20 @@ export class StickyNotePopover {
 	private onPointerMove = (e: PointerEvent): void => {
 		if (this.disposed) return;
 		if (this.isDragging && e.pointerId === this.dragPointerId) {
-			const width = this.rootEl.offsetWidth;
-			const height = this.rootEl.offsetHeight;
-			const left = Math.min(Math.max(0, e.clientX - this.dragOffsetX), window.innerWidth - width);
-			const top = Math.min(Math.max(0, e.clientY - this.dragOffsetY), window.innerHeight - height);
-			this.applyBounds({ left, top, width, height }, false);
+			const vis = this.getViewportClampRect();
+			const persist =
+				this.collapsed && this.dragPersistBounds
+					? this.dragPersistBounds
+					: { width: vis.width, height: vis.height };
+			const left = Math.min(
+				Math.max(0, e.clientX - this.dragOffsetX),
+				window.innerWidth - vis.width
+			);
+			const top = Math.min(
+				Math.max(0, e.clientY - this.dragOffsetY),
+				window.innerHeight - vis.height
+			);
+			this.applyBounds({ left, top, width: persist.width, height: persist.height }, false);
 		} else if (this.isResizing && e.pointerId === this.resizePointerId && this.resizeDirection && this.resizeStartBounds) {
 			const b = this.getResizedBounds(e);
 			if (b) this.applyBounds(b, false);
@@ -768,6 +871,7 @@ export class StickyNotePopover {
 			const endedDrag = this.isDragging;
 			this.isDragging = false;
 			this.dragPointerId = null;
+			this.dragPersistBounds = null;
 			try {
 				this.headerEl.releasePointerCapture(e.pointerId);
 			} catch {
