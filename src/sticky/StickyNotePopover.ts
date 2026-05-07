@@ -91,6 +91,8 @@ export class StickyNotePopover {
 	private bottomBarResizeObserver: ResizeObserver | null = null;
 	private resizeReflowRaf: number | null = null;
 	private leafModeSyncUninstall: (() => void) | null = null;
+	/** `getComputedStyle` 昂贵；`--layer-popover` 在会话内基本不变，按实例缓存。 */
+	private cachedLayerPopover: string | null = null;
 	private modeToggleLayoutRaf: number | null = null;
 	private disposed = false;
 	private collapsed: boolean;
@@ -643,6 +645,15 @@ export class StickyNotePopover {
 		});
 	}
 
+	private readLayerPopoverToken(): string {
+		if (this.cachedLayerPopover === null) {
+			this.cachedLayerPopover = getComputedStyle(document.documentElement)
+				.getPropertyValue('--layer-popover')
+				.trim();
+		}
+		return this.cachedLayerPopover;
+	}
+
 	private applyBounds(bounds: FloatingBounds, emit: boolean): void {
 		const width = Math.max(MIN_WIDTH, Math.min(bounds.width, window.innerWidth - VIEWPORT_MARGIN));
 		const height = Math.max(MIN_HEIGHT, Math.min(bounds.height, window.innerHeight - VIEWPORT_MARGIN));
@@ -656,7 +667,7 @@ export class StickyNotePopover {
 		this.rootEl.style.left = `${left}px`;
 		this.rootEl.style.top = `${top}px`;
 
-		const layer = getComputedStyle(document.documentElement).getPropertyValue('--layer-popover').trim();
+		const layer = this.readLayerPopoverToken();
 		/* 便笺叠放：在 popover 基准上加 --csn-sticky-stack，但不得 ≥ calc(var(--layer-slides) - 1) */
 		const baseZ = layer
 			? `calc(${layer} + var(--csn-sticky-stack, 0))`

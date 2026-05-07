@@ -1,4 +1,13 @@
-import { ItemView, TFile, WorkspaceLeaf, debounce, normalizePath, setIcon } from 'obsidian';
+import { ItemView, TFile, TFolder, WorkspaceLeaf, debounce, normalizePath, setIcon } from 'obsidian';
+
+function collectMarkdownUnderFolder(folder: TFolder): TFile[] {
+	const out: TFile[] = [];
+	for (const c of folder.children) {
+		if (c instanceof TFile && c.extension === 'md') out.push(c);
+		else if (c instanceof TFolder) out.push(...collectMarkdownUnderFolder(c));
+	}
+	return out;
+}
 import type ColorfulStickyNotesPlugin from '../main';
 import { VIEW_STICKY_NOTE_LIST } from '../types';
 
@@ -56,6 +65,10 @@ export class StickyNoteListView extends ItemView {
 			container.createDiv({ text: `文件夹不存在：${folder}`, cls: 'csn-list-empty' });
 			return;
 		}
+		if (!(folderAbs instanceof TFolder)) {
+			container.createDiv({ text: `便笺目录不是文件夹：${folder}`, cls: 'csn-list-empty' });
+			return;
+		}
 
 		const keywords = query
 			.trim()
@@ -63,9 +76,7 @@ export class StickyNoteListView extends ItemView {
 			.filter(Boolean)
 			.map(k => k.toLowerCase());
 
-		const files = this.app.vault.getMarkdownFiles().filter(
-			f => f.path === folder || f.path.startsWith(folder + '/')
-		);
+		const files = collectMarkdownUnderFolder(folderAbs);
 		const filtered =
 			keywords.length === 0
 				? files

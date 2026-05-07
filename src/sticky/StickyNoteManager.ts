@@ -1,4 +1,4 @@
-import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian';
+import { normalizePath, Notice, parseYaml, TFile, type App, type EventRef } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
@@ -6,6 +6,16 @@ import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
 import { StickyNotePopover } from './StickyNotePopover';
 
 const FM_COLOR_KEY = 'colorful-sticky-bg';
+
+const STICKY_BG_ALLOWED: readonly StickyColorId[] = [
+	'default',
+	'yellow',
+	'pink',
+	'mint',
+	'blue',
+	'lavender',
+	'gray'
+];
 
 /** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
 function executeCommandById(app: App, commandId: string): boolean {
@@ -131,11 +141,11 @@ export class StickyNoteManager {
 				return;
 			}
 		}
+		/* 勿传 color: 'default'，否则会覆盖 YAML 中的 colorful-sticky-bg。 */
 		await this.openExistingSticky({
 			id: this.newId(),
 			path: file.path,
-			bounds: this.getDefaultBounds(),
-			color: 'default'
+			bounds: this.getDefaultBounds()
 		});
 	}
 
@@ -193,7 +203,8 @@ export class StickyNoteManager {
 
 		this.popovers.set(id, pop);
 		await pop.openFile(f);
-		this.applyFrontmatterColorIfAny(f, pop);
+		const y = await this.resolveStickyBgColorForOpen(f);
+		if (y) pop.setColor(y);
 		this.persistOpenWindows();
 	}
 
@@ -274,14 +285,43 @@ export class StickyNoteManager {
 		this.persistOpenWindows();
 	}
 
-	private applyFrontmatterColorIfAny(file: TFile, pop: StickyNotePopover): void {
-		const c = this.app.metadataCache.getFileCache(file)?.frontmatter?.[FM_COLOR_KEY];
-		if (typeof c === 'string' && c) {
-			const allowed: StickyColorId[] = ['default', 'yellow', 'pink', 'mint', 'blue', 'lavender', 'gray'];
-			if (allowed.includes(c as StickyColorId)) {
-				pop.setColor(c as StickyColorId);
-			}
+	private normalizeStickyBgValue(raw: unknown): StickyColorId | null {
+		if (typeof raw !== 'string' || !raw) return null;
+		return STICKY_BG_ALLOWED.includes(raw as StickyColorId) ? (raw as StickyColorId) : null;
+	}
+
+	private readStickyColorFromMetadataCache(file: TFile): StickyColorId | null {
+		const raw = this.app.metadataCache.getFileCache(file)?.frontmatter?.[FM_COLOR_KEY];
+		return this.normalizeStickyBgValue(raw);
+	}
+
+	private parseStickyColorFromMarkdownSource(source: string): StickyColorId | null {
+		const text = source.replace(/^\uFEFF/, '');
+		const m = text.match(/^---[\t ]*\r?\n([\s\S]*?)\r?\n---(?:[\t ]*)(?:\r?\n|$)/);
+		if (!m?.[1]) return null;
+		try {
+			const fm = parseYaml(m[1]) as unknown;
+			if (!fm || typeof fm !== 'object') return null;
+			return this.normalizeStickyBgValue((fm as Record<string, unknown>)[FM_COLOR_KEY]);
+		} catch {
+			return null;
 		}
+	}
+
+	private async readStickyColorFromVaultCachedRead(file: TFile): Promise<StickyColorId | null> {
+		try {
+			const text = await this.app.vault.cachedRead(file);
+			return this.parseStickyColorFromMarkdownSource(text);
+		} catch {
+			return null;
+		}
+	}
+
+	/** 元数据就绪则用之，否则读正文首段 YAML（不依赖索引时序）。 */
+	private async resolveStickyBgColorForOpen(file: TFile): Promise<StickyColorId | null> {
+		const fromCache = this.readStickyColorFromMetadataCache(file);
+		if (fromCache) return fromCache;
+		return this.readStickyColorFromVaultCachedRead(file);
 	}
 
 	private clearPendingDeleteListener(): void {
@@ -345,17 +385,28 @@ export class StickyNoteManager {
 		}
 		const id = serial.id || this.newId();
 		const b = serial.bounds ?? this.getDefaultBounds();
+		const savedColor = serial.color;
+		/* 工作区 JSON 里已有 color 时不再读盘解析 YAML，减轻批量恢复卡顿。 */
+		let yamlBoot: StickyColorId | null = null;
+		if (savedColor === undefined) {
+			yamlBoot = await this.resolveStickyBgColorForOpen(file);
+		}
+		const initialColor = savedColor ?? yamlBoot ?? 'default';
 		const pop = this.createPopoverShell(id, {
 			bounds: b,
-			initialColor: serial.color ?? 'default',
+			initialColor,
 			initialCollapsed: !!serial.collapsed,
 			initialYamlVisible: !!serial.yamlVisible
 		});
 		this.popovers.set(id, pop);
 		await pop.openFile(file);
-		this.applyFrontmatterColorIfAny(file, pop);
+		if (savedColor === undefined) {
+			const after = this.readStickyColorFromMetadataCache(file) ?? yamlBoot;
+			if (after) pop.setColor(after);
+		} else {
+			pop.setColor(savedColor);
+		}
 		pop.setBounds(b);
-		if (serial.color) pop.setColor(serial.color);
 		this.persistOpenWindows();
 	}
 
@@ -371,9 +422,14 @@ export class StickyNoteManager {
 			await this.addStickyWindow();
 			return;
 		}
+		let yieldBeforeNext = false;
 		for (const w of ws.windows) {
 			if (openPaths.has(w.path)) continue;
+			if (yieldBeforeNext) {
+				await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+			}
 			await this.openExistingSticky(w);
+			yieldBeforeNext = true;
 		}
 	}
 
