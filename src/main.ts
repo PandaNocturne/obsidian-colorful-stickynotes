@@ -9,6 +9,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	settings!: ColorfulStickyNotesSettings;
 	stickies!: StickyNoteManager;
 
+	/** 便笺列表排序：插件新建的便笺路径临时置顶，`StickyNoteListView` 渲染后清空 */
+	listPrioritizeStickyPath: string | null = null;
+
+	/** 写入 frontmatter 等触发的 `modify`：跳过防抖列表刷新，由新建流程末尾主动 `refreshStickyListIfOpen` 一次，避免连刷卡顿 */
+	muteStickyListModifyPaths: Set<string> = new Set();
+
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.stickies = new StickyNoteManager(this, this.app);
@@ -108,6 +114,16 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 	openWorkspacePanel(): void {
 		new WorkspacePanelModal(this.app, this).open();
+	}
+
+	/** 若便笺列表已打开，立即重绘（新建便笺后对齐颜色/预览，且不与 vault 防抖叠成二次整表刷新） */
+	refreshStickyListIfOpen(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteListView) {
+				v.requestRedraw();
+			}
+		}
 	}
 
 	async openNoteListView(): Promise<void> {

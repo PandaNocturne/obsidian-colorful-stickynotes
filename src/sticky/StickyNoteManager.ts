@@ -112,6 +112,31 @@ export class StickyNoteManager {
 		this.scheduleSaveWorkspaces();
 	}
 
+	/** 新建便笺落在当前便笺左侧，间隔 10px；左侧溢出则尝试贴到右侧 */
+	private static readonly NEW_STICKY_GAP_PX = 10;
+	private static readonly VIEW_MARGIN = 12;
+
+	private offsetBoundsFromSource(source: FloatingBounds): FloatingBounds {
+		const gap = StickyNoteManager.NEW_STICKY_GAP_PX;
+		const m = StickyNoteManager.VIEW_MARGIN;
+		const w = source.width;
+		const h = source.height;
+		const maxLeft = Math.max(0, window.innerWidth - w);
+		const maxTop = Math.max(0, window.innerHeight - h);
+
+		let left = source.left - w - gap;
+		let top = source.top;
+
+		if (left < m) {
+			const rightOf = source.left + source.width + gap;
+			if (rightOf <= maxLeft) left = rightOf;
+			else left = Math.min(maxLeft, Math.max(m, left));
+		}
+		left = Math.min(maxLeft, Math.max(m, left));
+		top = Math.min(maxTop, Math.max(m, top));
+		return { left, top, width: w, height: h };
+	}
+
 	private getDefaultBounds(): FloatingBounds {
 		const w = 420;
 		const h = 360;
@@ -150,7 +175,7 @@ export class StickyNoteManager {
 		});
 	}
 
-	async addStickyWindow(initial?: Partial<SerializedStickyWindow>): Promise<void> {
+	async addStickyWindow(initial?: Partial<SerializedStickyWindow>, sourcePopover?: StickyNotePopover): Promise<void> {
 		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 		if (!(await this.app.vault.adapter.exists(folder))) {
 			await this.app.vault.createFolder(folder).catch(() => undefined);
@@ -182,31 +207,67 @@ export class StickyNoteManager {
 				}
 			}
 		}
-		await this.app.vault.create(path, body);
+		const normalizedPath = normalizePath(path);
+		this.plugin.listPrioritizeStickyPath = normalizedPath;
+
+		try {
+			await this.app.vault.create(path, body);
+		} catch {
+			if (this.plugin.listPrioritizeStickyPath === normalizedPath) {
+				this.plugin.listPrioritizeStickyPath = null;
+			}
+			new Notice('无法创建便笺文件');
+			return;
+		}
 
 		const f = this.app.vault.getAbstractFileByPath(path);
 		if (!(f instanceof TFile)) {
+			if (this.plugin.listPrioritizeStickyPath === normalizedPath) {
+				this.plugin.listPrioritizeStickyPath = null;
+			}
 			new Notice('无法创建便笺文件');
 			return;
 		}
 
 		const id = initial?.id ?? this.newId();
-		const color = initial?.color ?? 'yellow';
+		const color =
+			initial?.color ?? (sourcePopover ? sourcePopover.getColor() : undefined) ?? 'yellow';
 		const collapsed = initial?.collapsed ?? false;
 		const yamlVisible = initial?.yamlVisible ?? false;
 
+		let bounds: FloatingBounds;
+		if (initial?.bounds) {
+			bounds = initial.bounds;
+		} else if (sourcePopover) {
+			bounds = this.offsetBoundsFromSource(sourcePopover.getBounds());
+		} else {
+			bounds = this.getDefaultBounds();
+		}
+
 		const pop = this.createPopoverShell(id, {
-			bounds: initial?.bounds ?? this.getDefaultBounds(),
+			bounds,
 			initialColor: color,
 			initialCollapsed: collapsed,
 			initialYamlVisible: yamlVisible
 		});
 
 		this.popovers.set(id, pop);
+		this.bringStickyToFront(pop);
 		await this.yieldForStickyChromePaint();
 		await pop.openFile(f);
-		const y = await resolveStickyBgColorForFile(this.app, f);
-		if (y) pop.setColor(y);
+		if (sourcePopover) {
+			this.plugin.muteStickyListModifyPaths.add(f.path);
+			try {
+				await this.setStickyBackgroundColorForFile(f, color);
+			} finally {
+				requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
+				window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(f.path), 120);
+			}
+		} else {
+			const y = await resolveStickyBgColorForFile(this.app, f);
+			if (y) pop.setColor(y);
+		}
+		this.bringStickyToFront(pop);
 		this.persistOpenWindows();
 	}
 
@@ -267,7 +328,7 @@ export class StickyNoteManager {
 			viewContentZoom: this.plugin.settings.viewContentZoom,
 			onClose: () => void this.handleStickyCloseRequest(id),
 			onBoundsChange: () => this.persistOpenWindows(),
-			onRequestNewSticky: () => void this.addStickyWindow(),
+			onRequestNewSticky: () => void this.addStickyWindow(undefined, this.popovers.get(id)),
 			onColorChange: c => void this.applyColorToFile(id, c),
 			onCollapseChange: () => this.persistOpenWindows(),
 			onYamlVisibilityChange: () => this.persistOpenWindows(),

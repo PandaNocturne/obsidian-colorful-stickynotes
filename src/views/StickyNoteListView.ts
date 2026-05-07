@@ -96,6 +96,11 @@ export class StickyNoteListView extends ItemView {
 		return 'layout-list';
 	}
 
+	/** 供插件在新建便笺等时机主动刷新，避免仅依赖 vault 事件防抖导致延迟或重复整表渲染 */
+	requestRedraw(): void {
+		void this.renderList();
+	}
+
 	private disposeListMarkdownHost(): void {
 		if (this.listMarkdownHost) {
 			this.removeChild(this.listMarkdownHost);
@@ -134,7 +139,9 @@ export class StickyNoteListView extends ItemView {
 
 		this.registerEvent(
 			this.app.vault.on('create', (f: TAbstractFile) => {
-				if (this.pathUnderStickyFolder(f.path)) this.debouncedListStructureRefresh?.();
+				if (!this.pathUnderStickyFolder(f.path)) return;
+				this.listPageIndex = 0;
+				void this.renderList();
 			})
 		);
 		this.registerEvent(
@@ -152,6 +159,7 @@ export class StickyNoteListView extends ItemView {
 		this.registerEvent(
 			this.app.vault.on('modify', (f: TAbstractFile) => {
 				if (f instanceof TFile && f.extension === 'md' && this.pathUnderStickyFolder(f.path)) {
+					if (this.plugin.muteStickyListModifyPaths.has(f.path)) return;
 					this.debouncedListContentRefresh?.();
 				}
 			})
@@ -160,6 +168,7 @@ export class StickyNoteListView extends ItemView {
 			this.app.metadataCache.on('changed', file => {
 				if (!(file instanceof TFile) || file.extension !== 'md') return;
 				if (!this.pathUnderStickyFolder(file.path)) return;
+				if (this.plugin.muteStickyListModifyPaths.has(file.path)) return;
 				this.debouncedListContentRefresh?.();
 			})
 		);
@@ -314,7 +323,16 @@ export class StickyNoteListView extends ItemView {
 						return keywords.every(k => hay.includes(k));
 					});
 
-			filtered.sort((a, b) => b.stat.mtime - a.stat.mtime);
+			const prio = this.plugin.listPrioritizeStickyPath;
+			filtered.sort((a, b) => {
+				if (prio) {
+					if (a.path === prio && b.path !== prio) return -1;
+					if (b.path === prio && a.path !== prio) return 1;
+				}
+				const mt = b.stat.mtime - a.stat.mtime;
+				if (mt !== 0) return mt;
+				return b.path.localeCompare(a.path);
+			});
 
 			if (filtered.length === 0) {
 				container.createDiv({ text: '没有匹配的便笺', cls: 'csn-list-empty' });
@@ -440,6 +458,9 @@ export class StickyNoteListView extends ItemView {
 			container.scrollTop = 0;
 		} finally {
 			this.previewForceDiskRead = false;
+			if (this.plugin.listPrioritizeStickyPath) {
+				this.plugin.listPrioritizeStickyPath = null;
+			}
 		}
 	}
 
