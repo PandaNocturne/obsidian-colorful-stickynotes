@@ -112,6 +112,7 @@ export class StickyNotePopover {
 			attr: { 'data-csn-sticky': 'true', 'data-csn-color': options.initialColor }
 		});
 		this.rootEl.style.setProperty('--csn-sticky-stack', '0');
+		this.rootEl.style.setProperty('--csn-sticky-active-fine-lift', '0');
 
 		this.plugin.registerDomEvent(
 			this.rootEl,
@@ -482,6 +483,8 @@ export class StickyNotePopover {
 	/** 由管理器设置：仅一个便笺显示「活动」标题样式。 */
 	setActiveHighlight(on: boolean): void {
 		this.rootEl.toggleClass('csn-sticky--active', on);
+		this.rootEl.style.setProperty('--csn-sticky-active-fine-lift', on ? '1' : '0');
+		this.applyBounds(this.getBounds(), false);
 	}
 
 	/** 叠在其他便笺之上：与 Obsidian 的 `--layer-popover` 相加。 */
@@ -672,7 +675,10 @@ export class StickyNotePopover {
 		const baseZ = layer
 			? `calc(${layer} + var(--csn-sticky-stack, 0))`
 			: `calc(var(--layer-slides) - 2 + var(--csn-sticky-stack, 0))`;
-		const zIndex = `min(${baseZ}, calc(var(--layer-slides) - 2))`;
+		const cap = 'calc(var(--layer-slides) - 2)';
+		const capped = `min(${baseZ}, ${cap})`;
+		/* 多个便笺同时顶到 cap 时，用 --csn-sticky-active-fine-lift 保证当前激活仍在上层 */
+		const zIndex = `calc(${capped} + var(--csn-sticky-active-fine-lift, 0))`;
 		this.rootEl.setCssProps({
 			position: 'fixed',
 			'z-index': zIndex

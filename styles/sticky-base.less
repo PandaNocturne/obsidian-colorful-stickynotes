@@ -10,6 +10,31 @@
 	border: 1px solid var(--csn-border);
 	background: var(--csn-b);
 	box-shadow: var(--shadow-s);
+	transition:
+		opacity 0.16s ease,
+		filter 0.16s ease,
+		box-shadow 0.16s ease;
+}
+
+/* 非当前激活便笺：压暗，便于分辨哪一扇在最前 */
+.csn-sticky:not(.csn-sticky--active) {
+	// opacity: 0.68;
+	filter: saturate(0.9) brightness(1);
+
+}
+
+.csn-sticky--active {
+	opacity: 1;
+	filter: none;
+	box-shadow:
+		var(--shadow-s),
+		0 8px 28px color-mix(in srgb, var(--text-normal) 10%, transparent);
+}
+
+.theme-dark .csn-sticky--active {
+	box-shadow:
+		var(--shadow-s),
+		0 8px 32px color-mix(in srgb, #000 45%, transparent);
 }
 
 .csn-sticky-header {
@@ -25,7 +50,7 @@
 }
 
 .csn-sticky--active .csn-sticky-header {
-	cursor: grabbing;
+	cursor: grab;
 }
 
 .csn-sticky-header-left,
