@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile } from 'obsidian';
+import { Notice, Plugin, TFile, normalizePath, type App } from 'obsidian';
 import {
 	clampViewContentZoom,
 	ColorfulStickyNotesSettingTab,
@@ -42,6 +42,21 @@ function normalizeNoteListColorFilters(value: unknown): StickyColorId[] {
 		if (seen.has(x)) continue;
 		seen.add(x);
 		out.push(x as StickyColorId);
+	}
+	return out;
+}
+
+function normalizeNoteListPinnedPathsStorage(app: App, value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const x of value) {
+		if (typeof x !== 'string' || !x.trim()) continue;
+		const p = normalizePath(x);
+		if (seen.has(p)) continue;
+		seen.add(p);
+		if (!(app.vault.getAbstractFileByPath(p) instanceof TFile)) continue;
+		out.push(p);
 	}
 	return out;
 }
@@ -160,6 +175,11 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.noteListCardOverflowHidden !== 'boolean') {
 			this.settings.noteListCardOverflowHidden = DEFAULT_SETTINGS.noteListCardOverflowHidden;
 		}
+
+		this.settings.noteListPinnedPaths = normalizeNoteListPinnedPathsStorage(
+			this.app,
+			'noteListPinnedPaths' in raw ? raw.noteListPinnedPaths : this.settings.noteListPinnedPaths
+		);
 
 		delete st.noteListLayout;
 		let listH = this.settings.noteListCardHeight;

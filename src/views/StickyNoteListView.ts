@@ -36,6 +36,12 @@ const NOTE_LIST_SORT_SPECS: readonly { mode: NoteListSort; icon: string; title: 
 	{ mode: 'mtime-asc', icon: 'clock-arrow-up', title: '修改时间 · 旧的在先' }
 ];
 
+/** `pinnedNorm` 为已 normalize 的路径数组，顺序即置顶顺序；不在数组中为未置顶。 */
+function pinnedSortRank(notePath: string, pinnedNorm: readonly string[]): number {
+	const i = pinnedNorm.indexOf(normalizePath(notePath));
+	return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}
+
 function compareStickyListFiles(a: TFile, b: TFile, sort: NoteListSort): number {
 	switch (sort) {
 		case 'ctime-desc': {
@@ -240,6 +246,28 @@ export class StickyNoteListView extends ItemView {
 		card.toggleClass('csn-list-card--sticky-open', openStickyPaths.has(path));
 	}
 
+	private syncPinButton(card: HTMLElement, path: string, pinnedSet: ReadonlySet<string>): void {
+		const pinBtn = card.querySelector('.csn-list-card-pin-btn');
+		if (!(pinBtn instanceof HTMLButtonElement)) return;
+		const on = pinnedSet.has(normalizePath(path));
+		pinBtn.toggleClass('is-active', on);
+		pinBtn.setAttr('aria-pressed', on ? 'true' : 'false');
+		pinBtn.setAttr('aria-label', on ? '取消置顶' : '置顶');
+		pinBtn.setAttr('title', on ? '取消置顶' : '置顶到列表最前');
+	}
+
+	private async togglePinForPath(path: string): Promise<void> {
+		const p = normalizePath(path);
+		const cur = this.plugin.settings.noteListPinnedPaths.map(x => normalizePath(x));
+		const i = cur.indexOf(p);
+		if (i >= 0) cur.splice(i, 1);
+		else cur.unshift(p);
+		this.plugin.settings.noteListPinnedPaths = cur;
+		await this.plugin.saveSettings();
+		this.listPageIndex = 0;
+		void this.renderList();
+	}
+
 	/** 按设置里的 `noteListViewContentZoom` 更新已渲染卡片上的 CSS 变量，不重渲 Markdown。 */
 	syncViewContentZoomFromSettings(): void {
 		if (!this.listItemsEl) return;
@@ -294,7 +322,8 @@ export class StickyNoteListView extends ItemView {
 		colorFilters: readonly StickyColorId[],
 		pageSize: number,
 		prioPath: string | null,
-		filtered: TFile[]
+		filtered: TFile[],
+		pinnedPaths: readonly string[]
 	): string {
 		return JSON.stringify({
 			sort: sortMode,
@@ -302,7 +331,8 @@ export class StickyNoteListView extends ItemView {
 			colors: [...colorFilters].sort(),
 			pageSize,
 			prio: prioPath ?? '',
-			paths: filtered.map(f => f.path)
+			paths: filtered.map(f => f.path),
+			pinned: [...pinnedPaths]
 		});
 	}
 
@@ -313,6 +343,17 @@ export class StickyNoteListView extends ItemView {
 		this.registerDomEvent(this.listItemsEl, 'click', (evt: MouseEvent) => {
 			const t = evt.target;
 			if (!(t instanceof Element)) return;
+			const pinBtn = t.closest('.csn-list-card-pin-btn');
+			if (pinBtn && this.listItemsEl?.contains(pinBtn)) {
+				const card = pinBtn.closest('.csn-list-card');
+				if (!card) return;
+				const path = (card as HTMLElement).dataset.csnNotePath;
+				if (!path) return;
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.togglePinForPath(path);
+				return;
+			}
 			const btn = t.closest('.csn-list-card-menu-btn');
 			if (!btn || !this.listItemsEl?.contains(btn)) return;
 			const card = btn.closest('.csn-list-card');
@@ -371,7 +412,7 @@ export class StickyNoteListView extends ItemView {
 		this.registerDomEvent(this.listItemsEl, 'dblclick', (evt: MouseEvent) => {
 			const t = evt.target;
 			if (!(t instanceof Element)) return;
-			if (t.closest('.csn-list-card-menu-btn')) return;
+			if (t.closest('.csn-list-card-pin-btn') || t.closest('.csn-list-card-menu-btn')) return;
 			const card = t.closest('.csn-list-card');
 			if (!card || !this.listItemsEl?.contains(card)) return;
 			const path = (card as HTMLElement).dataset.csnNotePath;
@@ -636,7 +677,8 @@ export class StickyNoteListView extends ItemView {
 		f: TFile,
 		sortMode: NoteListSort,
 		color: StickyColorId,
-		openStickyPaths: ReadonlySet<string>
+		openStickyPaths: ReadonlySet<string>,
+		pinnedSet: ReadonlySet<string>
 	): void {
 		card.setAttr('data-csn-note-path', f.path);
 		card.setAttr('data-csn-list-color', color);
@@ -648,13 +690,15 @@ export class StickyNoteListView extends ItemView {
 		const dateEl = card.querySelector('.csn-list-card-date');
 		if (dateEl) dateEl.setText(moment(listDateTs).format('M月D日'));
 		this.syncCardStickyOpenFlag(card, f.path, openStickyPaths);
+		this.syncPinButton(card, f.path, pinnedSet);
 	}
 
 	private async createListCardElement(
 		f: TFile,
 		sortMode: NoteListSort,
 		color: StickyColorId,
-		openStickyPaths: ReadonlySet<string>
+		openStickyPaths: ReadonlySet<string>,
+		pinnedSet: ReadonlySet<string>
 	): Promise<HTMLElement> {
 		const card = this.contentEl.createDiv({
 			cls: 'csn-list-card',
@@ -675,6 +719,20 @@ export class StickyNoteListView extends ItemView {
 			cls: 'csn-list-card-date',
 			text: moment(listDateTs).format('M月D日')
 		});
+		const isPinned = pinnedSet.has(normalizePath(f.path));
+		headRight.createEl(
+			'button',
+			{
+				type: 'button',
+				cls: `clickable-icon csn-list-card-pin-btn${isPinned ? ' is-active' : ''}`,
+				attr: {
+					'aria-label': isPinned ? '取消置顶' : '置顶',
+					'aria-pressed': isPinned ? 'true' : 'false',
+					title: isPinned ? '取消置顶' : '置顶到列表最前'
+				}
+			},
+			(btn: HTMLButtonElement) => setIcon(btn, 'pin')
+		);
 		headRight.createEl(
 			'button',
 			{
@@ -691,6 +749,7 @@ export class StickyNoteListView extends ItemView {
 		await this.renderCardPreview(previewEl, f);
 		card.dataset.csnEmbedMtime = String(f.stat.mtime);
 		this.syncCardStickyOpenFlag(card, f.path, openStickyPaths);
+		this.syncPinButton(card, f.path, pinnedSet);
 		return card;
 	}
 
@@ -710,11 +769,12 @@ export class StickyNoteListView extends ItemView {
 		container: HTMLElement,
 		pageFiles: TFile[],
 		sortMode: NoteListSort,
-		openStickyPaths: ReadonlySet<string>
+		openStickyPaths: ReadonlySet<string>,
+		pinnedSet: ReadonlySet<string>
 	): Promise<void> {
 		for (const f of pageFiles) {
 			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
-			const card = await this.createListCardElement(f, sortMode, color, openStickyPaths);
+			const card = await this.createListCardElement(f, sortMode, color, openStickyPaths, pinnedSet);
 			container.appendChild(card);
 		}
 	}
@@ -723,7 +783,8 @@ export class StickyNoteListView extends ItemView {
 		container: HTMLElement,
 		pageFiles: TFile[],
 		sortMode: NoteListSort,
-		openStickyPaths: ReadonlySet<string>
+		openStickyPaths: ReadonlySet<string>,
+		pinnedSet: ReadonlySet<string>
 	): Promise<void> {
 		const wantedPaths = new Set(pageFiles.map(x => x.path));
 		const pool = new Map<string, HTMLElement>();
@@ -744,9 +805,9 @@ export class StickyNoteListView extends ItemView {
 			pool.delete(f.path);
 			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
 			if (!card) {
-				card = await this.createListCardElement(f, sortMode, color, openStickyPaths);
+				card = await this.createListCardElement(f, sortMode, color, openStickyPaths, pinnedSet);
 			} else {
-				this.updateListCardChrome(card, f, sortMode, color, openStickyPaths);
+				this.updateListCardChrome(card, f, sortMode, color, openStickyPaths, pinnedSet);
 				await this.maybeRefreshCardPreview(card, f);
 			}
 			container.appendChild(card);
@@ -761,7 +822,8 @@ export class StickyNoteListView extends ItemView {
 		container: HTMLElement,
 		pageFiles: TFile[],
 		sortMode: NoteListSort,
-		openStickyPaths: ReadonlySet<string>
+		openStickyPaths: ReadonlySet<string>,
+		pinnedSet: ReadonlySet<string>
 	): Promise<void> {
 		const byPath = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
@@ -772,7 +834,7 @@ export class StickyNoteListView extends ItemView {
 		if (byPath.size !== pageFiles.length) {
 			this.disposeAllListCardMarkdownHosts();
 			container.empty();
-			await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths);
+			await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths, pinnedSet);
 			return;
 		}
 		for (const f of pageFiles) {
@@ -780,11 +842,11 @@ export class StickyNoteListView extends ItemView {
 			if (!card) {
 				this.disposeAllListCardMarkdownHosts();
 				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths);
+				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths, pinnedSet);
 				return;
 			}
 			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
-			this.updateListCardChrome(card, f, sortMode, color, openStickyPaths);
+			this.updateListCardChrome(card, f, sortMode, color, openStickyPaths, pinnedSet);
 			await this.maybeRefreshCardPreview(card, f);
 		}
 	}
@@ -835,9 +897,15 @@ export class StickyNoteListView extends ItemView {
 				keywords.length === 0 ? files : await filterStickyFilesByKeywords(this.app, files, keywords);
 			filtered = await filterStickyFilesByColors(this.app, filtered, this.plugin.settings.noteListColorFilters);
 
+			const pinnedNorm = this.plugin.settings.noteListPinnedPaths.map(p => normalizePath(p));
+			const pinnedSet = new Set(pinnedNorm);
+
 			const prio = this.plugin.listPrioritizeStickyPath;
 			const sortMode = this.plugin.settings.noteListSort;
 			filtered.sort((a, b) => {
+				const ra = pinnedSortRank(a.path, pinnedNorm);
+				const rb = pinnedSortRank(b.path, pinnedNorm);
+				if (ra !== rb) return ra - rb;
 				if (prio) {
 					if (a.path === prio && b.path !== prio) return -1;
 					if (b.path === prio && a.path !== prio) return 1;
@@ -872,7 +940,8 @@ export class StickyNoteListView extends ItemView {
 				this.plugin.settings.noteListColorFilters,
 				pageSize,
 				prio,
-				filtered
+				filtered,
+				pinnedNorm
 			);
 
 			const structureChanged = structureKey !== this.lastListStructureKey;
@@ -889,15 +958,15 @@ export class StickyNoteListView extends ItemView {
 				this.lastListStructureKey = structureKey;
 				this.disposeAllListCardMarkdownHosts();
 				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths);
+				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths, pinnedSet);
 			} else if (paginationOnly) {
-				await this.syncListPageIncremental(container, pageFiles, sortMode, openStickyPaths);
+				await this.syncListPageIncremental(container, pageFiles, sortMode, openStickyPaths, pinnedSet);
 			} else if (samePageContentTouch) {
-				await this.syncListPageContentOnly(container, pageFiles, sortMode, openStickyPaths);
+				await this.syncListPageContentOnly(container, pageFiles, sortMode, openStickyPaths, pinnedSet);
 			} else {
 				this.disposeAllListCardMarkdownHosts();
 				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths);
+				await this.renderListCardsFull(container, pageFiles, sortMode, openStickyPaths, pinnedSet);
 			}
 
 			this.lastRenderedPageIndex = this.listPageIndex;
