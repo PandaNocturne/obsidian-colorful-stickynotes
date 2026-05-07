@@ -556,6 +556,14 @@ export class StickyNotePopover {
 		this.rootEl.toggleClass('csn-sticky--active', on);
 		this.rootEl.style.setProperty('--csn-sticky-active-fine-lift', on ? '1' : '0');
 		this.applyBounds(this.getBounds(), false);
+		/* 切换激活时与打开设置类似：同步底栏高度变量并触发叶视图测量，缓解嵌套 workspace 首帧高度链断裂 */
+		if (on) {
+			window.requestAnimationFrame(() => {
+				if (this.disposed) return;
+				this.syncBottomBarHeightCss();
+				this.requestLeafMeasure();
+			});
+		}
 	}
 
 	/** 叠在其他便笺之上：与 Obsidian 的 `--layer-popover` 相加。 */
@@ -604,7 +612,16 @@ export class StickyNotePopover {
 		await leaf.loadIfDeferred?.();
 		if (this.disposed) return;
 		this.syncModeToggleUi();
+		this.syncBottomBarHeightCss();
 		this.requestLeafMeasure();
+		/* 再延后两帧测量：偶发仅首帧高度未传导至嵌套 leaf，表现为正文整体上移、抬头似缺失；点底栏设置会触发同类同步从而恢复 */
+		window.requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
+				if (this.disposed) return;
+				this.syncBottomBarHeightCss();
+				this.requestLeafMeasure();
+			});
+		});
 	}
 
 	destroy(): void {

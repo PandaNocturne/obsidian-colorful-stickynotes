@@ -47,6 +47,9 @@
 	border-bottom: 1px solid var(--csn-border);
 	user-select: none;
 	cursor: grab;
+	/* 高于四边缩放热区（.csn-sticky-resize z-index:25），避免偶发叠层/合成顺序导致抬头似被「吃掉」 */
+	position: relative;
+	z-index: 60;
 }
 
 .csn-sticky--active .csn-sticky-header {
