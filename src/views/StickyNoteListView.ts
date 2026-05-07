@@ -172,8 +172,16 @@ export class StickyNoteListView extends ItemView {
 		return 'layout-grid';
 	}
 
-	/** 供插件在新建便笺等时机主动刷新，避免仅依赖 vault 事件防抖导致延迟或重复整表渲染 */
+	/** 立即整表重绘（不取消已排队的防抖；一般不要用在与 `create` 防抖叠加的场景）。 */
 	requestRedraw(): void {
+		void this.renderList();
+	}
+
+	/**
+	 * 取消结构/正文防抖并立即重绘。新建便笺后由插件调用，避免 `vault.create` 已触发的防抖与主动刷新各跑一次 `renderList`。
+	 */
+	flushListRedraw(): void {
+		this.cancelListRefreshDebouncers();
 		void this.renderList();
 	}
 
@@ -242,8 +250,8 @@ export class StickyNoteListView extends ItemView {
 		this.registerEvent(
 			this.app.vault.on('create', (f: TAbstractFile) => {
 				if (!this.pathUnderStickyFolder(f.path)) return;
-				this.listPageIndex = 0;
-				void this.renderList();
+				/* 与 delete/rename 一致走结构防抖；插件新建末尾会 `flushListRedraw` 取消防抖并立刻重绘，避免双次整表渲染 */
+				this.debouncedListStructureRefresh?.();
 			})
 		);
 		this.registerEvent(

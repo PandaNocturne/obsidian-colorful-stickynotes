@@ -244,12 +244,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		new WorkspacePanelModal(this.app, this).open();
 	}
 
-	/** 若便笺列表已打开，立即重绘（新建便笺后对齐颜色/预览，且不与 vault 防抖叠成二次整表刷新） */
+	/** 若便笺列表已打开：取消 create 等已排队的防抖并立即重绘，避免与 vault 事件叠成两次整表渲染 */
 	refreshStickyListIfOpen(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) {
-				v.requestRedraw();
+				v.flushListRedraw();
 			}
 		}
 	}
