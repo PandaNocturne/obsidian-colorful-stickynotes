@@ -97,8 +97,6 @@ function collectMarkdownUnderFolder(folder: TFolder): TFile[] {
 
 export class StickyNoteListView extends ItemView {
 	private listItemsEl: HTMLElement | null = null;
-	private layoutColumnBtn: HTMLButtonElement | null = null;
-	private layoutGridBtn: HTMLButtonElement | null = null;
 	private readonly sortBtnByMode = new Map<NoteListSort, HTMLButtonElement>();
 	private searchInput: HTMLInputElement | null = null;
 	private paginationEl: HTMLElement | null = null;
@@ -129,7 +127,7 @@ export class StickyNoteListView extends ItemView {
 	}
 
 	getIcon(): string {
-		return 'layout-list';
+		return 'layout-grid';
 	}
 
 	/** 供插件在新建便笺等时机主动刷新，避免仅依赖 vault 事件防抖导致延迟或重复整表渲染 */
@@ -146,6 +144,15 @@ export class StickyNoteListView extends ItemView {
 				card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 			}
 		});
+	}
+
+	/** 从设置写入根节点 CSS 变量（网格列宽、卡片高度）。 */
+	syncListGridMetricsFromSettings(): void {
+		if (!this.contentEl.hasClass('csn-list-view')) return;
+		const h = this.plugin.settings.noteListCardHeight;
+		const w = this.plugin.settings.noteListGridMinWidth;
+		this.contentEl.style.setProperty('--csn-list-card-height', `${h}px`);
+		this.contentEl.style.setProperty('--csn-list-grid-min-width', `${w}px`);
 	}
 
 	private disposeListMarkdownHost(): void {
@@ -234,30 +241,6 @@ export class StickyNoteListView extends ItemView {
 		});
 
 		const toolbar = root.createDiv({ cls: 'csn-list-toolbar' });
-		const layoutLabel = toolbar.createSpan({ cls: 'csn-list-toolbar-label', text: '布局' });
-		layoutLabel.setAttr('aria-hidden', 'true');
-
-		const btnWrap = toolbar.createDiv({ cls: 'csn-list-toolbar-btns' });
-		this.layoutColumnBtn = btnWrap.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-list-layout-btn',
-			attr: { 'aria-label': '纵向列表', title: '纵向列表' }
-		});
-		setIcon(this.layoutColumnBtn, 'layout-list');
-		this.registerDomEvent(this.layoutColumnBtn, 'click', () => {
-			void this.setListLayout('column');
-		});
-
-		this.layoutGridBtn = btnWrap.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-list-layout-btn',
-			attr: { 'aria-label': '自适应网格', title: '自适应网格' }
-		});
-		setIcon(this.layoutGridBtn, 'layout-grid');
-		this.registerDomEvent(this.layoutGridBtn, 'click', () => {
-			void this.setListLayout('grid');
-		});
-
 		const sortLabel = toolbar.createSpan({ cls: 'csn-list-toolbar-label', text: '排序' });
 		sortLabel.setAttr('aria-hidden', 'true');
 		const sortWrap = toolbar.createDiv({ cls: 'csn-list-toolbar-btns' });
@@ -299,7 +282,7 @@ export class StickyNoteListView extends ItemView {
 		});
 
 		this.listItemsEl = root.createDiv({ cls: 'csn-list-items' });
-		this.applyListLayoutClass();
+		this.syncListGridMetricsFromSettings();
 
 		this.paginationEl = root.createDiv({ cls: 'csn-list-pagination' });
 		this.paginationPrevBtn = this.paginationEl.createEl('button', {
@@ -334,30 +317,8 @@ export class StickyNoteListView extends ItemView {
 
 		this.registerDomEvent(this.searchInput, 'input', render);
 		this.registerVaultListRefresh();
-		this.syncLayoutToolbarActive();
 		this.syncSortToolbarActive();
 		void this.renderList();
-	}
-
-	private applyListLayoutClass(): void {
-		if (!this.listItemsEl) return;
-		this.listItemsEl.removeClass('csn-list-items--column', 'csn-list-items--grid');
-		const mode = this.plugin.settings.noteListLayout === 'grid' ? 'grid' : 'column';
-		this.listItemsEl.addClass(mode === 'grid' ? 'csn-list-items--grid' : 'csn-list-items--column');
-	}
-
-	private syncLayoutToolbarActive(): void {
-		const mode = this.plugin.settings.noteListLayout === 'grid' ? 'grid' : 'column';
-		this.layoutColumnBtn?.toggleClass('is-active', mode === 'column');
-		this.layoutGridBtn?.toggleClass('is-active', mode === 'grid');
-	}
-
-	private async setListLayout(layout: 'column' | 'grid'): Promise<void> {
-		if (this.plugin.settings.noteListLayout === layout) return;
-		this.plugin.settings.noteListLayout = layout;
-		await this.plugin.saveSettings();
-		this.applyListLayoutClass();
-		this.syncLayoutToolbarActive();
 	}
 
 	private syncSortToolbarActive(): void {
@@ -563,8 +524,6 @@ export class StickyNoteListView extends ItemView {
 		this.debouncedListContentRefresh = null;
 		this.disposeListMarkdownHost();
 		this.listItemsEl = null;
-		this.layoutColumnBtn = null;
-		this.layoutGridBtn = null;
 		this.searchInput = null;
 		this.paginationEl = null;
 		this.paginationPrevBtn = null;

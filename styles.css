@@ -483,11 +483,10 @@
   display: block !important;
 }
 /*
- * 便笺列表 — 卡片级 CSS 变量（预览区高度、默认色等）。
- * 修改列表预览条高度：只改 --csn-list-preview-h。
+ * 便笺列表 — 卡片级 CSS 变量（默认色等）。
+ * 卡片整体高度由根 `.csn-list-view` 上的 `--csn-list-card-height` 控制（设置项「列表卡片高度」）。
  */
 .csn-list-card {
-  --csn-list-preview-h: 160px;
   --csn-list-card-bg: var(--background-primary);
   --csn-list-card-head-bg: var(--background-modifier-hover);
   --csn-list-card-head-border: var(--background-modifier-border);
@@ -527,27 +526,17 @@
   flex: 1 1 auto;
   min-width: 8px;
 }
-.csn-list-layout-btn.is-active,
 .csn-list-sort-btn.is-active {
   background-color: var(--background-modifier-hover);
   border-radius: var(--radius-s);
 }
+/* 自适应网格（列最小宽度、卡片高度由 `.csn-list-view` 上 CSS 变量控制） */
 .csn-list-items {
   overflow: auto;
   flex: 1 1 auto;
   min-height: 0;
-}
-/* 纵向：单列卡片 */
-.csn-list-items--column {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: stretch;
-}
-/* 自适应网格 */
-.csn-list-items--grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--csn-list-grid-min-width, 320px), 1fr));
   gap: 10px;
   align-content: start;
 }
@@ -578,7 +567,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: var(--csn-list-preview-h);
+  height: var(--csn-list-card-height, 160px);
   overflow: hidden;
   transition: box-shadow 0.12s ease, transform 0.12s ease;
 }

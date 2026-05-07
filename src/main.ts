@@ -44,12 +44,16 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		await this.stickies.init();
 
 		this.registerView(VIEW_STICKY_NOTE_LIST, leaf => new StickyNoteListView(leaf, this));
+		this.syncNoteListGridMetricsToOpenViews();
+		this.app.workspace.onLayoutReady(() => {
+			this.syncNoteListGridMetricsToOpenViews();
+		});
 
 		this.addRibbonIcon('square-pen', '打开便笺', () => {
 			void this.restoreStickySession();
 		});
 
-		this.addRibbonIcon('layout-list', '便笺列表', () => {
+		this.addRibbonIcon('layout-grid', '便笺列表', () => {
 			void this.openNoteListView();
 		});
 
@@ -120,10 +124,19 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		} else {
 			this.settings.viewContentZoom = Math.max(0.5, Math.min(1, z));
 		}
-		const layout = this.settings.noteListLayout;
-		if (layout !== 'column' && layout !== 'grid') {
-			this.settings.noteListLayout = DEFAULT_SETTINGS.noteListLayout;
+		delete st.noteListLayout;
+		let listH = this.settings.noteListCardHeight;
+		if (typeof listH !== 'number' || !Number.isFinite(listH)) {
+			listH = DEFAULT_SETTINGS.noteListCardHeight;
 		}
+		this.settings.noteListCardHeight = Math.max(120, Math.min(600, Math.round(listH)));
+
+		let listMinW = this.settings.noteListGridMinWidth;
+		if (typeof listMinW !== 'number' || !Number.isFinite(listMinW)) {
+			listMinW = DEFAULT_SETTINGS.noteListGridMinWidth;
+		}
+		this.settings.noteListGridMinWidth = Math.max(180, Math.min(800, Math.round(listMinW)));
+
 		const nls = this.settings.noteListSort;
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.includes(nls as NoteListSort)) {
 			this.settings.noteListSort = DEFAULT_SETTINGS.noteListSort;
@@ -198,6 +211,16 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) {
 				v.syncViewContentZoomFromSettings();
+			}
+		}
+	}
+
+	/** 将列表网格的卡片高度、列最小宽度同步到已打开的便笺列表视图。 */
+	syncNoteListGridMetricsToOpenViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteListView) {
+				v.syncListGridMetricsFromSettings();
 			}
 		}
 	}

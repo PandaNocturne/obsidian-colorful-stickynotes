@@ -17,8 +17,10 @@ export interface ColorfulStickyNotesSettings {
 	restoreStickySessionOnStartup: boolean;
 	/** 启动恢复便笺前的等待秒数（0–10），仅在开启「启动时打开上次便笺」时生效。 */
 	restoreStickySessionDelaySec: number;
-	/** 便笺列表：纵向卡片列表或自适应网格。 */
-	noteListLayout: 'column' | 'grid';
+	/** 便笺列表卡片高度（像素，预览区所在整卡高度）。 */
+	noteListCardHeight: number;
+	/** 便笺列表网格单列最小宽度（像素，`minmax` 下限）。 */
+	noteListGridMinWidth: number;
 	/** 便笺列表排序（默认：创建时间新在前）。 */
 	noteListSort: NoteListSort;
 	/** 便笺列表首次打开时的挂载位置。 */
@@ -42,7 +44,8 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	bottomBarAutoHide: true,
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
-	noteListLayout: 'column',
+	noteListCardHeight: 160,
+	noteListGridMinWidth: 320,
 	noteListSort: 'ctime-desc',
 	noteListOpenLocation: 'right-sidebar',
 	confirmBlankStickyTrashOnClose: true,
@@ -301,16 +304,34 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('默认布局')
-			.setDesc('在便笺列表视图内也可随时切换；此处为打开列表时的默认排布。')
-			.addDropdown(dd =>
-				dd
-					.addOption('column', '纵向列表')
-					.addOption('grid', '自适应网格')
-					.setValue(this.plugin.settings.noteListLayout)
+			.setName('列表卡片高度')
+			.setDesc('便笺列表网格中每张卡片的高度（像素）。')
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.noteListCardHeight))
 					.onChange(async v => {
-						this.plugin.settings.noteListLayout = v as 'column' | 'grid';
+						const n = parseInt(v, 10);
+						this.plugin.settings.noteListCardHeight = Number.isFinite(n)
+							? Math.max(120, Math.min(600, n))
+							: DEFAULT_SETTINGS.noteListCardHeight;
 						await this.plugin.saveSettings();
+						this.plugin.syncNoteListGridMetricsToOpenViews();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName('网格最小列宽')
+			.setDesc('自适应网格中每列的最小宽度（像素）；侧栏较窄时列数会随之减少。')
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.noteListGridMinWidth))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.noteListGridMinWidth = Number.isFinite(n)
+							? Math.max(180, Math.min(800, n))
+							: DEFAULT_SETTINGS.noteListGridMinWidth;
+						await this.plugin.saveSettings();
+						this.plugin.syncNoteListGridMetricsToOpenViews();
 					})
 			);
 
