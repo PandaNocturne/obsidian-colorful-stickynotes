@@ -73,7 +73,7 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_SNAP_THRESHOLD_DESC: '距离小于该像素值时触发吸附。',
 	SETTINGS_BIND_AFTER_SNAP_NAME: '吸附后绑定窗口',
 	SETTINGS_BIND_AFTER_SNAP_DESC:
-		'吸附对齐后建立绑定；成组窗口会按网格整理（同列等宽、同行等高，尺寸由该行/列最大便笺决定）。移动其中一个窗口会连带移动整组。按住 Ctrl 拖动可移开并解绑。',
+		'吸附对齐后建立绑定；成组窗口会按网格整理（同列等宽、同行等高，尺寸由该行/列最大便笺决定）。移动其中一个窗口会连带移动整组。按住 Ctrl 拖动可移开并解绑。缩放时按住 Ctrl 可单独改尺寸而不推挤邻窗，松手后按与网格相交范围铺满多格。',
 
 	SETTINGS_DEFAULT_VIEW_NAME: '默认视图',
 	SETTINGS_MODE_SOURCE: '编辑',

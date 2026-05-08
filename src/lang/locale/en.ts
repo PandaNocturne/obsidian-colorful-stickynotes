@@ -78,7 +78,7 @@ export const en = {
 	SETTINGS_SNAP_THRESHOLD_DESC: 'Snaps when distance is below this many pixels.',
 	SETTINGS_BIND_AFTER_SNAP_NAME: 'Bind windows after snap',
 	SETTINGS_BIND_AFTER_SNAP_DESC:
-		'After snapping, linked windows move together and tidy into a grid (equal width per column, equal height per row, driven by the largest sticky in that track). Hold Ctrl while dragging to detach.',
+		'After snapping, linked windows move together and tidy into a grid (equal width per column, equal height per row, driven by the largest sticky in that track). Hold Ctrl while dragging to detach. Hold Ctrl while resizing to resize alone without pushing neighbors; on release, the sticky expands to cover the grid cells it overlaps.',
 
 	SETTINGS_DEFAULT_VIEW_NAME: 'Default view',
 	SETTINGS_MODE_SOURCE: 'Edit',

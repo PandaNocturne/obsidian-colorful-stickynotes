@@ -37,6 +37,9 @@ const STICKY_EDGE_GAP_PX = 5;
 const STICKY_TOP_ALIGN_SNAP_PX = 10;
 const STICKY_BOTTOM_ALIGN_SNAP_PX = 10;
 const GRID_LAYOUT_ITERATIONS = 4;
+/** 网格列/行在仅有占位时的回退尺寸（与便笺最小尺寸一致量级）。 */
+const GRID_FALLBACK_MIN_W = 280;
+const GRID_FALLBACK_MIN_H = 200;
 
 /** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
 function executeCommandById(app: App, commandId: string): boolean {
@@ -68,6 +71,8 @@ export class StickyNoteManager {
 		| {
 			id: string;
 			groupIds: string[];
+			/** 曾按住 Ctrl 缩放：松手后按与网格相交范围铺满多格。 */
+			ctrlSpanningResize: boolean;
 		}
 		| null = null;
 	private readonly mount = document.body;
@@ -1433,13 +1438,17 @@ export class StickyNoteManager {
 
 	private handleResizeStart(id: string, _e: PointerEvent, _dir: unknown): void {
 		const groupIds = this.resolveBindingGroupIds(id);
-		this.resizeSession = { id, groupIds };
+		this.resizeSession = { id, groupIds, ctrlSpanningResize: false };
 	}
 
-	private handleResizeMove(id: string, next: FloatingBounds, _e: PointerEvent, _dir: unknown): FloatingBounds {
+	private handleResizeMove(id: string, next: FloatingBounds, e: PointerEvent, _dir: unknown): FloatingBounds {
 		const session = this.resizeSession;
 		if (!session || session.id !== id) return next;
 		if (session.groupIds.length <= 1) return next;
+		if (e.ctrlKey) {
+			session.ctrlSpanningResize = true;
+			return next;
+		}
 		/* 横纵绑定：迭代松弛，改宽推挤左右邻窗、改高推挤上下邻窗并同步列宽 / 行高。 */
 		for (let iter = 0; iter < GRID_LAYOUT_ITERATIONS; iter++) {
 			for (const anchorId of session.groupIds) {
@@ -1476,8 +1485,18 @@ export class StickyNoteManager {
 	}
 
 	private handleResizeEnd(id: string, _e: PointerEvent): void {
-		if (this.resizeSession?.id === id) {
-			this.layoutBindingGroupAsGrid(id);
+		const session = this.resizeSession;
+		if (session?.id === id) {
+			let spanOpts:
+				| { multiCellSpanForId: { id: string; colMin: number; colMax: number; rowMin: number; rowMax: number } }
+				| undefined;
+			if (session.ctrlSpanningResize && session.groupIds.length > 1) {
+				const span = this.computeMultiCellSpanFromResize(id);
+				if (span) {
+					spanOpts = { multiCellSpanForId: { id, ...span } };
+				}
+			}
+			this.layoutBindingGroupAsGrid(id, spanOpts);
 			this.resizeSession = null;
 			this.persistOpenWindows();
 		}
@@ -1668,17 +1687,36 @@ export class StickyNoteManager {
 		};
 	}
 
+	private static rectsOverlap(
+		a: { left: number; top: number; width: number; height: number },
+		b: { left: number; top: number; width: number; height: number }
+	): boolean {
+		const ax2 = a.left + a.width;
+		const ay2 = a.top + a.height;
+		const bx2 = b.left + b.width;
+		const by2 = b.top + b.height;
+		return a.left < bx2 && ax2 > b.left && a.top < by2 && ay2 > b.top;
+	}
+
 	/**
-	 * 将绑定组整理为网格：同列等宽、同行等高（跨行 / 跨列由该列或行内最大尺寸决定），并夹紧在视口内。
+	 * 测量绑定组网格：拓扑、列宽 / 行高、像素起算位置。
+	 * @param excludeFromSizingId 不计入列宽 / 行高统计（用于 Ctrl 跨格缩放后只按邻窗定轨再铺当前窗）。
 	 */
-	private layoutBindingGroupAsGrid(
-		rootId: string,
+	private measureBindingGridMetrics(
+		group: string[],
+		excludeFromSizingId: string | null,
 		opts?: { heightSourceId?: string | null; widthSourceId?: string | null }
-	): void {
-		const root = this.popovers.get(rootId);
-		if (!root) return;
-		const group = this.resolveBindingGroupIds(rootId);
-		if (group.length <= 1) return;
+	): {
+		anchorId: string;
+		norm: Map<string, { c: number; r: number }>;
+		maxC: number;
+		maxR: number;
+		colW: Map<number, number>;
+		rowH: Map<number, number>;
+		colStart: Map<number, number>;
+		rowStart: Map<number, number>;
+	} | null {
+		if (group.length <= 1) return null;
 
 		const groupSet = new Set(group);
 		let anchorId = group[0]!;
@@ -1747,17 +1785,25 @@ export class StickyNoteManager {
 
 		const colW = new Map<number, number>();
 		const rowH = new Map<number, number>();
-		for (const id of group) {
-			const pop = this.popovers.get(id);
+		for (const wid of group) {
+			if (excludeFromSizingId !== null && wid === excludeFromSizingId) continue;
+			const pop = this.popovers.get(wid);
 			if (!pop) continue;
 			const logic = pop.getBounds();
 			const phy = pop.getPhysicalBounds();
-			const cell = norm.get(id);
+			const cell = norm.get(wid);
 			if (!cell) continue;
 			const wCell = phy.width;
 			const hCell = pop.getCollapsed() ? phy.height : logic.height;
 			colW.set(cell.c, Math.max(colW.get(cell.c) ?? 0, wCell));
 			rowH.set(cell.r, Math.max(rowH.get(cell.r) ?? 0, hCell));
+		}
+
+		for (let c = 0; c <= maxC; c++) {
+			if (!colW.has(c)) colW.set(c, GRID_FALLBACK_MIN_W);
+		}
+		for (let r = 0; r <= maxR; r++) {
+			if (!rowH.has(r)) rowH.set(r, GRID_FALLBACK_MIN_H);
 		}
 
 		const hRefId = opts?.heightSourceId;
@@ -1781,7 +1827,7 @@ export class StickyNoteManager {
 
 		const aNorm = norm.get(anchorId);
 		const aPop = this.popovers.get(anchorId);
-		if (!aNorm || !aPop) return;
+		if (!aNorm || !aPop) return null;
 		const aPhy = aPop.getPhysicalBounds();
 		const gap = STICKY_EDGE_GAP_PX;
 
@@ -1812,15 +1858,109 @@ export class StickyNoteManager {
 			rowStart.set(r, prevStart + prevH + gap);
 		}
 
-		for (const id of group) {
-			const pop = this.popovers.get(id);
-			const cell = norm.get(id);
+		return { anchorId, norm, maxC, maxR, colW, rowH, colStart, rowStart };
+	}
+
+	/**
+	 * Ctrl 独立缩放结束后：根据当前矩形与「邻窗决定的网格单元」相交情况，得到要铺满的列 / 行区间（多格）。
+	 */
+	private computeMultiCellSpanFromResize(resizeId: string): {
+		colMin: number;
+		colMax: number;
+		rowMin: number;
+		rowMax: number;
+	} | null {
+		const pop = this.popovers.get(resizeId);
+		if (!pop || pop.getCollapsed()) return null;
+		const group = this.resolveBindingGroupIds(resizeId);
+		const metrics = this.measureBindingGridMetrics(group, resizeId, undefined);
+		if (!metrics) return null;
+		const R = pop.getPhysicalBounds();
+		let colMin = Number.POSITIVE_INFINITY;
+		let colMax = -1;
+		let rowMin = Number.POSITIVE_INFINITY;
+		let rowMax = -1;
+		let hit = false;
+		for (let c = 0; c <= metrics.maxC; c++) {
+			for (let r = 0; r <= metrics.maxR; r++) {
+				const cl = metrics.colStart.get(c);
+				const ct = metrics.rowStart.get(r);
+				const cw = metrics.colW.get(c);
+				const ch = metrics.rowH.get(r);
+				if (cl === undefined || ct === undefined || cw === undefined || ch === undefined) continue;
+				const cell = { left: cl, top: ct, width: cw, height: ch };
+				if (StickyNoteManager.rectsOverlap(R, cell)) {
+					hit = true;
+					colMin = Math.min(colMin, c);
+					colMax = Math.max(colMax, c);
+					rowMin = Math.min(rowMin, r);
+					rowMax = Math.max(rowMax, r);
+				}
+			}
+		}
+		if (!hit || colMax < 0) return null;
+		if (colMin === colMax && rowMin === rowMax) return null;
+		return { colMin, colMax, rowMin, rowMax };
+	}
+
+	/**
+	 * 将绑定组整理为网格：同列等宽、同行等高（跨行 / 跨列由该列或行内最大尺寸决定），并夹紧在视口内。
+	 * 可选 multiCellSpanForId：将指定窗置于多格矩形内（用于 Ctrl 缩放跨格）。
+	 */
+	private layoutBindingGroupAsGrid(
+		rootId: string,
+		opts?: {
+			heightSourceId?: string | null;
+			widthSourceId?: string | null;
+			multiCellSpanForId?: { id: string; colMin: number; colMax: number; rowMin: number; rowMax: number };
+		}
+	): void {
+		const root = this.popovers.get(rootId);
+		if (!root) return;
+		const group = this.resolveBindingGroupIds(rootId);
+		if (group.length <= 1) return;
+
+		const excludeSizing = opts?.multiCellSpanForId?.id ?? null;
+		const m = this.measureBindingGridMetrics(group, excludeSizing, opts);
+		if (!m) return;
+
+		const span = opts?.multiCellSpanForId;
+		for (const wid of group) {
+			const pop = this.popovers.get(wid);
+			const cell = m.norm.get(wid);
 			if (!pop || !cell) continue;
 			const logic = pop.getBounds();
-			const nw = colW.get(cell.c) ?? logic.width;
-			const nh = rowH.get(cell.r) ?? logic.height;
-			const nl = colStart.get(cell.c) ?? logic.left;
-			const nt = rowStart.get(cell.r) ?? logic.top;
+
+			if (span && span.id === wid) {
+				const nl = m.colStart.get(span.colMin) ?? logic.left;
+				const nw =
+					(m.colStart.get(span.colMax) ?? nl) + (m.colW.get(span.colMax) ?? 0) - nl;
+				const nt = m.rowStart.get(span.rowMin) ?? logic.top;
+				const nh =
+					(m.rowStart.get(span.rowMax) ?? nt) + (m.rowH.get(span.rowMax) ?? 0) - nt;
+				if (pop.getCollapsed()) {
+					pop.setBounds({
+						...logic,
+						left: nl,
+						top: nt,
+						width: nw
+					});
+				} else {
+					pop.setBounds({
+						...logic,
+						left: nl,
+						top: nt,
+						width: nw,
+						height: nh
+					});
+				}
+				continue;
+			}
+
+			const nw = m.colW.get(cell.c) ?? logic.width;
+			const nh = m.rowH.get(cell.r) ?? logic.height;
+			const nl = m.colStart.get(cell.c) ?? logic.left;
+			const nt = m.rowStart.get(cell.r) ?? logic.top;
 
 			if (pop.getCollapsed()) {
 				pop.setBounds({
