@@ -373,10 +373,10 @@
 .theme-dark .csn-sticky-sheet-swatch[data-csn-sheet-color='gray'] {
   background: #2a2a2a;
 }
-/* 调整大小（须高于 .csn-sticky-bottombar 的 z-index:20，否则底边 s/sw/se 无法命中） */
+/* 调整大小（需高于 header/bottombar，保证头部边缘与四角都能命中缩放热区） */
 .csn-sticky .csn-sticky-resize {
   position: absolute;
-  z-index: 25;
+  z-index: 80;
 }
 .csn-sticky .csn-sticky-resize.is-n,
 .csn-sticky .csn-sticky-resize.is-s {
