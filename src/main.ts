@@ -1,4 +1,5 @@
-import { Notice, Plugin, TFile, normalizePath } from 'obsidian';
+import { Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from 'obsidian';
+import { t } from './lang/helpers';
 import {
 	clampViewContentZoom,
 	ColorfulStickyNotesSettingTab,
@@ -10,6 +11,8 @@ import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
 import {
 	VIEW_STICKY_NOTE_LIST,
+	type HeaderNewStickyAdjacentSide,
+	type NoteListArchiveFilter,
 	type NoteListFloatOpenFilter,
 	type NoteListOpenLocation,
 	type NoteListSort,
@@ -30,7 +33,9 @@ const VALID_NOTE_LIST_SORT: readonly NoteListSort[] = [
 	'ctime-desc',
 	'ctime-asc',
 	'mtime-desc',
-	'mtime-asc'
+	'mtime-asc',
+	'basename-asc',
+	'basename-desc'
 ];
 
 const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [
@@ -40,6 +45,10 @@ const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [
 ];
 
 const VALID_NOTE_LIST_FLOAT_OPEN_FILTER: readonly NoteListFloatOpenFilter[] = ['all', 'open', 'closed'];
+
+const VALID_NOTE_LIST_ARCHIVE_FILTER: readonly NoteListArchiveFilter[] = ['all', 'unarchived', 'archived'];
+
+const VALID_HEADER_NEW_STICKY_ADJACENT_SIDE: readonly HeaderNewStickyAdjacentSide[] = ['left', 'right'];
 
 function normalizeNoteListColorFilters(value: unknown): StickyColorId[] {
 	if (!Array.isArray(value)) return [];
@@ -72,6 +81,33 @@ function normalizeNoteListPinnedPathsStorage(value: unknown): string[] {
 	return out;
 }
 
+function samePinnedPathsOrder(a: readonly string[], b: readonly string[]): boolean {
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (normalizePath(a[i]!) !== normalizePath(b[i]!)) return false;
+	}
+	return true;
+}
+
+/**
+ * 便笺被删或整夹删除后，从置顶列表去掉对应路径（夹删除时去掉其下所有路径）。
+ */
+function pruneNoteListPinnedPathsAfterDelete(
+	pinned: readonly string[],
+	deletedPath: string,
+	isFolder: boolean
+): string[] {
+	const del = normalizePath(deletedPath);
+	const prefix = `${del}/`;
+	const kept = pinned.filter(p => {
+		const n = normalizePath(p);
+		if (n === del) return false;
+		if (isFolder && n.startsWith(prefix)) return false;
+		return true;
+	});
+	return normalizeNoteListPinnedPathsStorage(kept);
+}
+
 export default class ColorfulStickyNotesPlugin extends Plugin {
 	settings!: ColorfulStickyNotesSettings;
 	stickies!: StickyNoteManager;
@@ -95,21 +131,21 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			this.syncNoteListGridMetricsToOpenViews();
 		});
 
-		this.addRibbonIcon('square-pen', '打开便笺', () => {
+		this.addRibbonIcon('square-pen', t('RIBBON_OPEN_STICKY'), () => {
 			void this.toggleStickyWindowsForCurrentWorkspace();
 		});
 
-		this.addRibbonIcon('layout-grid', '便笺列表', () => {
+		this.addRibbonIcon('layout-list', t('RIBBON_STICKY_LIST'), () => {
 			void this.openNoteListView();
 		});
 
-		this.addRibbonIcon('layout', '便笺工作区', () => {
+		this.addRibbonIcon('layers', t('RIBBON_WORKSPACE'), () => {
 			this.openWorkspacePanel();
 		});
 
 		this.addCommand({
 			id: 'open-sticky-note-windows',
-			name: '打开/关闭当前工作区便笺',
+			name: t('CMD_TOGGLE_STICKY_WINDOWS'),
 			callback: () => {
 				void this.toggleStickyWindowsForCurrentWorkspace();
 			}
@@ -117,7 +153,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'open-sticky-note-list',
-			name: '打开便笺列表',
+			name: t('CMD_OPEN_STICKY_LIST'),
 			callback: () => {
 				void this.openNoteListView();
 			}
@@ -125,7 +161,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'create-new-sticky-note',
-			name: '新建便笺',
+			name: t('CMD_NEW_STICKY'),
 			callback: () => {
 				void this.stickies.addStickyWindow();
 			}
@@ -133,7 +169,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'hide-current-sticky-note',
-			name: '隐藏当前便笺',
+			name: t('CMD_HIDE_CURRENT'),
 			callback: () => {
 				this.stickies.toggleHideCurrentSticky();
 			}
@@ -141,7 +177,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'toggle-sticky-notes-hide-others',
-			name: '隐藏其他便笺/取消',
+			name: t('CMD_TOGGLE_HIDE_OTHERS'),
 			callback: () => {
 				/* 兼容旧命令：按当前状态切换隐藏其他/显示其他。 */
 				if (this.stickies.isHideOthersMode()) {
@@ -154,7 +190,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'toggle-sticky-notes-visibility',
-			name: '显示/隐藏所有便笺',
+			name: t('CMD_TOGGLE_HIDE_ALL'),
 			callback: () => {
 				/* 若任意便笺处于隐藏状态，则优先“显示所有”；否则“隐藏所有”。 */
 				this.stickies.toggleHideAllByCurrentState();
@@ -163,13 +199,52 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'open-sticky-workspace-panel',
-			name: '打开便笺工作区',
+			name: t('CMD_OPEN_WORKSPACE_PANEL'),
 			callback: () => {
 				this.openWorkspacePanel();
 			}
 		});
 
 		this.addSettingTab(new ColorfulStickyNotesSettingTab(this.app, this));
+
+		this.registerEvent(
+			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
+				const oldN = normalizePath(oldPath);
+				const newN = normalizePath(file.path);
+				const oldPrefix = `${oldN}/`;
+				let changed = false;
+				const next = this.settings.noteListPinnedPaths.map(p => {
+					const pn = normalizePath(p);
+					if (pn === oldN) {
+						changed = true;
+						return newN;
+					}
+					if (file instanceof TFolder && pn.startsWith(oldPrefix)) {
+						changed = true;
+						return normalizePath(`${newN}/${pn.slice(oldPrefix.length)}`);
+					}
+					return p;
+				});
+				if (!changed) return;
+				this.settings.noteListPinnedPaths = normalizeNoteListPinnedPathsStorage(next);
+				void this.saveSettings();
+			})
+		);
+
+		this.registerEvent(
+			this.app.vault.on('delete', (file: TAbstractFile) => {
+				if (this.settings.noteListPinnedPaths.length === 0) return;
+				const isFolder = file instanceof TFolder;
+				const next = pruneNoteListPinnedPathsAfterDelete(
+					this.settings.noteListPinnedPaths,
+					file.path,
+					isFolder
+				);
+				if (samePinnedPathsOrder(this.settings.noteListPinnedPaths, next)) return;
+				this.settings.noteListPinnedPaths = next;
+				void this.saveSettings();
+			})
+		);
 
 		if (this.settings.restoreStickySessionOnStartup) {
 			this.app.workspace.onLayoutReady(() => {
@@ -222,14 +297,36 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.stickyHeaderDoubleClickStretch !== 'boolean') {
 			this.settings.stickyHeaderDoubleClickStretch = DEFAULT_SETTINGS.stickyHeaderDoubleClickStretch;
 		}
-		if (typeof this.settings.stickyAssistAlignSnap !== 'boolean') {
-			this.settings.stickyAssistAlignSnap = DEFAULT_SETTINGS.stickyAssistAlignSnap;
+		const VALID_SNAP_MODES = new Set(['none', 'auto', 'ctrl']);
+		const rawSnapMode = raw.stickyAssistAlignSnapMode;
+		const legacySnapBool = raw.stickyAssistAlignSnap;
+		if (typeof rawSnapMode === 'string' && VALID_SNAP_MODES.has(rawSnapMode)) {
+			this.settings.stickyAssistAlignSnapMode =
+				rawSnapMode as ColorfulStickyNotesSettings['stickyAssistAlignSnapMode'];
+		} else if (typeof legacySnapBool === 'boolean') {
+			this.settings.stickyAssistAlignSnapMode = legacySnapBool ? 'auto' : 'none';
+		} else if (
+			typeof this.settings.stickyAssistAlignSnapMode !== 'string' ||
+			!VALID_SNAP_MODES.has(this.settings.stickyAssistAlignSnapMode)
+		) {
+			this.settings.stickyAssistAlignSnapMode = DEFAULT_SETTINGS.stickyAssistAlignSnapMode;
 		}
+		delete st.stickyAssistAlignSnap;
 		const snapPx = this.settings.stickyAssistAlignSnapThresholdPx;
 		if (typeof snapPx !== 'number' || !Number.isFinite(snapPx)) {
 			this.settings.stickyAssistAlignSnapThresholdPx = DEFAULT_SETTINGS.stickyAssistAlignSnapThresholdPx;
 		} else {
 			this.settings.stickyAssistAlignSnapThresholdPx = Math.max(1, Math.min(50, Math.round(snapPx)));
+		}
+		const snapUnbindMult = this.settings.stickyAssistAlignSnapUnbindRangeMultiplier;
+		if (typeof snapUnbindMult !== 'number' || !Number.isFinite(snapUnbindMult)) {
+			this.settings.stickyAssistAlignSnapUnbindRangeMultiplier =
+				DEFAULT_SETTINGS.stickyAssistAlignSnapUnbindRangeMultiplier;
+		} else {
+			this.settings.stickyAssistAlignSnapUnbindRangeMultiplier = Math.max(
+				1,
+				Math.min(8, Math.round(snapUnbindMult * 10) / 10)
+			);
 		}
 		if (typeof this.settings.stickyAssistAlignBind !== 'boolean') {
 			this.settings.stickyAssistAlignBind = DEFAULT_SETTINGS.stickyAssistAlignBind;
@@ -269,6 +366,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			!VALID_NOTE_LIST_FLOAT_OPEN_FILTER.includes(nf as NoteListFloatOpenFilter)
 		) {
 			this.settings.noteListFloatOpenFilter = DEFAULT_SETTINGS.noteListFloatOpenFilter;
+		}
+
+		const naf = this.settings.noteListArchiveFilter;
+		if (
+			typeof naf !== 'string' ||
+			!VALID_NOTE_LIST_ARCHIVE_FILTER.includes(naf as NoteListArchiveFilter)
+		) {
+			this.settings.noteListArchiveFilter = DEFAULT_SETTINGS.noteListArchiveFilter;
 		}
 
 		const hasNewColorFilters = 'noteListColorFilters' in raw;
@@ -330,6 +435,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		} else {
 			this.settings.defaultNewStickyBackground = dbg as StickyColorId;
 		}
+
+		const hns = this.settings.headerNewStickyAdjacentSide;
+		if (
+			typeof hns !== 'string' ||
+			!VALID_HEADER_NEW_STICKY_ADJACENT_SIDE.includes(hns as HeaderNewStickyAdjacentSide)
+		) {
+			this.settings.headerNewStickyAdjacentSide = DEFAULT_SETTINGS.headerNewStickyAdjacentSide;
+		}
 	}
 
 	async saveSettings(): Promise<void> {
@@ -339,7 +452,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			await this.saveData(payload);
 		} catch (e) {
 			console.error('[colorful-sticky-notes] saveSettings failed', e);
-			new Notice('多彩便笺：设置保存失败，请查看控制台。');
+			new Notice(t('NOTICE_SAVE_SETTINGS_FAILED'));
 			throw e;
 		}
 	}
@@ -442,7 +555,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			if (loc === 'left-sidebar') {
 				const L = workspace.getLeftLeaf(false);
 				if (!L) {
-					new Notice('无法创建左侧侧边栏视图');
+					new Notice(t('NOTICE_CANNOT_CREATE_LEFT_SIDEBAR'));
 					return;
 				}
 				await L.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
@@ -450,7 +563,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			} else if (loc === 'right-sidebar') {
 				const R = workspace.getRightLeaf(false);
 				if (!R) {
-					new Notice('无法创建右侧侧边栏视图');
+					new Notice(t('NOTICE_CANNOT_CREATE_RIGHT_SIDEBAR'));
 					return;
 				}
 				await R.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
@@ -474,13 +587,13 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 	/**
 	 * 命令行为：
-	 * 1) 当前工作区没有便笺 -> 新建并打开一张便笺
-	 * 2) 当前工作区存在便笺 -> 关闭当前工作区所有已打开便笺
-	 * 3) 若当前无打开便笺，但工作区存在已保存便笺 -> 恢复上次工作区
+	 * 1) 当前便笺工作区没有便笺 → 新建并打开一张便笺
+	 * 2) 当前便笺工作区存在便笺 → 关闭该便笺工作区内所有已打开便笺
+	 * 3) 若当前无打开便笺，但该便笺工作区已有保存布局 → 恢复该便笺工作区
 	 */
 	private async toggleStickyWindowsForCurrentWorkspace(): Promise<void> {
 		if (this.stickies.hasOpenStickyWindows()) {
-			/* 关闭窗口但保留工作区会话，便于下次“一键恢复上次工作区”。 */
+			/* 关闭窗口但保留便笺工作区会话，便于下次一键恢复。 */
 			this.stickies.closeAllOpenStickyWindows(true);
 			return;
 		}

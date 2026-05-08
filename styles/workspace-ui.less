@@ -1,4 +1,4 @@
-/* 工作区面板 */
+/* 便笺工作区面板 */
 .csn-ws-row {
 	display: flex;
 	align-items: center;
@@ -19,6 +19,244 @@
 
 .csn-cmd-label {
 	font-size: var(--font-ui-small);
+}
+
+/* —— 管理便笺工作区弹窗 —— */
+.modal.csn-workspace-panel-modal {
+	max-width: 520px;
+	width: min(92vw, 520px);
+}
+
+.csn-workspace-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	padding: 2px 2px 8px;
+
+	.csn-ws-panel-list .csn-ws-panel-item {
+		box-shadow: none;
+		border: none;
+	}
+}
+
+.csn-ws-panel-save-row {
+	display: flex;
+	align-items: stretch;
+	gap: 10px;
+	margin-bottom: 14px;
+}
+
+.csn-ws-panel-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: var(--input-height);
+	padding: 0 12px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+
+.csn-ws-panel-input:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+}
+
+.csn-ws-panel-btn {
+	flex: 0 0 auto;
+	height: var(--input-height);
+	padding: 0 16px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.csn-ws-panel-btn:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+}
+
+.csn-ws-panel-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.csn-ws-panel-btn--ghost {
+	background: transparent;
+}
+
+/* 与输入框同高的图标按钮（顶部「保存」） */
+.csn-ws-panel-icon-btn--bordered {
+	flex: 0 0 auto;
+	width: var(--input-height);
+	min-width: var(--input-height);
+	height: var(--input-height);
+	padding: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-primary);
+	color: var(--text-normal);
+}
+
+.csn-ws-panel-icon-btn--bordered:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+}
+
+.csn-ws-panel-icon-btn--bordered:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.csn-ws-panel-divider {
+	height: 1px;
+	background: var(--background-modifier-border);
+	margin: 4px 0 12px;
+}
+
+.csn-ws-panel-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.csn-ws-panel-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 12px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	box-shadow: var(--shadow-s);
+}
+
+.csn-ws-panel-item-main {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.csn-ws-panel-item-title-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+.csn-ws-panel-item-name {
+	font-size: var(--font-ui-medium);
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.csn-ws-panel-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	line-height: 1.3;
+}
+
+.csn-ws-panel-item-meta {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+
+.csn-ws-panel-item-actions {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+.csn-ws-panel-icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--input-height);
+	min-width: var(--input-height);
+	height: var(--input-height);
+	padding: 0;
+	border: none;
+	border-radius: var(--radius-m);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	box-sizing: border-box;
+}
+
+.csn-ws-panel-icon-btn:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.csn-ws-panel-icon-btn:disabled {
+	opacity: 0.38;
+	cursor: not-allowed;
+}
+
+.csn-ws-panel-icon-btn svg {
+	flex-shrink: 0;
+}
+
+/* 顶部保存与列表操作图标：无背景、无悬停/焦点装饰 */
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn,
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn {
+	background: transparent !important;
+	box-shadow: none !important;
+	border: none !important;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:hover:not(:disabled),
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:active:not(:disabled),
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:focus:not(:disabled),
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:focus-visible,
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:hover:not(:disabled),
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:active:not(:disabled),
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:focus:not(:disabled),
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:focus-visible {
+	background: transparent !important;
+	box-shadow: none !important;
+	outline: none;
+	color: var(--text-muted);
+}
+
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:disabled,
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:disabled {
+	background: transparent !important;
+}
+
+/* 重命名小弹窗 */
+.csn-ws-rename-modal .csn-ws-rename-input {
+	display: block;
+	width: 100%;
+	margin-bottom: 14px;
+	height: var(--input-height);
+	padding: 0 10px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	box-sizing: border-box;
+}
+
+.csn-ws-rename-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
 }
 
 /* 文件名格式预览：外层占位 + 内层可视容器 */

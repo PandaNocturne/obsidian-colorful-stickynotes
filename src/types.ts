@@ -14,6 +14,17 @@ export type StickyColorId =
 	| 'lavender'
 	| 'gray';
 
+/** 拖动时对齐吸附的触发方式（与「吸附后绑定」共用阈值与邻窗检测）。 */
+export type StickyAssistAlignSnapMode = 'none' | 'auto' | 'ctrl';
+
+/** 绑定组内归一化网格索引下的多格占位（含边界）。单格时勿存。 */
+export interface StickyGridSpan {
+	colMin: number;
+	colMax: number;
+	rowMin: number;
+	rowMax: number;
+}
+
 export interface SerializedStickyWindow {
 	id: string;
 	path: string;
@@ -27,6 +38,8 @@ export interface SerializedStickyWindow {
 	stretched?: boolean;
 	/** 吸附绑定的其它窗口 id（无向关系，序列化为邻接表）。 */
 	bindings?: string[];
+	/** 跨多格便笺：归一化网格列/行范围；与拓扑变化不符时布局会丢弃。 */
+	gridSpan?: StickyGridSpan;
 	color?: StickyColorId;
 	yamlVisible?: boolean;
 	/** Markdown 便笺的阅读 / 编辑视图（`preview` | `source`）。 */
@@ -37,6 +50,8 @@ export interface StickyWorkspace {
 	id: string;
 	name: string;
 	windows: SerializedStickyWindow[];
+	/** 最近一次写入该便笺工作区快照的时间（毫秒时间戳）。 */
+	updatedAt?: number;
 }
 
 export interface WorkspacesFile {
@@ -47,12 +62,24 @@ export interface WorkspacesFile {
 
 export const VIEW_STICKY_NOTE_LIST = 'colorful-sticky-notes-list';
 
-/** 便笺列表排序方式（时间均为 vault 文件 stat）。 */
-export type NoteListSort = 'ctime-desc' | 'ctime-asc' | 'mtime-desc' | 'mtime-asc';
+/** 便笺列表排序方式（时间均为 vault 文件 stat；按文件名称时为 `TFile.basename`，含扩展名，`localeCompare` 带 numeric）。 */
+export type NoteListSort =
+	| 'ctime-desc'
+	| 'ctime-asc'
+	| 'mtime-desc'
+	| 'mtime-asc'
+	| 'basename-asc'
+	| 'basename-desc';
 
 /** 便笺列表首次打开时的挂载位置。 */
 export type NoteListOpenLocation = 'left-sidebar' | 'right-sidebar' | 'new-tab';
 
+/** 便笺头部「+」从当前窗口旁新建时，优先出现在源窗口的哪一侧（空间不足时自动换到另一侧）。 */
+export type HeaderNewStickyAdjacentSide = 'left' | 'right';
+
 /** 便笺列表：按当前是否已打开浮动便笺窗口筛选。 */
 export type NoteListFloatOpenFilter = 'all' | 'open' | 'closed';
+
+/** 便笺列表：按 frontmatter `colorful-sticky-archived` 筛选。 */
+export type NoteListArchiveFilter = 'all' | 'unarchived' | 'archived';
 

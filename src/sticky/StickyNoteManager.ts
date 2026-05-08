@@ -1,18 +1,27 @@
 import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian';
+import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
-import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
+import type {
+	FloatingBounds,
+	SerializedStickyWindow,
+	StickyColorId,
+	StickyGridSpan,
+	StickyWorkspace,
+	WorkspacesFile
+} from '../types';
 import {
 	getStickyBgColorFromMetadataCache,
 	parseStickyBgColorFromMarkdownSource,
 	resolveStickyBgColorForFile
 } from '../utils/sticky-bg-from-file';
 import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
+import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
 import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
 import { StickyNotePopover } from './StickyNotePopover';
 
-/** 批量恢复：外壳已挂载，待 setViewState；无会话色时已在创建前解析 YAML 色。 */
+/** ?????????????????????? setViewState????????????????????????????? YAML ?????? */
 type PreparedExistingStickyOpen = {
 	pop: StickyNotePopover;
 	file: TFile;
@@ -27,8 +36,13 @@ const FM_ID_KEY = 'colorful-sticky-id';
 const FM_ARCHIVED_KEY = 'colorful-sticky-archived';
 const STICKY_EDGE_GAP_PX = 5;
 const STICKY_TOP_ALIGN_SNAP_PX = 10;
+const STICKY_BOTTOM_ALIGN_SNAP_PX = 10;
+const GRID_LAYOUT_ITERATIONS = 4;
+/** ??????/???????????????????????????????????????????????????? */
+const GRID_FALLBACK_MIN_W = 280;
+const GRID_FALLBACK_MIN_H = 200;
 
-/** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
+/** ?????????????????????? obsidian ??????????????? `App` ?????? `commands`??? */
 function executeCommandById(app: App, commandId: string): boolean {
 	const withCommands = app as unknown as {
 		commands?: { executeCommandById: (id: string) => boolean };
@@ -38,47 +52,57 @@ function executeCommandById(app: App, commandId: string): boolean {
 
 export class StickyNoteManager {
 	private readonly popovers = new Map<string, StickyNotePopover>();
-	/** 绑定图：无向边（吸附后建立），用于连带移动。 */
+	/** ????????????????????????????????????????????? */
 	private readonly bindings = new Map<string, Set<string>>();
-	/** 恢复工作区时暂存的序列化绑定（等目标窗口创建后再连线）。 */
+	private readonly stickyGridSpan = new Map<string, StickyGridSpan>();
+	/** ??????????????????????????????????????????????????????????? */
 	private readonly pendingBindings = new Map<string, string[]>();
 	private dragSession:
 		| {
-				id: string;
-				groupIds: string[];
-				lastPrimary: FloatingBounds;
-				ctrlDetach: boolean;
-				/** 同行吸附时的高度参照（被吸附侧），非发起拖动便笺的高度。 */
-				snapHeightSourceId: string | null;
-		  }
+			id: string;
+			groupIds: string[];
+			lastPrimary: FloatingBounds;
+			ctrlDetach: boolean;
+			/**
+			 * Ctrl-trigger + grouped + detach at drag start: keep binding graph until drag end;
+			 * unbind only if released outside snap reach of bound peers.
+			 */
+			deferBindingClear?: boolean;
+			/** ???????????????????????????????????????????????????????? */
+			snapHeightSourceId: string | null;
+			/** ??????????????????????????????????? */
+			snapWidthSourceId: string | null;
+		}
 		| null = null;
 	private resizeSession:
 		| {
 			id: string;
 			groupIds: string[];
+			/** ??????? Ctrl ???????????????????????????????????????? */
+			ctrlSpanningResize: boolean;
 		}
 		| null = null;
 	private readonly mount = document.body;
-	/** 便笺间 z-index 微调，单调递增即可。 */
+	/** ????? z-index ??????????????????? */
 	private stickyZStackSeq = 0;
-	/** “隐藏当前便笺”产生的手动隐藏集合（独立于模式）。 */
+	/** ??????????????????????????????????????????????????????????? */
 	private readonly manualHiddenIds = new Set<string>();
-	/** “隐藏其他便笺”模式：仅显示当前，其它隐藏。 */
+	/** ?????????????????????????????????????????????????? */
 	private hideOthersMode = false;
-	/** “全部隐藏便笺”模式：全部隐藏。 */
+	/** ??????????????????????????????????????? */
 	private hideAllMode = false;
 	private activePopoverId: string | null = null;
-	/** 上一次 bringStickyToFront 命中的 id，用于区分“重新激活隐藏便笺” vs “同一便笺重复激活”。 */
+	/** ????? bringStickyToFront ??????? id???????????????????????????????????? vs ?????????????????????? */
 	private lastActivatedPopoverId: string | null = null;
 	private saveTimer: number | null = null;
-	/** 等待内置删除命令完成时挂起的 vault 监听，避免重复注册。 */
+	/** ????????????????????????????????? vault ????????????????????? */
 	private pendingDeleteListener: EventRef | null = null;
 	private pendingDeleteSafetyTimer: number | null = null;
 
 	workspaces: WorkspacesFile = {
 		version: 1,
 		activeWorkspaceId: 'default',
-		workspaces: [{ id: 'default', name: '默认工作区', windows: [] }]
+		workspaces: [{ id: 'default', name: t('DEFAULT_WORKSPACE_NAME'), windows: [], updatedAt: Date.now() }]
 	};
 
 	constructor(
@@ -86,7 +110,7 @@ export class StickyNoteManager {
 		private readonly app: App
 	) { }
 
-	/** 当前已打开浮动便笺对应的笔记路径（用于便笺列表「已打开 / 未打开」筛选）。 */
+	/** ??????????????????????????????????????????????????? / ????????????????????? */
 	getOpenStickyNotePaths(): ReadonlySet<string> {
 		const s = new Set<string>();
 		for (const pop of this.popovers.values()) {
@@ -107,8 +131,8 @@ export class StickyNoteManager {
 	}
 
 	/**
-	 * 关闭当前已打开的所有便笺窗口。
-	 * @param keepWorkspaceSession true 时仅关闭窗口，不覆盖工作区已保存的 windows（用于“下次恢复上次工作区”）。
+	 * ??????????????????????????????????
+	 * @param keepWorkspaceSession true ????????????????????????????????????? windows??????????????????????????????
 	 */
 	closeAllOpenStickyWindows(keepWorkspaceSession = false): void {
 		if (!keepWorkspaceSession) {
@@ -157,14 +181,14 @@ export class StickyNoteManager {
 		}
 		if (activeId) this.activePopoverId = activeId;
 
-		/* 若用户从面板切换激活到一个隐藏便笺：自动取消其隐藏。 */
+		/* ?????????????????????????????????????????????????????????? */
 		const switchedToDifferent = activeId !== null && activeId !== this.lastActivatedPopoverId;
 		if (activeId && switchedToDifferent && pop.isHidden()) {
-			/* 取消手动隐藏该便笺 */
+			/* ??????????????????? */
 			this.manualHiddenIds.delete(activeId);
-			/* 若处于“全部隐藏”，必须退出，否则永远不可见 */
+			/* ???????????????????????????????????????????????? */
 			if (this.hideAllMode) this.hideAllMode = false;
-			/* “隐藏其他”模式下无需退出：切换 active 后它会自然变成“唯一显示”。 */
+			/* ??????????????????????????????????????? active ??????????????????????????????????? */
 			this.applyHiddenStateToAll();
 		}
 
@@ -190,7 +214,7 @@ export class StickyNoteManager {
 		return next;
 	}
 
-	/** “隐藏当前”：切换仅隐藏当前便笺（其它显示）。 */
+	/** ?????????????????????????????????????????????????????? */
 	toggleHideCurrentSticky(): void {
 		const id = this.ensureActivePopoverId();
 		if (!id) return;
@@ -199,7 +223,7 @@ export class StickyNoteManager {
 
 	private hideCurrentStickyById(id: string): void {
 		if (!this.popovers.has(id)) return;
-		/* 规则：隐藏当前为“单独隐藏”，进入前先清空其它隐藏模式，避免叠加导致难以理解。 */
+		/* ????????????????????????????????????????????????????????????????????????????????????????? */
 		this.hideAllMode = false;
 		this.hideOthersMode = false;
 		this.manualHiddenIds.add(id);
@@ -207,7 +231,7 @@ export class StickyNoteManager {
 		this.popovers.get(id)?.setActiveHighlight(false);
 	}
 
-	/** 仅隐藏其他便笺（固定动作，不做切换）。 */
+	/** ????????????????????????????????????????? */
 	hideOthersSticky(): void {
 		const id = this.ensureActivePopoverId();
 		if (!id) return;
@@ -216,9 +240,9 @@ export class StickyNoteManager {
 
 	private hideOthersRelativeToId(id: string): void {
 		if (!this.popovers.has(id)) return;
-		/* 以指定便笺作为“当前显示”的参照对象，避免与全局 active 竞态。 */
+		/* ????????????????????????????????????????????????? active ???????? */
 		this.activePopoverId = id;
-		/* 规则：隐藏其他为独占模式，进入前清空其它隐藏来源。 */
+		/* ?????????????????????????????????????????????????????? */
 		this.hideAllMode = false;
 		this.manualHiddenIds.clear();
 		this.hideOthersMode = true;
@@ -226,7 +250,7 @@ export class StickyNoteManager {
 		this.popovers.get(id)?.setActiveHighlight(true);
 	}
 
-	/** 显示其他便笺（仅退出“隐藏其他”模式）。 */
+	/** ????????????????????????????????????????????? */
 	showOthersSticky(): void {
 		this.hideOthersMode = false;
 		this.hideAllMode = false;
@@ -239,7 +263,7 @@ export class StickyNoteManager {
 	}
 
 	hideAllStickies(): void {
-		/* 规则：全部隐藏为独占模式，进入前清空其它隐藏来源。 */
+		/* ??????????????????????????????????????????????????????? */
 		this.hideOthersMode = false;
 		this.manualHiddenIds.clear();
 		this.hideAllMode = true;
@@ -272,7 +296,7 @@ export class StickyNoteManager {
 		else this.hideAllStickies();
 	}
 
-	/** 统一合并“隐藏来源”并写回 DOM。 */
+	/** ???????????????????????????? DOM??? */
 	private applyHiddenStateToAll(): void {
 		const activeId = this.activePopoverId;
 		for (const [id, pop] of this.popovers) {
@@ -281,7 +305,7 @@ export class StickyNoteManager {
 				this.manualHiddenIds.has(id) ||
 				(this.hideOthersMode && activeId !== null && id !== activeId);
 			pop.setHidden(hidden);
-			/* 隐藏便笺后移除激活状态（高亮/细微提升等）。 */
+			/* ????????????????????????????/????????????? */
 			if (hidden) pop.setActiveHighlight(false);
 		}
 	}
@@ -304,7 +328,7 @@ export class StickyNoteManager {
 		return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
 	}
 
-	/** 自动补齐便笺 frontmatter：id/archived/bg。 */
+	/** ?????????? frontmatter??id/archived/bg??? */
 	private async ensureStickyFrontmatterDefaults(
 		file: TFile,
 		opts?: { preferredId?: string; preferredColor?: StickyColorId }
@@ -351,15 +375,15 @@ export class StickyNoteManager {
 		return null;
 	}
 
-	private persistOpenWindows(): void {
-		const ws = this.activeWorkspace();
-		if (!ws) return;
+	/** ???????????????????????????????????????????????????????????????????? */
+	serializeOpenWindowsSnapshot(): SerializedStickyWindow[] {
 		const ser: SerializedStickyWindow[] = [];
 		for (const [id, pop] of this.popovers) {
 			const view = pop.leaf?.view;
 			const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
 			if (!file) continue;
 			const bounds = pop.getBounds();
+			const popColor = pop.getColor();
 			const row: SerializedStickyWindow = {
 				id,
 				path: file.path,
@@ -368,24 +392,83 @@ export class StickyNoteManager {
 				collapsed: pop.getCollapsed(),
 				hidden: pop.isHidden(),
 				stretched: pop.isStretched(),
-				bindings: this.getBindingsForId(id),
-				color: pop.getColor(),
+				bindings: this.getAllBindingsForId(id),
 				yamlVisible: pop.getYamlVisible()
 			};
+			if (popColor != null) row.color = popColor;
+			const gs = this.stickyGridSpan.get(id);
+			if (gs) row.gridSpan = { ...gs };
 			if (file.extension === 'md') {
 				row.markdownMode = pop.getMarkdownMode();
 			}
 			ser.push(row);
 		}
-		ws.windows = ser;
+		return ser;
+	}
+
+	/**
+	 * ??????????????????????????????????????????????????????????
+	 * ????????????? id ??????????????????? `persistOpenWindows` ????????????????????
+	 */
+	async createWorkspaceFromCurrentLayout(name: string): Promise<void> {
+		this.persistOpenWindows();
+		const trimmed = name.trim();
+		const finalName = trimmed || `???????? ${this.workspaces.workspaces.length + 1}`;
+		const snapshot = this.serializeOpenWindowsSnapshot();
+		const id = `ws_${Date.now().toString(36)}`;
+		const nw: StickyWorkspace = {
+			id,
+			name: finalName,
+			windows: snapshot,
+			updatedAt: Date.now()
+		};
+		this.workspaces.workspaces.push(nw);
+		this.workspaces.activeWorkspaceId = id;
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+	}
+
+	/**
+	 * ??????????????????????????????????????????????????????????????????????????????????
+	 */
+	async switchWorkspaceAndRestore(wsId: string): Promise<void> {
+		if (!this.workspaces.workspaces.some(w => w.id === wsId)) return;
+		this.persistOpenWindows();
+		this.workspaces.activeWorkspaceId = wsId;
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+		this.closeAllOpenStickyWindows(true);
+		await this.restoreWorkspaceWindows();
+	}
+
+	async renameWorkspace(wsId: string, name: string): Promise<void> {
+		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
+		if (!ws) return;
+		const next = name.trim();
+		if (!next) {
+			new Notice(t('NOTICE_NAME_EMPTY'));
+			return;
+		}
+		ws.name = next;
+		ws.updatedAt = Date.now();
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+		new Notice(t('NOTICE_WORKSPACE_RENAMED'));
+	}
+
+	private persistOpenWindows(): void {
+		const ws = this.activeWorkspace();
+		if (!ws) return;
+		ws.windows = this.serializeOpenWindowsSnapshot();
+		ws.updatedAt = Date.now();
 		this.scheduleSaveWorkspaces();
 	}
 
-	/** 新建便笺落在当前便笺左侧，间隔 10px；左侧溢出则尝试贴到右侧 */
+	/** ???????????????????????????????? gap??????????????????????????? */
 	private static readonly NEW_STICKY_GAP_PX = 5;
 	private static readonly VIEW_MARGIN = 12;
 
-	private offsetBoundsFromSource(source: FloatingBounds): FloatingBounds {
+	private offsetBoundsFromSource(
+		source: FloatingBounds,
+		prefer: 'left' | 'right'
+	): FloatingBounds {
 		const gap = StickyNoteManager.NEW_STICKY_GAP_PX;
 		const m = StickyNoteManager.VIEW_MARGIN;
 		const w = source.width;
@@ -393,17 +476,27 @@ export class StickyNoteManager {
 		const maxLeft = Math.max(0, window.innerWidth - w);
 		const maxTop = Math.max(0, window.innerHeight - h);
 
-		let left = source.left - w - gap;
-		let top = source.top;
+		let left: number;
+		const top = source.top;
 
-		if (left < m) {
-			const rightOf = source.left + source.width + gap;
-			if (rightOf <= maxLeft) left = rightOf;
-			else left = Math.min(maxLeft, Math.max(m, left));
+		if (prefer === 'left') {
+			left = source.left - w - gap;
+			if (left < m) {
+				const rightOf = source.left + source.width + gap;
+				if (rightOf <= maxLeft) left = rightOf;
+				else left = Math.min(maxLeft, Math.max(m, left));
+			}
+		} else {
+			left = source.left + source.width + gap;
+			if (left > maxLeft) {
+				const leftOf = source.left - w - gap;
+				if (leftOf >= m) left = leftOf;
+				else left = Math.min(maxLeft, Math.max(m, left));
+			}
 		}
-		left = Math.min(maxLeft, Math.max(m, left));
-		top = Math.min(maxTop, Math.max(m, top));
-		return { left, top, width: w, height: h };
+		const clampedLeft = Math.min(maxLeft, Math.max(m, left));
+		const clampedTop = Math.min(maxTop, Math.max(m, top));
+		return { left: clampedLeft, top: clampedTop, width: w, height: h };
 	}
 
 	private getDefaultBounds(): FloatingBounds {
@@ -428,7 +521,7 @@ export class StickyNoteManager {
 				return;
 			}
 		}
-		/* 勿传 color: 'default'，否则会覆盖 YAML 中的 colorful-sticky-bg。 */
+		/* ???? color: 'default'????????????? YAML ???? colorful-sticky-bg??? */
 		await this.openExistingSticky({
 			id: this.newId(),
 			path: file.path,
@@ -465,7 +558,7 @@ export class StickyNoteManager {
 			(this.plugin.settings.filenameTemplate || '').trim() || 'YYYY/YYYY-MM-DD';
 		const relativeFormatted = formatStickyNoteRelativePath(tmpl);
 		if (relativeFormatted === 'invalid-format') {
-			new Notice('便笺文件名格式无效，请在设置中检查 Moment 格式');
+			new Notice(t('NOTICE_INVALID_FILENAME_TEMPLATE'));
 			return;
 		}
 		let relativeNoExt = relativeFormatted;
@@ -482,8 +575,8 @@ export class StickyNoteManager {
 			initial?.color ?? (sourcePopover ? sourcePopover.getColor() : undefined) ?? fallbackBg;
 
 		/**
-		 * 空白新建且需写入背景时，直接把 YAML 放进首次 create。
-		 * 含「从便笺旁新建」：若仍依赖随后 processFrontMatter，易与刚打开的编辑区竞态，出现空白闪屏或覆盖已输入内容。
+		 * ??????????????????????????????????????? YAML ???????? create???
+		 * ???????????????????????????????? processFrontMatter???????????????????????????????????????????????????????????????????
 		 */
 		let bodyForCreate = body;
 		if (resolvedNewColor !== 'default') {
@@ -502,7 +595,7 @@ export class StickyNoteManager {
 			if (this.plugin.listPrioritizeStickyPath === normalizedPath) {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
-			new Notice('无法创建便笺文件');
+			new Notice(t('NOTICE_CANNOT_CREATE_STICKY_FILE'));
 			return;
 		}
 
@@ -511,11 +604,11 @@ export class StickyNoteManager {
 			if (this.plugin.listPrioritizeStickyPath === normalizedPath) {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
-			new Notice('无法创建便笺文件');
+			new Notice(t('NOTICE_CANNOT_CREATE_STICKY_FILE'));
 			return;
 		}
 
-		/* `create` 已同步触发列表的结构防抖；取消后由下方延迟刷新统一重绘，避免与 openFile 争抢主线程（列表嵌入预览极重） */
+		/* `create` ??????????????????????????????????????????????????????????????????? openFile ???????????????????????????????? */
 		this.plugin.cancelStickyListDebouncedRefresh();
 
 		const id = initial?.id ?? this.newId();
@@ -527,7 +620,10 @@ export class StickyNoteManager {
 		if (initial?.bounds) {
 			bounds = initial.bounds;
 		} else if (sourcePopover) {
-			bounds = this.offsetBoundsFromSource(sourcePopover.getBounds());
+			bounds = this.offsetBoundsFromSource(
+				sourcePopover.getBounds(),
+				this.plugin.settings.headerNewStickyAdjacentSide
+			);
 		} else {
 			bounds = this.getDefaultBounds();
 		}
@@ -550,11 +646,11 @@ export class StickyNoteManager {
 		try {
 			await this.app.vault.cachedRead(f);
 		} catch {
-			/* 预热缓存失败时仍尝试打开 */
+			/* ??????????????????????? */
 		}
 		await pop.openFile(f);
 
-		/** 与新建 Markdown 叶 `loadIfDeferred` 错开，降低「列表已打开时新建便笺」的卡顿 */
+		/** ?????? Markdown ? `loadIfDeferred` ?????????????????????????????????????????? */
 		const LIST_REFRESH_AFTER_NEW_STICKY_MS = 800;
 		const scheduleListRefreshSoon = (): void => {
 			window.setTimeout(() => {
@@ -585,7 +681,7 @@ export class StickyNoteManager {
 			if (yamlUi) pop.setColor(yamlUi);
 			scheduleListRefreshSoon();
 		}
-		/* 统一补齐 frontmatter 属性（id / archived / bg）。 */
+		/* ?????? frontmatter ???????id / archived / bg????? */
 		await this.ensureStickyFrontmatterDefaults(f, { preferredId: id, preferredColor: color }).catch(() => undefined);
 		this.bringStickyToFront(pop);
 		this.persistOpenWindows();
@@ -593,7 +689,7 @@ export class StickyNoteManager {
 	}
 
 	/**
-	 * `relativeNoExt` 为相对便笺根目录的路径（无 .md），可含子文件夹，如 `2026/2026-05-07`。
+	 * `relativeNoExt` ???????????????????????? .md???????????????? `2026/2026-05-07`???
 	 */
 	private async pathForStickyRelative(rootFolder: string, relativeNoExt: string): Promise<string> {
 		const segments = relativeNoExt
@@ -632,7 +728,7 @@ export class StickyNoteManager {
 		id: string,
 		extra: {
 			bounds: FloatingBounds;
-			initialColor: StickyColorId;
+			initialColor: StickyColorId | null;
 			initialCollapsed: boolean;
 			initialYamlVisible: boolean;
 			defaultMarkdownMode?: 'preview' | 'source';
@@ -666,6 +762,7 @@ export class StickyNoteManager {
 			onHideOthersSticky: () => void this.hideOthersRelativeToId(id),
 			onShowOthersSticky: () => void this.showOthersSticky(),
 			onShowAllStickies: () => void this.showAllStickies(),
+			onToggleArchiveCurrentSticky: () => void this.toggleArchiveCurrentStickyForPopover(id),
 			onActivate: () => this.bringStickyToFrontById(id),
 			onDragStart: e => this.handleDragStart(id, e),
 			onDragMove: (next, e) => this.handleDragMove(id, next, e),
@@ -683,7 +780,7 @@ export class StickyNoteManager {
 		await this.setStickyBackgroundColorForFile(file, color);
 	}
 
-	/** 写入 frontmatter 并同步已打开的便笺窗口颜色（便笺列表等也可调用）。 */
+	/** ?????? frontmatter ?????????????????????????????????????????????? */
 	async setStickyBackgroundColorForFile(file: TFile, color: StickyColorId): Promise<void> {
 		await this.app.fileManager.processFrontMatter(file, fm => {
 			(fm as Record<string, unknown>)[FM_COLOR_KEY] = color;
@@ -696,7 +793,27 @@ export class StickyNoteManager {
 		this.persistOpenWindows();
 	}
 
-	/** 移入库回收站并关闭对应便笺窗口（若有）。 */
+	/** ?????? frontmatter `colorful-sticky-archived`????????????????????? */
+	async setStickyArchivedForFile(file: TFile, archived: boolean): Promise<void> {
+		await this.app.fileManager.processFrontMatter(file, fm => {
+			(fm as Record<string, unknown>)[FM_ARCHIVED_KEY] = archived;
+		});
+	}
+
+	private async toggleArchiveCurrentStickyForPopover(popoverId: string): Promise<void> {
+		const pop = this.popovers.get(popoverId);
+		const file =
+			pop?.leaf?.view && 'file' in pop.leaf.view
+				? (pop.leaf.view as { file?: TFile }).file
+				: undefined;
+		if (!(file instanceof TFile) || file.extension !== 'md') return;
+		const cur = await resolveStickyArchivedForFile(this.app, file);
+		const nextArchived = !cur;
+		await this.setStickyArchivedForFile(file, nextArchived);
+		if (nextArchived) this.closeSticky(popoverId);
+	}
+
+	/** ?????????????????????????????????????????? */
 	async trashStickyNoteFile(file: TFile): Promise<void> {
 		const ids: string[] = [];
 		for (const [id, pop] of this.popovers) {
@@ -708,7 +825,7 @@ export class StickyNoteManager {
 		try {
 			await this.app.vault.trash(file, false);
 		} catch {
-			new Notice('无法删除该便笺');
+			new Notice(t('NOTICE_CANNOT_DELETE_STICKY'));
 		}
 	}
 
@@ -746,7 +863,7 @@ export class StickyNoteManager {
 				const ok = executeCommandById(this.app, 'app:delete-file');
 				if (!ok) {
 					this.clearPendingDeleteListener();
-					new Notice('无法执行「删除当前笔记」命令');
+					new Notice(t('NOTICE_CANNOT_DELETE_ACTIVE_NOTE_COMMAND'));
 					return;
 				}
 				this.pendingDeleteSafetyTimer = window.setTimeout(() => this.clearPendingDeleteListener(), 120_000);
@@ -762,33 +879,35 @@ export class StickyNoteManager {
 		if (!pop) return;
 		pop.destroy();
 		this.popovers.delete(id);
+		this.stickyGridSpan.delete(id);
 		this.persistOpenWindows();
 		this.notifyStickyListOpenIndicators();
 	}
 
-	/** 路径是否在「便笺文件夹」下（含根目录下同名 .md）。 */
+	/** ??????????????????????????????????????? .md????? */
 	private isPathUnderStickyFolder(filePath: string): boolean {
 		const root = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 		const p = normalizePath(filePath);
 		return p === root || p.startsWith(`${root}/`);
 	}
 
-	/** 关闭便笺 DOM，并在需要时将已判定为空白的文件移入回收站。 */
+	/** ???????? DOM???????????????????????????????????????????????? */
 	private finalizeUserCloseSticky(id: string, file: TFile | undefined, trashIfBlank: boolean): void {
 		const pop = this.popovers.get(id);
 		if (!pop) return;
 		pop.destroy();
 		this.popovers.delete(id);
+		this.stickyGridSpan.delete(id);
 		this.persistOpenWindows();
 		this.notifyStickyListOpenIndicators();
 		if (!trashIfBlank || !(file instanceof TFile)) return;
 		if (!this.app.vault.getAbstractFileByPath(file.path)) return;
 		void this.app.vault.trash(file, false).catch(() => {
-			new Notice('无法自动删除空白便笺');
+			new Notice(t('NOTICE_CANNOT_AUTO_DELETE_BLANK_STICKY'));
 		});
 	}
 
-	/** 用户点击关闭：非空白直接关；空白则视设置弹出确认或立即删除。 */
+	/** ????????????????????????????????????????????????????????????????????? */
 	private async handleStickyCloseRequest(id: string): Promise<void> {
 		const pop = this.popovers.get(id);
 		if (!pop) return;
@@ -806,7 +925,7 @@ export class StickyNoteManager {
 				const raw = await this.app.vault.cachedRead(file);
 				trashIfBlank = isBlankStickyMarkdown(raw);
 			} catch {
-				/* 读取失败则不自动删除 */
+				/* ????????????????????? */
 			}
 		}
 
@@ -828,25 +947,27 @@ export class StickyNoteManager {
 		this.finalizeUserCloseSticky(id, file, true);
 	}
 
-	/** 让便笺外壳先完成一帧绘制，再执行叶视图 setViewState / 读盘等重活。 */
+	/** ?????????????????????????????????????? setViewState / ????????????? */
 	private yieldForStickyChromePaint(): Promise<void> {
 		return new Promise(resolve => requestAnimationFrame(() => resolve()));
 	}
 
-	/** 创建 DOM/叶视图占位，不打开文件。无会话 `color` 时先解析笔记色再挂载，避免首帧默认色闪烁。 */
+	/** ???? DOM/????????????????????????????? `color` ??????????????????????????????????????????????? */
 	private async prepareExistingStickyShell(
 		serial: SerializedStickyWindow
 	): Promise<PreparedExistingStickyOpen | null> {
 		const file = this.resolveStickyFileForSerialized(serial);
 		if (!(file instanceof TFile)) {
-			new Notice(`找不到便笺：${serial.path}`);
+			new Notice(`???????????${serial.path}`);
 			return null;
 		}
 		const id = serial.id || this.newId();
 		const b = serial.bounds ?? this.getDefaultBounds();
 		const savedColor = serial.color;
-		const initialColor: StickyColorId =
-			savedColor ?? (await resolveStickyBgColorForFile(this.app, file)) ?? 'default';
+		const fromYaml = await resolveStickyBgColorForFile(this.app, file);
+		/* ?????????????? `color` ???? YAML ????????????????????????????????????? `default` ????????? */
+		const initialColor: StickyColorId | null =
+			savedColor !== undefined ? savedColor : fromYaml;
 		const restoredMdMode: 'preview' | 'source' | undefined =
 			file.extension === 'md' &&
 				(serial.markdownMode === 'preview' || serial.markdownMode === 'source')
@@ -861,6 +982,9 @@ export class StickyNoteManager {
 			defaultMarkdownMode: restoredMdMode
 		});
 		this.popovers.set(id, pop);
+		if (this.isValidPersistedGridSpan(serial.gridSpan)) {
+			this.stickyGridSpan.set(id, serial.gridSpan!);
+		}
 		if (Array.isArray(serial.bindings) && serial.bindings.length > 0) {
 			this.pendingBindings.set(
 				id,
@@ -886,11 +1010,11 @@ export class StickyNoteManager {
 		const { pop, file, bounds: b, savedColor, hidden, stretched } = prepared;
 		await pop.openFile(file, { workspaceActive: opts.workspaceActive });
 		pop.setBounds(b);
-		/* 恢复会话态全高时勿按视口左右贴边，否则破坏工作区里保存的横向位置与绑定关系 */
+		/* ??????????????????????????????????????????????????????????????????? */
 		pop.setStretched(stretched, { snapHorizontalToViewport: false });
 		pop.setHidden(hidden);
 		if (savedColor !== undefined) {
-			/* 工作区里记录了便笺颜色，但笔记 frontmatter 无 `colorful-sticky-bg` 时写回，避免仅会话态有颜色。 */
+			/* ???????????????????????????? frontmatter ??? `colorful-sticky-bg` ?????????????????????????????????? */
 			const yamlColor =
 				getStickyBgColorFromMetadataCache(this.app, file) ??
 				(await resolveStickyBgColorForFile(this.app, file));
@@ -927,7 +1051,7 @@ export class StickyNoteManager {
 			await Promise.all(pending.map(w => this.prepareExistingStickyShell(w)))
 		).filter((p): p is PreparedExistingStickyOpen => p !== null);
 		if (preparedList.length === 0) return;
-		/* 所有外壳同一帧后再并行加载内容，且不以 active 叶抢主编辑器焦点。 */
+		/* ???????????????????????????????????? active ????????????????????? */
 		await this.yieldForStickyChromePaint();
 		await Promise.all(
 			preparedList.map(p => this.finalizeExistingStickyOpen(p, { workspaceActive: false }))
@@ -962,14 +1086,14 @@ export class StickyNoteManager {
 		}
 	}
 
-	/** 仅同行（横向）绑定参与联动；纵向历史边不入链。 */
-	private getBindingsForId(id: string): string[] {
+	/** ??????????????????????????????????????????????? */
+	private getAllBindingsForId(id: string): string[] {
 		const set = this.bindings.get(id);
 		if (!set || set.size === 0) return [];
-		return [...set].filter(other => this.inferBindingAxis(id, other) === 'x');
+		return [...set].filter(other => this.popovers.has(other));
 	}
 
-	/** 仅同步折叠/拉伸状态，不排版、不落盘。返回是否有多窗绑定需要后续 repair。 */
+	/** ?????????/????????????????????????????????????????????????????????? repair??? */
 	private applyBindingPeersChromeStateOnly(sourceId: string): boolean {
 		const src = this.popovers.get(sourceId);
 		if (!src) return false;
@@ -992,12 +1116,12 @@ export class StickyNoteManager {
 	}
 
 	/**
-	 * 将 source 便笺的折叠/全高拉伸状态同步到同行绑定组内其它便笺，并可选写入工作区（含 bindings）。
-	 * 拉伸同步后不贴视口左右缘（保持同行 left），并在末尾按绑定链重整位置。
+	 * ?? source ?????????/??????????????????????????????????????????????????????????????? bindings?????
+	 * ???????????????????????????? left?????????????????????????????????
 	 */
 	private syncBindingPeersChrome(sourceId: string, opts?: { persist?: boolean }): void {
 		if (!this.applyBindingPeersChromeStateOnly(sourceId)) return;
-		/* 与便笺内双 rAF 折叠布局对齐后再修绑定位置，否则物理占位仍是旧边界 */
+		/* ????????? rAF ?????????????????????????????????????????????? */
 		window.requestAnimationFrame(() => {
 			window.requestAnimationFrame(() => {
 				this.repairBindingGroupRowAfterChromeSync(sourceId);
@@ -1008,25 +1132,29 @@ export class StickyNoteManager {
 		});
 	}
 
-	/** 同行绑定在折叠/拉伸同步后：以最左便笺为锚做一次间距与顶/高对齐（含发起者贴边后链上错位的情况）。 */
+	/** ?????????????/??????????????????????????????????????????????????????????? */
 	private repairBindingGroupRowAfterChromeSync(sourceId: string): void {
+		/* Dragging: only the title bar moves the active sticky; defer grid layout to drag end. */
+		if (this.dragSession) return;
 		const group = this.resolveBindingGroupIds(sourceId);
 		if (group.length <= 1) return;
-		let leftmostId = group[0]!;
+		let anchorId = group[0]!;
 		let bestL = Number.POSITIVE_INFINITY;
+		let bestT = Number.POSITIVE_INFINITY;
 		for (const gid of group) {
 			const pop = this.popovers.get(gid);
 			if (!pop) continue;
-			const l = pop.getBounds().left;
-			if (l < bestL) {
-				bestL = l;
-				leftmostId = gid;
+			const phy = pop.getPhysicalBounds();
+			if (phy.left < bestL || (phy.left === bestL && phy.top < bestT)) {
+				bestL = phy.left;
+				bestT = phy.top;
+				anchorId = gid;
 			}
 		}
-		this.repairBindingAlignmentNear(leftmostId, sourceId);
+		this.layoutBindingGroupAsGrid(anchorId, { heightSourceId: sourceId });
 	}
 
-	/** 恢复工作区后统一各绑定组的折叠/拉伸，并以靠左便笺为准，最后落盘。 */
+	/** ?????????????????????????????/?????????????????????????????? */
 	private syncAllBindingGroupsChromeAfterRestore(): void {
 		const seen = new Set<string>();
 		const repairAnchors: string[] = [];
@@ -1036,13 +1164,15 @@ export class StickyNoteManager {
 			for (const g of group) seen.add(g);
 			if (group.length <= 1) continue;
 			let anchorId = group[0]!;
-			let bestLeft = Number.POSITIVE_INFINITY;
+			let bestL = Number.POSITIVE_INFINITY;
+			let bestT = Number.POSITIVE_INFINITY;
 			for (const gid of group) {
 				const pop = this.popovers.get(gid);
 				if (!pop) continue;
-				const l = pop.getBounds().left;
-				if (l < bestLeft) {
-					bestLeft = l;
+				const phy = pop.getPhysicalBounds();
+				if (phy.left < bestL || (phy.left === bestL && phy.top < bestT)) {
+					bestL = phy.left;
+					bestT = phy.top;
 					anchorId = gid;
 				}
 			}
@@ -1092,8 +1222,8 @@ export class StickyNoteManager {
 	}
 
 	/**
-	 * 单轴限额（发起侧）：仅限制发起吸附的一侧在同轴只保留一个绑定，
-	 * 目标侧保留原有邻接，确保可形成相邻链式联动（A->B->C）。
+	 * ??????????????????????????????????????????????????????????
+	 * ????????????????????????????????????????????????A->B->C?????
 	 */
 	private bindPairWithAxis(a: string, b: string, axis: 'x' | 'y'): void {
 		if (a === b) return;
@@ -1119,6 +1249,7 @@ export class StickyNoteManager {
 			if (this.bindings.get(other)?.size === 0) this.bindings.delete(other);
 		}
 		this.bindings.delete(id);
+		this.stickyGridSpan.delete(id);
 	}
 
 	private applyPendingBindingsForId(id: string): void {
@@ -1126,8 +1257,8 @@ export class StickyNoteManager {
 		if (!wants || wants.length === 0) return;
 		for (const other of wants) {
 			if (!this.popovers.has(other)) continue;
-			if (this.inferBindingAxis(id, other) !== 'x') continue;
-			this.bindPairWithAxis(id, other, 'x');
+			/* ??????????????????????? bindPairWithAxis ????????????????????? */
+			this.bindPair(id, other);
 		}
 	}
 
@@ -1139,7 +1270,7 @@ export class StickyNoteManager {
 		while (q.length) {
 			const cur = q.shift()!;
 			out.push(cur);
-			for (const x of this.getBindingsForId(cur)) {
+			for (const x of this.getAllBindingsForId(cur)) {
 				if (seen.has(x)) continue;
 				if (!this.popovers.has(x)) continue;
 				seen.add(x);
@@ -1149,38 +1280,65 @@ export class StickyNoteManager {
 		return out;
 	}
 
+	/**
+	 * Auto: Ctrl = detach/solo drag.
+	 * None: Alt = detach.
+	 * Ctrl-trigger: ungrouped ? Alt only (detach); grouped ? Ctrl or Alt removes binding so Ctrl can mean snap when alone.
+	 */
+	private isDragDetachModifier(e: PointerEvent, dragId: string): boolean {
+		const mode = this.plugin.settings.stickyAssistAlignSnapMode;
+		if (mode === 'auto') return e.ctrlKey;
+		if (mode === 'none') return e.altKey;
+		const grouped = this.resolveBindingGroupIds(dragId).length > 1;
+		if (grouped) return e.ctrlKey || e.altKey;
+		return e.altKey;
+	}
+
+	private isAssistSnapEnabledThisMove(e: PointerEvent): boolean {
+		const mode = this.plugin.settings.stickyAssistAlignSnapMode;
+		if (mode === 'none') return false;
+		if (mode === 'auto') return true;
+		return e.ctrlKey;
+	}
+
 	private handleDragStart(id: string, e: PointerEvent): void {
 		if (!this.popovers.has(id)) return;
-		const ctrl = !!e.ctrlKey;
-		if (ctrl) this.unbindAll(id);
-		const groupIds = ctrl ? [id] : this.resolveBindingGroupIds(id);
+		const detach = this.isDragDetachModifier(e, id);
+		const grouped = this.resolveBindingGroupIds(id).length > 1;
+		const deferBindingClear =
+			this.plugin.settings.stickyAssistAlignSnapMode === 'ctrl' && grouped && detach;
+		if (detach && !deferBindingClear) this.unbindAll(id);
+		const groupIds = detach ? [id] : this.resolveBindingGroupIds(id);
 		const primary = this.popovers.get(id)?.getBounds();
 		if (!primary) return;
 		this.dragSession = {
 			id,
 			groupIds,
 			lastPrimary: primary,
-			ctrlDetach: ctrl,
-			snapHeightSourceId: null
+			ctrlDetach: detach,
+			deferBindingClear,
+			snapHeightSourceId: null,
+			snapWidthSourceId: null
 		};
 	}
 
 	private handleDragMove(id: string, next: FloatingBounds, e: PointerEvent): FloatingBounds {
 		const session = this.dragSession;
 		if (!session || session.id !== id) return next;
-		const ctrl = !!e.ctrlKey;
-		if (ctrl) {
+		const detach = this.isDragDetachModifier(e, id);
+		if (detach) {
 			if (!session.ctrlDetach) {
 				session.ctrlDetach = true;
-				this.unbindAll(id);
+				if (!session.deferBindingClear) this.unbindAll(id);
 				session.groupIds = [id];
 			}
 			session.snapHeightSourceId = null;
+			session.snapWidthSourceId = null;
 			session.lastPrimary = next;
 			return next;
 		}
 
-		const snapEnabled = this.plugin.settings.stickyAssistAlignSnap;
+		const snapEnabled = this.isAssistSnapEnabledThisMove(e);
 		const bindEnabled = this.plugin.settings.stickyAssistAlignBind;
 		const threshold = Math.max(
 			1,
@@ -1190,34 +1348,59 @@ export class StickyNoteManager {
 		let adjusted = next;
 		let snappedToId: string | null = null;
 		let snappedAxis: 'x' | 'y' | null = null;
+		let rowEdgeAlign: 'top' | 'bottom' | null = null;
 		if (snapEnabled) {
-			const res = this.computeSnapForBounds(id, next, threshold, session.groupIds);
+			const res = this.computeSnapForBounds(id, next, threshold, this.resolveBindingGroupIds(id));
 			adjusted = res.bounds;
 			snappedToId = res.snappedToId;
 			snappedAxis = res.snappedAxis;
+			rowEdgeAlign = res.rowEdgeAlign;
 		}
 
 		if (bindEnabled && snappedToId && snappedAxis === 'x') {
 			this.bindPairWithAxis(id, snappedToId, 'x');
-			/* 吸附过程中若产生新绑定，立刻扩展为整链，下一步位移按整组联动。 */
-			session.groupIds = this.resolveBindingGroupIds(id);
 			const anchor = this.popovers.get(snappedToId);
 			if (anchor) {
 				const anchorB = anchor.getBounds();
-				/* 同行：左右贴靠，顶对齐。 */
+				/* ??????????????????????? */
 				const leftCandidate = anchorB.left - STICKY_EDGE_GAP_PX - adjusted.width;
 				const rightCandidate = anchorB.left + anchorB.width + STICKY_EDGE_GAP_PX;
 				const useLeft =
 					Math.abs(adjusted.left - leftCandidate) <= Math.abs(adjusted.left - rightCandidate);
+				const rowTop =
+					rowEdgeAlign === 'bottom'
+						? anchorB.top + anchorB.height - adjusted.height
+						: anchorB.top;
 				adjusted = {
 					...adjusted,
 					left: useLeft ? leftCandidate : rightCandidate,
-					top: anchorB.top,
-					/* 高度跟随被吸附侧（绑定参照端），而非发起吸附的便笺 */
+					top: rowTop,
+					/* ??????????????????????????????????????????????? */
 					height: anchorB.height
 				};
 				session.snapHeightSourceId = snappedToId;
-				/* 参照端（被吸附便笺）的折叠/拉伸状态同步到本组，落盘在拖动结束统一写。 */
+				session.snapWidthSourceId = null;
+				/* ????????????????????????/?????????????????????????????????????????????????? */
+				this.syncBindingPeersChrome(snappedToId, { persist: false });
+			}
+		} else if (bindEnabled && snappedToId && snappedAxis === 'y') {
+			this.bindPairWithAxis(id, snappedToId, 'y');
+			const anchor = this.popovers.get(snappedToId);
+			if (anchor) {
+				const anchorB = anchor.getBounds();
+				const below =
+					adjusted.top + adjusted.height / 2 >= anchorB.top + anchorB.height / 2;
+				const nextTop = below
+					? anchorB.top + anchorB.height + STICKY_EDGE_GAP_PX
+					: anchorB.top - adjusted.height - STICKY_EDGE_GAP_PX;
+				adjusted = {
+					...adjusted,
+					left: anchorB.left,
+					width: anchorB.width,
+					top: nextTop
+				};
+				session.snapWidthSourceId = snappedToId;
+				session.snapHeightSourceId = null;
 				this.syncBindingPeersChrome(snappedToId, { persist: false });
 			}
 		}
@@ -1227,7 +1410,7 @@ export class StickyNoteManager {
 		let dx = desiredDx;
 		let dy = desiredDy;
 
-		/* 吸附后作为整体移动：边界按“整组外接框”夹紧，避免单窗撞边挤压队形。 */
+		/* ?????????????????????????????????????????????????????????????????????????? */
 		if (session.groupIds.length > 1 && (dx !== 0 || dy !== 0)) {
 			let minLeft = Number.POSITIVE_INFINITY;
 			let minTop = Number.POSITIVE_INFINITY;
@@ -1238,16 +1421,16 @@ export class StickyNoteManager {
 			for (const gid of session.groupIds) {
 				const pop = this.popovers.get(gid);
 				if (!pop) continue;
-				/* 折叠态 getBounds() 仍为逻辑展开高，夹紧外接框须用 DOM 实际占位，否则底部 maxDy 错误 */
+				/* ??????? getBounds() ???????????????????????????? DOM ?????????????????? maxDy ???? */
 				const b: FloatingBounds =
 					gid === id
 						? primaryPhy
 							? {
-									left: session.lastPrimary.left,
-									top: session.lastPrimary.top,
-									width: primaryPhy.width,
-									height: primaryPhy.height
-								}
+								left: session.lastPrimary.left,
+								top: session.lastPrimary.top,
+								width: primaryPhy.width,
+								height: primaryPhy.height
+							}
 							: session.lastPrimary
 						: pop.getPhysicalBounds();
 				minLeft = Math.min(minLeft, b.left);
@@ -1283,93 +1466,133 @@ export class StickyNoteManager {
 	}
 
 	private handleDragEnd(id: string, _e: PointerEvent): void {
-		if (this.dragSession?.id === id) {
-			const heightSrc = this.dragSession.snapHeightSourceId;
-			this.repairBindingAlignmentNear(id, heightSrc);
-			this.dragSession = null;
-			this.persistOpenWindows();
+		const session = this.dragSession;
+		if (session?.id !== id) return;
+		const heightSrc = session.snapHeightSourceId;
+		const widthSrc = session.snapWidthSourceId;
+		const threshold = Math.max(
+			1,
+			Math.min(50, Math.round(this.plugin.settings.stickyAssistAlignSnapThresholdPx))
+		);
+		const mult = Math.max(
+			1,
+			Math.min(8, Math.round(this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier * 10) / 10)
+		);
+		const unbindSnapThreshold = Math.max(1, Math.min(200, Math.round(threshold * mult)));
+		if (this.plugin.settings.stickyAssistAlignSnapMode === 'ctrl' && session.ctrlDetach) {
+			const hasPeers = (this.bindings.get(id)?.size ?? 0) > 0;
+			if (hasPeers && !this.isWithinSnapReachOfAnyBindingPeer(id, unbindSnapThreshold)) {
+				this.unbindAll(id);
+			}
 		}
+		this.layoutBindingGroupAsGrid(id, { heightSourceId: heightSrc, widthSourceId: widthSrc });
+		this.dragSession = null;
+		this.persistOpenWindows();
 	}
 
 	private handleResizeStart(id: string, _e: PointerEvent, _dir: unknown): void {
 		const groupIds = this.resolveBindingGroupIds(id);
-		this.resizeSession = { id, groupIds };
+		this.resizeSession = { id, groupIds, ctrlSpanningResize: false };
 	}
 
-	private handleResizeMove(id: string, next: FloatingBounds, _e: PointerEvent, _dir: unknown): FloatingBounds {
+	private handleResizeMove(id: string, next: FloatingBounds, e: PointerEvent, _dir: unknown): FloatingBounds {
 		const session = this.resizeSession;
 		if (!session || session.id !== id) return next;
 		if (session.groupIds.length <= 1) return next;
-		/**
-		 * 仅同行绑定：沿绑定边 BFS；顶对齐 + 同高，改宽时推挤邻窗 left（不同步宽度）。
-		 */
-		const visited = new Set<string>([id]);
-		const q: string[] = [id];
-		while (q.length > 0) {
-			const anchorId = q.shift()!;
-			const anchorBounds = anchorId === id ? next : this.popovers.get(anchorId)?.getBounds();
-			if (!anchorBounds) continue;
-			for (const nbId of this.getBindingsForId(anchorId)) {
-				if (visited.has(nbId)) continue;
-				const pop = this.popovers.get(nbId);
-				if (!pop) continue;
-				const b = pop.getBounds();
-				const anchorCx = anchorBounds.left + anchorBounds.width / 2;
-				const nbCx = b.left + b.width / 2;
-				const placeLeft = nbCx <= anchorCx;
-				const left = placeLeft
-					? anchorBounds.left - STICKY_EDGE_GAP_PX - b.width
-					: anchorBounds.left + anchorBounds.width + STICKY_EDGE_GAP_PX;
-				pop.setBounds({ ...b, left, top: anchorBounds.top, height: anchorBounds.height });
-				visited.add(nbId);
-				q.push(nbId);
+		if (e.ctrlKey) {
+			session.ctrlSpanningResize = true;
+			return next;
+		}
+		/* ??????????????????????????????????????????????????????????????? / ??????? */
+		for (let iter = 0; iter < GRID_LAYOUT_ITERATIONS; iter++) {
+			for (const anchorId of session.groupIds) {
+				const anchorBounds = anchorId === id ? next : this.popovers.get(anchorId)?.getBounds();
+				const anchorPhy = this.popovers.get(anchorId)?.getPhysicalBounds();
+				if (!anchorBounds || !anchorPhy) continue;
+				for (const nbId of this.getAllBindingsForId(anchorId)) {
+					if (!session.groupIds.includes(nbId)) continue;
+					const pop = this.popovers.get(nbId);
+					if (!pop) continue;
+					const b = pop.getBounds();
+					const nbPhy = pop.getPhysicalBounds();
+					if (this.isAxisBinding(anchorId, nbId, 'x')) {
+						const anchorCx = anchorBounds.left + anchorBounds.width / 2;
+						const nbCx = b.left + b.width / 2;
+						const placeLeft = nbCx <= anchorCx;
+						const left = placeLeft
+							? anchorBounds.left - STICKY_EDGE_GAP_PX - b.width
+							: anchorBounds.left + anchorBounds.width + STICKY_EDGE_GAP_PX;
+						pop.setBounds({ ...b, left, top: anchorBounds.top, height: anchorBounds.height });
+					} else {
+						const anchorCy = anchorPhy.top + anchorPhy.height / 2;
+						const nbCy = nbPhy.top + nbPhy.height / 2;
+						const placeAbove = nbCy <= anchorCy;
+						const top = placeAbove
+							? anchorBounds.top - STICKY_EDGE_GAP_PX - b.height
+							: anchorBounds.top + anchorBounds.height + STICKY_EDGE_GAP_PX;
+						pop.setBounds({ ...b, top, left: anchorBounds.left, width: anchorBounds.width });
+					}
+				}
 			}
 		}
 		return next;
 	}
 
 	private handleResizeEnd(id: string, _e: PointerEvent): void {
-		if (this.resizeSession?.id === id) {
-			this.repairBindingSizeOnly(id);
+		const session = this.resizeSession;
+		if (session?.id === id) {
+			let spanOpts:
+				| { multiCellSpanForId: { id: string; colMin: number; colMax: number; rowMin: number; rowMax: number } }
+				| undefined;
+			if (session.ctrlSpanningResize && session.groupIds.length > 1) {
+				const span = this.computeMultiCellSpanFromResize(id);
+				if (span) {
+					spanOpts = { multiCellSpanForId: { id, ...span } };
+					this.stickyGridSpan.set(id, span);
+				} else {
+					this.stickyGridSpan.delete(id);
+				}
+			}
+			this.layoutBindingGroupAsGrid(id, spanOpts);
 			this.resizeSession = null;
 			this.persistOpenWindows();
 		}
 	}
 
-	private repairBindingSizeOnly(rootId: string): void {
-		const root = this.popovers.get(rootId);
-		if (!root) return;
-		const group = this.resolveBindingGroupIds(rootId);
-		if (group.length <= 1) return;
-		/* 仅同行：统一高度；不改宽度与 left/top。 */
-		const visited = new Set<string>();
-		const q: string[] = [rootId];
-		visited.add(rootId);
-		while (q.length > 0) {
-			const anchorId = q.shift()!;
-			const anchor = this.popovers.get(anchorId);
-			if (!anchor) continue;
-			const ab = anchor.getBounds();
-			for (const nbId of this.getBindingsForId(anchorId)) {
-				if (visited.has(nbId)) continue;
-				const nb = this.popovers.get(nbId);
-				if (!nb) continue;
-				const bb = nb.getBounds();
-				nb.setBounds({ ...bb, height: ab.height });
-				visited.add(nbId);
-				q.push(nbId);
-			}
+	/**
+	 * Whether `movingId` is still within `threshold` px (snap logic) to at least one directly bound peer.
+	 * Only peers are considered as targets; other windows are ignored. For drag-end unbind, pass
+	 * `snapThresholdPx * stickyAssistAlignSnapUnbindRangeMultiplier` (capped) instead of the raw snap threshold.
+	 */
+	private isWithinSnapReachOfAnyBindingPeer(movingId: string, threshold: number): boolean {
+		const peers = this.bindings.get(movingId);
+		if (!peers || peers.size === 0) return true;
+		const pop = this.popovers.get(movingId);
+		if (!pop) return true;
+		const b = pop.getBounds();
+		const ignoreIds: string[] = [];
+		for (const wid of this.popovers.keys()) {
+			if (wid === movingId) continue;
+			if (peers.has(wid)) continue;
+			ignoreIds.push(wid);
 		}
+		const res = this.computeSnapForBounds(movingId, b, threshold, ignoreIds);
+		return res.snappedToId != null && peers.has(res.snappedToId);
 	}
 
 	private computeSnapForBounds(
-		movingId: string,
+		_movingId: string,
 		b: FloatingBounds,
 		threshold: number,
 		ignoreIds: readonly string[]
-	): { bounds: FloatingBounds; snappedToId: string | null; snappedAxis: 'x' | 'y' | null } {
+	): {
+		bounds: FloatingBounds;
+		snappedToId: string | null;
+		snappedAxis: 'x' | 'y' | null;
+		rowEdgeAlign: 'top' | 'bottom' | null;
+	} {
 		const ignore = new Set(ignoreIds);
-		ignore.add(movingId);
+		ignore.add(_movingId);
 		const left = b.left;
 		const top = b.top;
 		const right = b.left + b.width;
@@ -1381,16 +1604,28 @@ export class StickyNoteManager {
 		let bestDyAbs = threshold + 1;
 		let snappedToId: string | null = null;
 		let snappedAxis: 'x' | 'y' | null = null;
+		let rowEdgeAlign: 'top' | 'bottom' | null = null;
 
 		const overlapLen = (a0: number, a1: number, b0: number, b1: number): number =>
 			Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
 		const hasEnoughOverlap = (overlapPx: number, aLen: number, bLen: number): boolean => {
 			const minLen = Math.max(1, Math.min(aLen, bLen));
-			/* “同一行/列”判定：要有明显重叠，避免仅擦边就吸附。 */
+			/* ?????????/??????????????????????????????????????????????? */
 			const OVERLAP_MIN_PX = 24;
 			const OVERLAP_MIN_RATIO = 0.3;
 			return overlapPx >= Math.min(OVERLAP_MIN_PX, minLen) || overlapPx / minLen >= OVERLAP_MIN_RATIO;
 		};
+
+		/** ??????????????? / ????????? */
+		let bestRowDxAbs = threshold + 1;
+		let bestRowDx = 0;
+		let bestRowTarget: string | null = null;
+		let bestRowEdge: 'top' | 'bottom' = 'top';
+
+		/** ????????????????????? */
+		let bestColDyAbs = threshold + 1;
+		let bestColDy = 0;
+		let bestColTarget: string | null = null;
 
 		for (const [id, pop] of this.popovers) {
 			if (ignore.has(id)) continue;
@@ -1403,8 +1638,9 @@ export class StickyNoteManager {
 			const yOverlap = overlapLen(top, bottom, oTop, oBottom);
 			const sameRow = hasEnoughOverlap(yOverlap, b.height, ob.height);
 			const topNear = Math.abs(top - oTop) <= STICKY_TOP_ALIGN_SNAP_PX;
+			const bottomNear = Math.abs(bottom - oBottom) <= STICKY_BOTTOM_ALIGN_SNAP_PX;
 
-			/* 规则：当两窗接近共左/共右且高度接近时，优先吸附“顶部对齐”。 */
+			/* ?????????????????????/?????????????????????????????? */
 			const heightClose = Math.abs(b.height - ob.height) <= Math.max(8, Math.round(threshold * 1.2));
 			if (heightClose) {
 				const leftEdgeClose = Math.abs(left - oLeft) <= threshold;
@@ -1417,6 +1653,16 @@ export class StickyNoteManager {
 						bestDy = topDelta;
 						snappedToId = id;
 						snappedAxis = 'x';
+						rowEdgeAlign = 'top';
+					}
+					const bottomDelta = oBottom - bottom;
+					const bottomAbs = Math.abs(bottomDelta);
+					if (bottomAbs <= STICKY_BOTTOM_ALIGN_SNAP_PX && bottomAbs < bestDyAbs) {
+						bestDyAbs = bottomAbs;
+						bestDy = bottomDelta;
+						snappedToId = id;
+						snappedAxis = 'x';
+						rowEdgeAlign = 'bottom';
 					}
 				}
 			}
@@ -1427,76 +1673,600 @@ export class StickyNoteManager {
 				{ dx: oLeft - STICKY_EDGE_GAP_PX - right, target: id },
 				{ dx: oRight + STICKY_EDGE_GAP_PX - left, target: id }
 			];
-			if (sameRow && topNear) {
+			const considerRowSnap = sameRow && (topNear || bottomNear);
+			if (considerRowSnap) {
+				const preferBottom = bottomNear && !topNear;
+				const preferTop = topNear && !bottomNear;
+				const edge: 'top' | 'bottom' =
+					preferBottom ? 'bottom' : preferTop ? 'top' : Math.abs(top - oTop) <= Math.abs(bottom - oBottom) ? 'top' : 'bottom';
 				for (const c of candidatesX) {
 					const a = Math.abs(c.dx);
-					if (a <= threshold && a < bestDxAbs) {
-						bestDxAbs = a;
-						bestDx = c.dx;
-						snappedToId = c.target;
-						snappedAxis = 'x';
+					if (a <= threshold && a < bestRowDxAbs) {
+						bestRowDxAbs = a;
+						bestRowDx = c.dx;
+						bestRowTarget = c.target;
+						bestRowEdge = edge;
+					}
+				}
+			}
+
+			const xOverlap = overlapLen(left, right, oLeft, oRight);
+			const sameCol = hasEnoughOverlap(xOverlap, b.width, ob.width);
+			const widthClose = Math.abs(b.width - ob.width) <= Math.max(8, Math.round(threshold * 1.2));
+			const leftNear = Math.abs(left - oLeft) <= threshold;
+			if (sameCol && (leftNear || widthClose)) {
+				const candidatesY = [
+					{ dy: oTop - top, target: id },
+					{ dy: oBottom + STICKY_EDGE_GAP_PX - top, target: id },
+					{ dy: oTop - STICKY_EDGE_GAP_PX - bottom, target: id },
+					{ dy: oBottom - bottom, target: id }
+				];
+				for (const c of candidatesY) {
+					const a = Math.abs(c.dy);
+					if (a <= threshold && a < bestColDyAbs) {
+						bestColDyAbs = a;
+						bestColDy = c.dy;
+						bestColTarget = c.target;
 					}
 				}
 			}
 		}
 
+		/* ???????????????????????????????????????????????????????????????? */
+		if (bestRowDxAbs <= threshold && bestColDyAbs <= threshold) {
+			if (bestRowDxAbs <= bestColDyAbs) {
+				bestDx = bestRowDx;
+				bestDxAbs = bestRowDxAbs;
+				snappedToId = bestRowTarget;
+				snappedAxis = 'x';
+				rowEdgeAlign = bestRowEdge;
+				if (bestRowEdge === 'top') {
+					const ob = bestRowTarget ? this.popovers.get(bestRowTarget)?.getBounds() : undefined;
+					if (ob) bestDy = ob.top - top;
+				} else {
+					const ob = bestRowTarget ? this.popovers.get(bestRowTarget)?.getBounds() : undefined;
+					if (ob) bestDy = ob.top + ob.height - bottom;
+				}
+				bestDyAbs = Math.abs(bestDy);
+			} else {
+				bestDy = bestColDy;
+				bestDyAbs = bestColDyAbs;
+				snappedToId = bestColTarget;
+				snappedAxis = 'y';
+				rowEdgeAlign = null;
+			}
+		} else if (bestRowDxAbs <= threshold) {
+			bestDx = bestRowDx;
+			bestDxAbs = bestRowDxAbs;
+			snappedToId = bestRowTarget;
+			snappedAxis = 'x';
+			rowEdgeAlign = bestRowEdge;
+			if (bestRowEdge === 'top') {
+				const ob = bestRowTarget ? this.popovers.get(bestRowTarget)?.getBounds() : undefined;
+				if (ob) bestDy = ob.top - top;
+			} else {
+				const ob = bestRowTarget ? this.popovers.get(bestRowTarget)?.getBounds() : undefined;
+				if (ob) bestDy = ob.top + ob.height - bottom;
+			}
+			bestDyAbs = Math.abs(bestDy);
+		} else if (bestColDyAbs <= threshold) {
+			bestDy = bestColDy;
+			bestDyAbs = bestColDyAbs;
+			snappedToId = bestColTarget;
+			snappedAxis = 'y';
+			rowEdgeAlign = null;
+		}
+
 		return {
 			bounds: { ...b, left: b.left + bestDx, top: b.top + bestDy },
 			snappedToId,
-			snappedAxis
+			snappedAxis,
+			rowEdgeAlign
 		};
 	}
 
-	private repairBindingAlignmentNear(rootId: string, heightSourceId?: string | null): void {
+	private static rectsOverlap(
+		a: { left: number; top: number; width: number; height: number },
+		b: { left: number; top: number; width: number; height: number }
+	): boolean {
+		const ax2 = a.left + a.width;
+		const ay2 = a.top + a.height;
+		const bx2 = b.left + b.width;
+		const by2 = b.top + b.height;
+		return a.left < bx2 && ax2 > b.left && a.top < by2 && ay2 > b.top;
+	}
+
+	/**
+	 * ????????????????????????????? / ???????????????????
+	 * @param excludeFromSizingId ????????? / ?????????????? Ctrl ??????????????????????????????????????
+	 */
+
+	private isValidPersistedGridSpan(s: StickyGridSpan | undefined): s is StickyGridSpan {
+		if (!s) return false;
+		if (!Number.isFinite(s.colMin) || !Number.isFinite(s.colMax)) return false;
+		if (!Number.isFinite(s.rowMin) || !Number.isFinite(s.rowMax)) return false;
+		if (s.colMin > s.colMax || s.rowMin > s.rowMax) return false;
+		if (s.colMin < 0 || s.rowMin < 0) return false;
+		if (s.colMax - s.colMin > 32 || s.rowMax - s.rowMin > 32) return false;
+		return true;
+	}
+
+	private computeBindingGroupNorm(group: string[]): {
+		anchorId: string;
+		norm: Map<string, { c: number; r: number }>;
+		maxC: number;
+		maxR: number;
+	} | null {
+		if (group.length <= 1) return null;
+		const groupSet = new Set(group);
+		let anchorId: string = group[0]!;
+		let bestL = Number.POSITIVE_INFINITY;
+		let bestT = Number.POSITIVE_INFINITY;
+		for (const gid of group) {
+			const pop = this.popovers.get(gid);
+			if (!pop) continue;
+			const phy = pop.getPhysicalBounds();
+			if (phy.left < bestL || (phy.left === bestL && phy.top < bestT)) {
+				bestL = phy.left;
+				bestT = phy.top;
+				anchorId = gid;
+			}
+		}
+
+		const pos = new Map();
+		pos.set(anchorId, { c: 0, r: 0 });
+		const q = [anchorId];
+		while (q.length > 0) {
+			const cur = q.shift();
+			if (cur === undefined) continue;
+			const pcell = pos.get(cur);
+			if (!pcell) continue;
+			const curPop = this.popovers.get(cur);
+			if (!curPop) continue;
+			const cPhy = curPop.getPhysicalBounds();
+			for (const other of this.getAllBindingsForId(cur)) {
+				if (!groupSet.has(other)) continue;
+				const axis = this.inferBindingAxis(cur, other);
+				const oPop = this.popovers.get(other);
+				if (!oPop) continue;
+				const oPhy = oPop.getPhysicalBounds();
+				let nc = pcell.c;
+				let nr = pcell.r;
+				if (axis === "x") {
+					nc = oPhy.left + oPhy.width / 2 < cPhy.left + cPhy.width / 2 ? pcell.c - 1 : pcell.c + 1;
+					nr = pcell.r;
+				} else {
+					nc = pcell.c;
+					nr = oPhy.top + oPhy.height / 2 < cPhy.top + cPhy.height / 2 ? pcell.r - 1 : pcell.r + 1;
+				}
+				if (!pos.has(other)) {
+					pos.set(other, { c: nc, r: nr });
+					q.push(other);
+				}
+			}
+		}
+
+		let minC = Number.POSITIVE_INFINITY;
+		let minR = Number.POSITIVE_INFINITY;
+		for (const pr of pos.values()) {
+			minC = Math.min(minC, pr.c);
+			minR = Math.min(minR, pr.r);
+		}
+		const norm = new Map();
+		for (const [wid, pr] of pos) {
+			norm.set(wid, { c: pr.c - minC, r: pr.r - minR });
+		}
+
+		let maxC = 0;
+		let maxR = 0;
+		for (const pr of norm.values()) {
+			maxC = Math.max(maxC, pr.c);
+			maxR = Math.max(maxR, pr.r);
+		}
+		return { anchorId, norm, maxC, maxR };
+	}
+
+	private collectSpanMapForGroup(
+		group: string[],
+		opts?: {
+			multiCellSpanForId?: { id: string; colMin: number; colMax: number; rowMin: number; rowMax: number };
+		}
+	): Map<string, StickyGridSpan> {
+		const m = new Map<string, StickyGridSpan>();
+		for (const id of group) {
+			const x = this.stickyGridSpan.get(id);
+			if (x) m.set(id, { ...x });
+		}
+		if (opts?.multiCellSpanForId) {
+			const z = opts.multiCellSpanForId;
+			m.set(z.id, { colMin: z.colMin, colMax: z.colMax, rowMin: z.rowMin, rowMax: z.rowMax });
+		}
+		return m;
+	}
+
+	private pruneStaleGridSpans(norm: Map<string, { c: number; r: number }>, spanById: Map<string, StickyGridSpan>): void {
+		for (const sid of [...spanById.keys()]) {
+			const span = spanById.get(sid);
+			if (!span) continue;
+			const h = norm.get(sid);
+			if (
+				!h ||
+				h.c < span.colMin ||
+				h.c > span.colMax ||
+				h.r < span.rowMin ||
+				h.r > span.rowMax
+			) {
+				spanById.delete(sid);
+				this.stickyGridSpan.delete(sid);
+			}
+		}
+	}
+
+	private dedupeOverlappingSpans(spanById: Map<string, StickyGridSpan>): void {
+		const occ = new Map<string, string>();
+		for (const sid of [...spanById.keys()].sort()) {
+			const span = spanById.get(sid);
+			if (!span) continue;
+			let conflict = false;
+			for (let c = span.colMin; c <= span.colMax && !conflict; c++) {
+				for (let r = span.rowMin; r <= span.rowMax; r++) {
+					const k = `${c},${r}`;
+					const o = occ.get(k);
+					if (o !== undefined && o !== sid) {
+						conflict = true;
+						break;
+					}
+				}
+			}
+			if (conflict) {
+				spanById.delete(sid);
+				this.stickyGridSpan.delete(sid);
+				continue;
+			}
+			for (let c = span.colMin; c <= span.colMax; c++) {
+				for (let r = span.rowMin; r <= span.rowMax; r++) {
+					occ.set(`${c},${r}`, sid);
+				}
+			}
+		}
+	}
+
+	private resolveVirtualPlacement(
+		norm: Map<string, { c: number; r: number }>,
+		maxC: number,
+		maxR: number,
+		group: string[],
+		spanById: Map<string, StickyGridSpan>
+	): { placement: Map<string, { c: number; r: number }>; maxC: number; maxR: number } {
+		const occupied = new Map<string, string>();
+		const placement = new Map<string, { c: number; r: number }>();
+		const key = (c: number, r: number) => `${c},${r}`;
+
+		for (const sid of spanById.keys()) {
+			const span = spanById.get(sid);
+			if (!span) continue;
+			for (let c = span.colMin; c <= span.colMax; c++) {
+				for (let r = span.rowMin; r <= span.rowMax; r++) {
+					occupied.set(key(c, r), sid);
+				}
+			}
+			placement.set(sid, { c: span.colMin, r: span.rowMin });
+		}
+
+		let mc = maxC;
+		let mr = maxR;
+
+		const scanFree = (): { c: number; r: number } => {
+			for (let r = 0; r <= mr + 24; r++) {
+				for (let c = 0; c <= mc + 24; c++) {
+					if (!occupied.has(key(c, r))) return { c, r };
+				}
+			}
+			return { c: mc + 1, r: 0 };
+		};
+
+		for (const wid of group) {
+			if (spanById.has(wid)) continue;
+			const home = norm.get(wid);
+			if (!home) continue;
+			const { c, r } = home;
+			const k0 = key(c, r);
+			if (!occupied.has(k0)) {
+				occupied.set(k0, wid);
+				placement.set(wid, { c, r });
+				mc = Math.max(mc, c);
+				mr = Math.max(mr, r);
+				continue;
+			}
+			const free = scanFree();
+			occupied.set(key(free.c, free.r), wid);
+			placement.set(wid, free);
+			mc = Math.max(mc, free.c);
+			mr = Math.max(mr, free.r);
+		}
+
+		return { placement, maxC: mc, maxR: mr };
+	}
+
+	private measureBindingGridMetrics(
+		group: string[],
+		anchorId: string,
+		placement: Map<string, { c: number; r: number }>,
+		maxC: number,
+		maxR: number,
+		spanById: Map<string, StickyGridSpan>,
+		sizingExcludeIds: Set<string>,
+		opts?: { heightSourceId?: string | null; widthSourceId?: string | null }
+	): {
+		colW: Map<number, number>;
+		rowH: Map<number, number>;
+		colStart: Map<number, number>;
+		rowStart: Map<number, number>;
+	} | null {
+		const colW = new Map<number, number>();
+		const rowH = new Map<number, number>();
+
+		for (const wid of group) {
+			if (spanById.has(wid)) continue;
+			if (sizingExcludeIds.has(wid)) continue;
+			const pop = this.popovers.get(wid);
+			if (!pop) continue;
+			const cell = placement.get(wid);
+			if (!cell) continue;
+			const logic = pop.getBounds();
+			const phy = pop.getPhysicalBounds();
+			const wCell = phy.width;
+			const hCell = pop.getCollapsed() ? phy.height : logic.height;
+			colW.set(cell.c, Math.max(colW.get(cell.c) ?? 0, wCell));
+			rowH.set(cell.r, Math.max(rowH.get(cell.r) ?? 0, hCell));
+		}
+
+		for (let c = 0; c <= maxC; c++) {
+			if (!colW.has(c)) colW.set(c, GRID_FALLBACK_MIN_W);
+		}
+		for (let r = 0; r <= maxR; r++) {
+			if (!rowH.has(r)) rowH.set(r, GRID_FALLBACK_MIN_H);
+		}
+
+		const gap = STICKY_EDGE_GAP_PX;
+		for (const [sid, span] of spanById) {
+			const pop = this.popovers.get(sid);
+			if (!pop) continue;
+			const phy = pop.getPhysicalBounds();
+			const logic = pop.getBounds();
+			const needW = phy.width;
+			const needH = pop.getCollapsed() ? phy.height : logic.height;
+			let sumW = 0;
+			for (let c = span.colMin; c <= span.colMax; c++) sumW += colW.get(c) ?? 0;
+			sumW += gap * (span.colMax - span.colMin);
+			if (needW > sumW) {
+				colW.set(span.colMax, (colW.get(span.colMax) ?? 0) + (needW - sumW));
+			}
+			let sumH = 0;
+			for (let r = span.rowMin; r <= span.rowMax; r++) sumH += rowH.get(r) ?? 0;
+			sumH += gap * (span.rowMax - span.rowMin);
+			if (needH > sumH) {
+				rowH.set(span.rowMax, (rowH.get(span.rowMax) ?? 0) + (needH - sumH));
+			}
+		}
+
+		const hRefId = opts?.heightSourceId;
+		const wRefId = opts?.widthSourceId;
+		if (hRefId) {
+			const ref = this.popovers.get(hRefId);
+			const pr = placement.get(hRefId);
+			if (ref && pr !== undefined && !ref.getCollapsed()) {
+				const rh = ref.getBounds().height;
+				rowH.set(pr.r, Math.max(rowH.get(pr.r) ?? 0, rh));
+			}
+		}
+		if (wRefId) {
+			const ref = this.popovers.get(wRefId);
+			const pc = placement.get(wRefId);
+			if (ref && pc !== undefined) {
+				const rw = ref.getPhysicalBounds().width;
+				colW.set(pc.c, Math.max(colW.get(pc.c) ?? 0, rw));
+			}
+		}
+
+		const aNorm = placement.get(anchorId);
+		const aPop = this.popovers.get(anchorId);
+		if (!aNorm || !aPop) return null;
+		const aPhy = aPop.getPhysicalBounds();
+
+		const colStart = new Map<number, number>();
+		const rowStart = new Map<number, number>();
+		colStart.set(aNorm.c, aPhy.left);
+		rowStart.set(aNorm.r, aPhy.top);
+
+		for (let c = aNorm.c - 1; c >= 0; c--) {
+			const curW = colW.get(c) ?? 0;
+			const rightNeighborStart = colStart.get(c + 1)!;
+			colStart.set(c, rightNeighborStart - gap - curW);
+		}
+		for (let c = aNorm.c + 1; c <= maxC; c++) {
+			const prevW = colW.get(c - 1) ?? 0;
+			const prevStart = colStart.get(c - 1)!;
+			colStart.set(c, prevStart + prevW + gap);
+		}
+
+		for (let r = aNorm.r - 1; r >= 0; r--) {
+			const curH = rowH.get(r) ?? 0;
+			const belowStart = rowStart.get(r + 1)!;
+			rowStart.set(r, belowStart - gap - curH);
+		}
+		for (let r = aNorm.r + 1; r <= maxR; r++) {
+			const prevH = rowH.get(r - 1) ?? 0;
+			const prevStart = rowStart.get(r - 1)!;
+			rowStart.set(r, prevStart + prevH + gap);
+		}
+
+		return { colW, rowH, colStart, rowStart };
+	}
+
+	private computeMultiCellSpanFromResize(resizeId: string): {
+		colMin: number;
+		colMax: number;
+		rowMin: number;
+		rowMax: number;
+	} | null {
+		const pop = this.popovers.get(resizeId);
+		if (!pop || pop.getCollapsed()) return null;
+		const group = this.resolveBindingGroupIds(resizeId);
+		const topo = this.computeBindingGroupNorm(group);
+		if (!topo) return null;
+		const spanById = this.collectSpanMapForGroup(group, undefined);
+		this.pruneStaleGridSpans(topo.norm, spanById);
+		this.dedupeOverlappingSpans(spanById);
+		const { placement, maxC, maxR } = this.resolveVirtualPlacement(
+			topo.norm,
+			topo.maxC,
+			topo.maxR,
+			group,
+			spanById
+		);
+		const sizingExclude = new Set(spanById.keys());
+		sizingExclude.add(resizeId);
+		const m = this.measureBindingGridMetrics(
+			group,
+			topo.anchorId,
+			placement,
+			maxC,
+			maxR,
+			spanById,
+			sizingExclude,
+			undefined
+		);
+		if (!m) return null;
+		const R = pop.getPhysicalBounds();
+		let colMin = Number.POSITIVE_INFINITY;
+		let colMax = -1;
+		let rowMin = Number.POSITIVE_INFINITY;
+		let rowMax = -1;
+		let hit = false;
+		for (let c = 0; c <= maxC; c++) {
+			for (let r = 0; r <= maxR; r++) {
+				const cl = m.colStart.get(c);
+				const ct = m.rowStart.get(r);
+				const cw = m.colW.get(c);
+				const ch = m.rowH.get(r);
+				if (cl === undefined || ct === undefined || cw === undefined || ch === undefined) continue;
+				const cell = { left: cl, top: ct, width: cw, height: ch };
+				if (StickyNoteManager.rectsOverlap(R, cell)) {
+					hit = true;
+					colMin = Math.min(colMin, c);
+					colMax = Math.max(colMax, c);
+					rowMin = Math.min(rowMin, r);
+					rowMax = Math.max(rowMax, r);
+				}
+			}
+		}
+		if (!hit || colMax < 0) return null;
+		if (colMin === colMax && rowMin === rowMax) return null;
+		return { colMin, colMax, rowMin, rowMax };
+	}
+
+	private layoutBindingGroupAsGrid(
+		rootId: string,
+		opts?: {
+			heightSourceId?: string | null;
+			widthSourceId?: string | null;
+			multiCellSpanForId?: { id: string; colMin: number; colMax: number; rowMin: number; rowMax: number };
+		}
+	): void {
 		const root = this.popovers.get(rootId);
 		if (!root) return;
 		const group = this.resolveBindingGroupIds(rootId);
 		if (group.length <= 1) return;
-		const refPop =
-			heightSourceId && this.popovers.has(heightSourceId) ? this.popovers.get(heightSourceId) : null;
-		const refLogical = refPop?.getBounds();
-		const rowHeight = refLogical?.height;
-		/* 折叠态 getBounds() 为逻辑展开高；仅双方均为展开态时才同步高度，避免误写折叠占位 */
-		if (
-			refLogical &&
-			refPop &&
-			heightSourceId &&
-			rootId !== heightSourceId &&
-			!refPop.getCollapsed() &&
-			!root.getCollapsed()
-		) {
-			const rb = root.getBounds();
-			root.setBounds({ ...rb, height: refLogical.height });
-		}
-		const visited = new Set<string>();
-		const q: string[] = [rootId];
-		visited.add(rootId);
-		while (q.length > 0) {
-			const anchorId = q.shift()!;
-			const anchor = this.popovers.get(anchorId);
-			if (!anchor) continue;
-			const abPhy = anchor.getPhysicalBounds();
-			const abLogic = anchor.getBounds();
-			const syncH = rowHeight ?? abLogic.height;
-			for (const nbId of this.getBindingsForId(anchorId)) {
-				if (visited.has(nbId)) continue;
-				const nb = this.popovers.get(nbId);
-				if (!nb) continue;
-				const bbPhy = nb.getPhysicalBounds();
-				const bbLogic = nb.getBounds();
-				/* 左右判定与间距用 DOM 实际占位；落盘仍用逻辑宽高（折叠时保留 expanded） */
-				const placeLeft = bbPhy.left + bbPhy.width / 2 <= abPhy.left + abPhy.width / 2;
-				const left = placeLeft
-					? abPhy.left - STICKY_EDGE_GAP_PX - bbPhy.width
-					: abPhy.left + abPhy.width + STICKY_EDGE_GAP_PX;
-				const next: FloatingBounds = { ...bbLogic, left, top: abPhy.top };
-				if (!nb.getCollapsed() && !anchor.getCollapsed()) {
-					next.height = syncH;
+
+		const topo = this.computeBindingGroupNorm(group);
+		if (!topo) return;
+		const spanById = this.collectSpanMapForGroup(group, opts);
+		this.pruneStaleGridSpans(topo.norm, spanById);
+		this.dedupeOverlappingSpans(spanById);
+		const { placement, maxC, maxR } = this.resolveVirtualPlacement(
+			topo.norm,
+			topo.maxC,
+			topo.maxR,
+			group,
+			spanById
+		);
+		const sizingExclude = new Set<string>();
+		const m = this.measureBindingGridMetrics(
+			group,
+			topo.anchorId,
+			placement,
+			maxC,
+			maxR,
+			spanById,
+			sizingExclude,
+			opts
+		);
+		if (!m) return;
+
+		for (const wid of group) {
+			const pop = this.popovers.get(wid);
+			if (!pop) continue;
+			const pcell = placement.get(wid);
+			if (!pcell) continue;
+			const logic = pop.getBounds();
+			const span = spanById.get(wid);
+			if (span) {
+				const nl = m.colStart.get(span.colMin) ?? logic.left;
+				const nw = (m.colStart.get(span.colMax) ?? nl) + (m.colW.get(span.colMax) ?? 0) - nl;
+				const nt = m.rowStart.get(span.rowMin) ?? logic.top;
+				const nh = (m.rowStart.get(span.rowMax) ?? nt) + (m.rowH.get(span.rowMax) ?? 0) - nt;
+				if (pop.getCollapsed()) {
+					pop.setBounds({ ...logic, left: nl, top: nt, width: nw });
+				} else {
+					pop.setBounds({ ...logic, left: nl, top: nt, width: nw, height: nh });
 				}
-				nb.setBounds(next);
-				visited.add(nbId);
-				q.push(nbId);
+				continue;
 			}
+
+			const nw = m.colW.get(pcell.c) ?? logic.width;
+			const nh = m.rowH.get(pcell.r) ?? logic.height;
+			const nl = m.colStart.get(pcell.c) ?? logic.left;
+			const nt = m.rowStart.get(pcell.r) ?? logic.top;
+
+			if (pop.getCollapsed()) {
+				pop.setBounds({ ...logic, left: nl, top: nt, width: nw });
+			} else {
+				pop.setBounds({ ...logic, left: nl, top: nt, width: nw, height: nh });
+			}
+		}
+
+		this.ensureBindingGroupInViewport(group);
+	}
+
+	private ensureBindingGroupInViewport(groupIds: readonly string[]): void {
+		const margin = StickyNoteManager.VIEW_MARGIN;
+		let minLeft = Number.POSITIVE_INFINITY;
+		let minTop = Number.POSITIVE_INFINITY;
+		let maxRight = Number.NEGATIVE_INFINITY;
+		let maxBottom = Number.NEGATIVE_INFINITY;
+		for (const gid of groupIds) {
+			const pop = this.popovers.get(gid);
+			if (!pop) continue;
+			const b = pop.getPhysicalBounds();
+			minLeft = Math.min(minLeft, b.left);
+			minTop = Math.min(minTop, b.top);
+			maxRight = Math.max(maxRight, b.left + b.width);
+			maxBottom = Math.max(maxBottom, b.top + b.height);
+		}
+		if (!Number.isFinite(minLeft)) return;
+		const minDx = margin - minLeft;
+		const maxDx = window.innerWidth - margin - maxRight;
+		const minDy = margin - minTop;
+		const maxDy = window.innerHeight - margin - maxBottom;
+		const dx = Math.min(maxDx, Math.max(minDx, 0));
+		const dy = Math.min(maxDy, Math.max(minDy, 0));
+		if (dx === 0 && dy === 0) return;
+		for (const gid of groupIds) {
+			const pop = this.popovers.get(gid);
+			if (!pop) continue;
+			const b = pop.getBounds();
+			pop.setBounds({ ...b, left: b.left + dx, top: b.top + dy });
 		}
 	}
 

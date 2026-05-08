@@ -1,6 +1,6 @@
-@import "./list-view-tokens.less";
+﻿@import "./list-view-tokens.less";
 
-/* 便笺列表 */
+/* 渚跨鍒楄〃 */
 .workspace-leaf-content .view-content.csn-list-view {
 	padding: 8px 10px;
 	display: flex;
@@ -9,24 +9,19 @@
 	height: 100%;
 }
 
-/* 顶部「工作区」：搜索 + 工具栏成组，与下方网格/list 区分层次 */
-.csn-list-chrome {
+/* 便笺列表顶部工具区：搜索 + 工具栏，与下方卡片网格分隔 */
+.csn-list-tool-region {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 10px;
+	width: 100%;
 	flex-shrink: 0;
-	padding: 10px 10px 11px;
-	border-radius: var(--radius-m);
-	border: 1px solid var(--background-modifier-border);
-	background-color: var(--background-primary);
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	padding-bottom: 12px;
+	margin-bottom: 6px;
+	border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.theme-dark .csn-list-chrome {
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-}
-
-/* 搜索：输入 + 有内容时右侧悬浮圆形清除 */
+/* 鎼滅储锛氳緭鍏?+ 鏈夊唴瀹规椂鍙充晶鎮诞鍦嗗舰娓呴櫎 */
 .csn-list-search {
 	width: 100%;
 }
@@ -61,7 +56,7 @@
 	color: var(--text-normal);
 }
 
-/* 有清除按钮时预留右侧，避免文字叠在悬浮 X 下方 */
+/* 鏈夋竻闄ゆ寜閽椂棰勭暀鍙充晶锛岄伩鍏嶆枃瀛楀彔鍦ㄦ偓娴?X 涓嬫柟 */
 .csn-list-search-inner--has-clear .csn-list-search-input {
 	padding-right: 34px;
 }
@@ -88,7 +83,7 @@
 	padding: 0;
 	border: none;
 	border-radius: 50%;
-	/* 灰色底、白色 X（与常见清除按钮一致） */
+	/* 鐏拌壊搴曘€佺櫧鑹?X锛堜笌甯歌娓呴櫎鎸夐挳涓€鑷达級 */
 	background-color: #8e8e93 !important;
 	color: #fff !important;
 	cursor: var(--cursor);
@@ -122,227 +117,97 @@
 	opacity: 0;
 }
 
+/* 便笺列表工具栏：左（浮动 / 归档 / 调色板展开色条）右（新建 / 编辑 / 筛选 / 刷新） */
 .csn-list-toolbar {
 	display: flex;
-	align-items: center;
-	gap: 8px;
+	align-items: flex-start;
 	flex-wrap: wrap;
+	gap: 10px 12px;
+	width: 100%;
 }
 
-/* 宽屏：完整图标工具栏；窄屏（侧栏）：折叠为「窗口 / 排序 / 颜色」图标按钮 */
-.csn-list-toolbar-main {
+.csn-list-toolbar-left {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 8px;
+	gap: 4px;
 	flex: 1 1 auto;
 	min-width: 0;
 }
 
-.csn-list-toolbar-expanded {
+.csn-list-toolbar-actions {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	column-gap: 12px;
-	row-gap: 8px;
-	flex: 1 1 auto;
-	min-width: 0;
-}
-
-/* 未缩略时：各模块（窗口 / 排序 / 颜色）之间的竖向分隔线 */
-.csn-list-toolbar-divider {
+	gap: 4px;
 	flex-shrink: 0;
-	width: 1px;
-	height: 22px;
-	align-self: center;
-	background-color: var(--background-modifier-border);
-	border-radius: 1px;
+	margin-left: auto;
 }
 
-.csn-list-toolbar-module {
-	display: flex;
+.csn-list-toolbar-dropdown-group {
+	display: inline-flex;
 	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
+	gap: 0;
 }
 
-.csn-list-toolbar-compact {
-	display: none;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
-	flex: 1 1 auto;
-	min-width: 0;
-}
-
-.csn-list-view.csn-list-view--toolbar-compact .csn-list-toolbar-expanded {
-	display: none;
-}
-
-.csn-list-view.csn-list-view--toolbar-compact .csn-list-toolbar-compact {
-	display: flex;
-}
-
-.csn-list-toolbar-chip {
+/* 工具栏图标按钮：与 Obsidian clickable-icon 一致，新建/编辑/刷新/下拉共用 */
+.csn-list-toolbar-icon-btn {
 	flex: 0 0 auto;
-	box-sizing: border-box;
-	min-width: 28px;
-	min-height: 28px;
-	padding: 4px;
-	border-radius: var(--radius-s);
 	border: 1px solid var(--background-modifier-border);
-	background-color: var(--background-secondary);
-	color: var(--text-normal);
-	cursor: var(--cursor);
 }
 
-.csn-list-toolbar-chip:hover {
-	background-color: var(--background-modifier-hover);
-}
-
-/* 紧凑「颜色」：水平色块浮层（无文字行、多选不关，参考圆角色块横排） */
-.csn-list-color-popover {
-	position: fixed;
-	padding: 10px 12px;
-	border-radius: var(--radius-m);
-	background-color: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	box-shadow: var(--shadow-l);
-}
-
-.csn-list-color-popover-row {
-	display: flex;
-	flex-direction: row;
-	flex-wrap: nowrap;
+.csn-list-toolbar-color-wrap {
+	display: inline-flex;
 	align-items: center;
-	gap: 8px;
+	flex-wrap: nowrap;
+	gap: 4px;
+	max-width: 100%;
 }
 
-.csn-list-color-popover-swatch {
-	width: 28px;
-	height: 28px;
-	min-width: 28px;
-	padding: 0;
-	border: none;
-	border-radius: 10px;
-	box-sizing: border-box;
-	cursor: var(--cursor);
-	flex-shrink: 0;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+/* 调色板：展开或已选颜色筛选时高亮为交互强调色 */
+.csn-list-toolbar-color-wrap.is-expanded .csn-list-color-palette-btn{
+	color: var(--interactive-accent);
 }
 
-.theme-dark .csn-list-color-popover-swatch {
-	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+.csn-list-color-filter-strip {
+	display: none;
+	align-items: center;
+	flex: 0 1 auto;
+	min-width: 0;
+	// padding: 1px 5px;
+	// border-radius: var(--radius-s);
+	// border: 1px solid var(--background-modifier-border);
+	// background-color: var(--background-primary);
+	// box-shadow: var(--shadow-s);
 }
 
-.csn-list-color-popover-swatch.is-active {
-	box-shadow:
-		inset 0 0 0 1px rgba(0, 0, 0, 0.06),
-		0 0 0 2px var(--background-primary),
-		0 0 0 4px var(--text-accent);
-}
-
-.theme-dark .csn-list-color-popover-swatch.is-active {
-	box-shadow:
-		inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-		0 0 0 2px var(--background-primary),
-		0 0 0 4px var(--text-accent);
-}
-
-.csn-list-color-popover-swatch[data-csn-list-color='yellow'] {
-	background: #f5e6a3;
-}
-
-.csn-list-color-popover-swatch[data-csn-list-color='mint'] {
-	background: #a8e6cf;
-}
-
-.csn-list-color-popover-swatch[data-csn-list-color='pink'] {
-	background: #f5c2d6;
-}
-
-.csn-list-color-popover-swatch[data-csn-list-color='lavender'] {
-	background: #d4c4f5;
-}
-
-.csn-list-color-popover-swatch[data-csn-list-color='blue'] {
-	background: #a8d4f0;
-}
-
-.csn-list-color-popover-swatch[data-csn-list-color='gray'] {
-	background: #d8d8d8;
-}
-
-.csn-list-color-popover-swatch[data-csn-list-color='default'] {
-	background: var(--background-modifier-hover);
-}
-
-.theme-dark .csn-list-color-popover-swatch[data-csn-list-color='yellow'] {
-	background: #5c5430;
-}
-
-.theme-dark .csn-list-color-popover-swatch[data-csn-list-color='mint'] {
-	background: #2d5c48;
-}
-
-.theme-dark .csn-list-color-popover-swatch[data-csn-list-color='pink'] {
-	background: #5c3040;
-}
-
-.theme-dark .csn-list-color-popover-swatch[data-csn-list-color='lavender'] {
-	background: #403060;
-}
-
-.theme-dark .csn-list-color-popover-swatch[data-csn-list-color='blue'] {
-	background: #2d4a5c;
-}
-
-.theme-dark .csn-list-color-popover-swatch[data-csn-list-color='gray'] {
-	background: #404040;
-}
-
-.csn-list-new-btn {
-	flex-shrink: 0;
-}
-
-.csn-list-toolbar-label {
-	font-size: var(--font-ui-small);
-	color: var(--text-muted);
-}
-
-.csn-list-toolbar-btns {
+.csn-list-toolbar-color-wrap.is-expanded .csn-list-color-filter-strip {
 	display: flex;
+}
+
+.csn-list-color-filter-btns--compact {
 	gap: 2px;
 }
 
-.csn-list-toolbar-spacer {
-	flex: 1 1 auto;
-	min-width: 8px;
+/* 展开色条内色块：比原工具栏行更紧凑 */
+.csn-list-color-filter-strip .csn-list-color-filter-btn.csn-list-color-filter-swatch {
+	--csn-list-color-filter-swatch-size: 24px;
+	width: var(--csn-list-color-filter-swatch-size);
+	height: var(--csn-list-color-filter-swatch-size);
+	min-width:var(--csn-list-color-filter-swatch-size);
+	border-radius: 4px;
 }
 
-.csn-list-sort-btn.is-active {
-	background-color: var(--background-modifier-hover);
-	border-radius: var(--radius-s);
-}
+// .csn-list-color-filter-strip .csn-list-color-filter-btn.is-active {
+// 	box-shadow: inset 0 0 0 1.5px var(--text-accent);
+// }
 
-/* 「窗口」筛选：已打开 / 未打开 / 全部浮动便笺 */
-.csn-list-toolbar-float-open {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
-	flex-shrink: 0;
-}
+// .csn-list-bulk-edit-btn.is-active {
+// 	background-color: var(--background-modifier-hover);
+// 	border-radius: var(--radius-s);
+// }
 
-/* 颜色筛选（顶部工具栏，排序右侧）：与卡片色条一致 */
-.csn-list-toolbar-color-filter {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
-	flex-shrink: 0;
-}
-
+/* 工具栏颜色块（与卡片色条一致） */
 .csn-list-color-filter-btns {
 	display: flex;
 	flex-wrap: wrap;
@@ -416,7 +281,7 @@
 	background: #404040;
 }
 
-/* 自适应网格（列最小宽度、卡片高度由 `.csn-list-view` 上 CSS 变量控制） */
+/* 鑷€傚簲缃戞牸锛堝垪鏈€灏忓搴︺€佸崱鐗囬珮搴︾敱 `.csn-list-view` 涓?CSS 鍙橀噺鎺у埗锛?*/
 .csn-list-items {
 	overflow: auto;
 	flex: 1 1 auto;
@@ -495,7 +360,7 @@
 	cursor: not-allowed;
 }
 
-/* —— 卡片：对齐浮动便笺色板；令牌见 list-view-tokens.less —— */
+/* 鈥斺€?鍗＄墖锛氬榻愭诞鍔ㄤ究绗鸿壊鏉匡紱浠ょ墝瑙?list-view-tokens.less 鈥斺€?*/
 .csn-list-card {
 	position: relative;
 	border: 1px solid var(--background-modifier-border);
@@ -624,15 +489,58 @@
 	min-width: 0;
 }
 
+.csn-list-card-head-left {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+/* 褰掓。澶嶉€夋锛氶粯璁ら殣钘忥紱宸ュ叿鏍忋€岀紪杈戙€嶅紑鍚悗鏄剧ず锛堣 `.csn-list-view--archive-checkbox-edit`锛?*/
+.csn-list-card-archive-wrap {
+	display: none;
+	align-items: center;
+	flex-shrink: 0;
+	margin: 0;
+	cursor: pointer;
+}
+
+.csn-list-view--archive-checkbox-edit .csn-list-card-archive-wrap {
+	display: flex;
+}
+
+.csn-list-card-archive-checkbox {
+	margin: 0;
+	width: 1rem;
+	height: 1rem;
+	cursor: pointer;
+	accent-color: var(--text-accent);
+	flex-shrink: 0;
+}
+
+/* 鏍囬锛氭嫋鍏ョ紪杈戝櫒鎻掑叆閾炬帴锛堜笌 fileManager 鐢熸垚鐨?Markdown 涓€鑷达級 */
 .csn-list-card-title {
 	font-weight: 600;
 	font-size: var(--font-ui-small);
-	line-height: var(--line-height-tight);
+	// line-height: var(--line-height-tight);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	flex: 1 1 auto;
 	min-width: 0;
+	max-width: fit-content;
+	cursor: grab;
+	user-select: none;
+}
+
+// .csn-list-card-title:hover {
+// 	background-color: var(--background-modifier-hover);
+// 	border-radius: var(--radius-s);
+// }
+
+.csn-list-card-title:active {
+	cursor: grabbing;
 }
 
 .csn-list-card-head-right {
@@ -642,7 +550,7 @@
 	flex-shrink: 0;
 }
 
-/* 置顶：未置顶时仅悬停卡片（或焦点在卡片内）时显示；置顶后常驻显示 */
+/* 缃《锛氭湭缃《鏃朵粎鎮仠鍗＄墖锛堟垨鐒︾偣鍦ㄥ崱鐗囧唴锛夋椂鏄剧ず锛涚疆椤跺悗甯搁┗鏄剧ず */
 .csn-list-card-pin-btn {
 	transition: opacity 0.12s ease;
 }
@@ -692,7 +600,7 @@
 	min-width: 0;
 }
 
-/* Obsidian MarkdownRenderer：固定高度，内部滚动；zoom 与便笺正文一致（--csn-sticky-view-content-zoom 由 TS 写在卡片上） */
+/* Obsidian MarkdownRenderer锛氬浐瀹氶珮搴︼紝鍐呴儴婊氬姩锛泎oom 涓庝究绗烘鏂囦竴鑷达紙--csn-sticky-view-content-zoom 鐢?TS 鍐欏湪鍗＄墖涓婏級 */
 .csn-list-card-body {
 	width: 100%;
 	height: 100%;
@@ -707,9 +615,7 @@
 	border-radius: var(--radius-s);
 	background: var(--csn-list-preview-bg);
 	/*
-	 * 与浮动便笺内 Markdown 阅读视图一致：侧栏 ItemView 默认走界面字体，须显式用笔记正文变量，
-	 * 否则列表预览与便笺窗口正文字体族不一致。
-	 */
+	 * 涓庢诞鍔ㄤ究绗哄唴 Markdown 闃呰瑙嗗浘涓€鑷达細渚ф爮 ItemView 榛樿璧扮晫闈㈠瓧浣擄紝椤绘樉寮忕敤绗旇姝ｆ枃鍙橀噺锛?	 * 鍚﹀垯鍒楄〃棰勮涓庝究绗虹獥鍙ｆ鏂囧瓧浣撴棌涓嶄竴鑷淬€?	 */
 	font-family: var(--font-text);
 	font-size: var(--font-text-size);
 	line-height: var(--line-height-normal);
@@ -717,7 +623,7 @@
 	zoom: var(--csn-sticky-view-content-zoom, 0.65);
 }
 
-/* 设置「预览区裁剪溢出」关闭：嵌入预览不再在区域内滚动，可溢出显示 */
+/* 璁剧疆銆岄瑙堝尯瑁佸壀婧㈠嚭銆嶅叧闂細宓屽叆棰勮涓嶅啀鍦ㄥ尯鍩熷唴婊氬姩锛屽彲婧㈠嚭鏄剧ず */
 .csn-list-view.csn-list-view--card-overflow-visible .csn-list-card-body--rendered {
 	overflow: visible;
 }
@@ -745,7 +651,7 @@
 	margin: 0.25em 0;
 }
 
-/* 嵌入文档预览：与阅读视图 transclusion 一致，隐藏嵌入标题（与卡片抬头重复） */
+/* 宓屽叆鏂囨。棰勮锛氫笌闃呰瑙嗗浘 transclusion 涓€鑷达紝闅愯棌宓屽叆鏍囬锛堜笌鍗＄墖鎶ご閲嶅锛?*/
 .csn-list-card-body--embed .markdown-embed-title {
 	display: none;
 }
@@ -756,7 +662,7 @@
 	min-width: 0;
 }
 
-/* 便笺列表卡片内嵌入：去掉默认线框与底色，由外层 `.csn-list-card-body--rendered` 承担视觉容器 */
+/* 渚跨鍒楄〃鍗＄墖鍐呭祵鍏ワ細鍘绘帀榛樿绾挎涓庡簳鑹诧紝鐢卞灞?`.csn-list-card-body--rendered` 鎵挎媴瑙嗚瀹瑰櫒 */
 .csn-list-card-body--embed .markdown-embed {
 	border: none;
 	border-radius: 0;
@@ -776,7 +682,7 @@
 	padding: 8px 4px;
 }
 
-/* 「修改背景」子菜单：背景色画在 Obsidian `.menu-item` 上（与列表/便笺色一致） */
+/* 銆屼慨鏀硅儗鏅€嶅瓙鑿滃崟锛氳儗鏅壊鐢诲湪 Obsidian `.menu-item` 涓婏紙涓庡垪琛?渚跨鑹蹭竴鑷达級 */
 .csn-list-bg-menu-mi(@id, @light, @dark) {
 	.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='@{id}']) {
 		background-color: @light;
