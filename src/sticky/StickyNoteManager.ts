@@ -71,6 +71,37 @@ export class StickyNoteManager {
 		return s;
 	}
 
+	hasOpenStickyWindows(): boolean {
+		return this.popovers.size > 0;
+	}
+
+	hasSavedStickyWindowsInActiveWorkspace(): boolean {
+		const ws = this.activeWorkspace();
+		return !!ws && ws.windows.length > 0;
+	}
+
+	/**
+	 * 关闭当前已打开的所有便笺窗口。
+	 * @param keepWorkspaceSession true 时仅关闭窗口，不覆盖工作区已保存的 windows（用于“下次恢复上次工作区”）。
+	 */
+	closeAllOpenStickyWindows(keepWorkspaceSession = false): void {
+		if (!keepWorkspaceSession) {
+			const ids = [...this.popovers.keys()];
+			for (const id of ids) {
+				this.closeSticky(id);
+			}
+			return;
+		}
+
+		for (const pop of this.popovers.values()) {
+			pop.destroy();
+		}
+		this.popovers.clear();
+		this.activePopoverId = null;
+		this.lastActivatedPopoverId = null;
+		this.notifyStickyListOpenIndicators();
+	}
+
 	private notifyStickyListOpenIndicators(): void {
 		this.plugin.refreshStickyListOpenIndicatorsIfOpen();
 	}

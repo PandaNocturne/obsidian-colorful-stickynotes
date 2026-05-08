@@ -96,7 +96,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		});
 
 		this.addRibbonIcon('square-pen', '打开便笺', () => {
-			void this.restoreStickySession();
+			void this.toggleStickyWindowsForCurrentWorkspace();
 		});
 
 		this.addRibbonIcon('layout-grid', '便笺列表', () => {
@@ -109,9 +109,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'open-sticky-note-windows',
-			name: '打开便笺窗口（恢复上次会话）',
+			name: '打开/关闭当前工作区便笺',
 			callback: () => {
-				void this.restoreStickySession();
+				void this.toggleStickyWindowsForCurrentWorkspace();
 			}
 		});
 
@@ -442,6 +442,25 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 打开或聚焦指定文件的便笺窗口 */
 	async openStickyForFile(file: TFile): Promise<void> {
 		await this.stickies.openStickyForFile(file);
+	}
+
+	/**
+	 * 命令行为：
+	 * 1) 当前工作区没有便笺 -> 新建并打开一张便笺
+	 * 2) 当前工作区存在便笺 -> 关闭当前工作区所有已打开便笺
+	 * 3) 若当前无打开便笺，但工作区存在已保存便笺 -> 恢复上次工作区
+	 */
+	private async toggleStickyWindowsForCurrentWorkspace(): Promise<void> {
+		if (this.stickies.hasOpenStickyWindows()) {
+			/* 关闭窗口但保留工作区会话，便于下次“一键恢复上次工作区”。 */
+			this.stickies.closeAllOpenStickyWindows(true);
+			return;
+		}
+		if (this.stickies.hasSavedStickyWindowsInActiveWorkspace()) {
+			await this.stickies.restoreWorkspaceWindows();
+			return;
+		}
+		await this.stickies.addStickyWindow();
 	}
 
 	private async restoreStickySession(): Promise<void> {
