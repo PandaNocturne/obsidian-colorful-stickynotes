@@ -1,7 +1,13 @@
 import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
-import type { FloatingBounds, SerializedStickyWindow, StickyColorId, WorkspacesFile } from '../types';
+import type {
+	FloatingBounds,
+	SerializedStickyWindow,
+	StickyColorId,
+	StickyWorkspace,
+	WorkspacesFile
+} from '../types';
 import {
 	getStickyBgColorFromMetadataCache,
 	parseStickyBgColorFromMarkdownSource,
@@ -78,7 +84,7 @@ export class StickyNoteManager {
 	workspaces: WorkspacesFile = {
 		version: 1,
 		activeWorkspaceId: 'default',
-		workspaces: [{ id: 'default', name: '默认工作区', windows: [] }]
+		workspaces: [{ id: 'default', name: '默认工作区', windows: [], updatedAt: Date.now() }]
 	};
 
 	constructor(
@@ -351,9 +357,8 @@ export class StickyNoteManager {
 		return null;
 	}
 
-	private persistOpenWindows(): void {
-		const ws = this.activeWorkspace();
-		if (!ws) return;
+	/** 将当前已打开便笺序列化为工作区快照（不按引用修改内存中的工作区）。 */
+	serializeOpenWindowsSnapshot(): SerializedStickyWindow[] {
 		const ser: SerializedStickyWindow[] = [];
 		for (const [id, pop] of this.popovers) {
 			const view = pop.leaf?.view;
@@ -377,7 +382,70 @@ export class StickyNoteManager {
 			}
 			ser.push(row);
 		}
-		ws.windows = ser;
+		return ser;
+	}
+
+	private remapStickyWindowIds(windows: SerializedStickyWindow[]): SerializedStickyWindow[] {
+		const idMap = new Map<string, string>();
+		for (const w of windows) {
+			idMap.set(w.id, this.newId());
+		}
+		return windows.map(w => ({
+			...w,
+			id: idMap.get(w.id) ?? w.id,
+			bindings: (w.bindings ?? [])
+				.map(b => (typeof b === 'string' ? idMap.get(b) : undefined))
+				.filter((x): x is string => typeof x === 'string' && x.length > 0)
+		}));
+	}
+
+	/** 以当前窗口布局新建一条命名工作区（便笺窗口 ID 重新分配，避免与运行中会话冲突）。 */
+	async createWorkspaceFromCurrentLayout(name: string): Promise<void> {
+		const trimmed = name.trim();
+		const finalName = trimmed || `工作区 ${this.workspaces.workspaces.length + 1}`;
+		const snapshot = this.remapStickyWindowIds(this.serializeOpenWindowsSnapshot());
+		const id = `ws_${Date.now().toString(36)}`;
+		const nw: StickyWorkspace = {
+			id,
+			name: finalName,
+			windows: snapshot,
+			updatedAt: Date.now()
+		};
+		this.workspaces.workspaces.push(nw);
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+	}
+
+	/**
+	 * 切换当前使用的工作区并立即按该工作区快照恢复便笺窗口（先落盘当前布局到原工作区）。
+	 */
+	async switchWorkspaceAndRestore(wsId: string): Promise<void> {
+		if (!this.workspaces.workspaces.some(w => w.id === wsId)) return;
+		this.persistOpenWindows();
+		this.workspaces.activeWorkspaceId = wsId;
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+		this.closeAllOpenStickyWindows(true);
+		await this.restoreWorkspaceWindows();
+	}
+
+	async renameWorkspace(wsId: string, name: string): Promise<void> {
+		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
+		if (!ws) return;
+		const next = name.trim();
+		if (!next) {
+			new Notice('名称不能为空');
+			return;
+		}
+		ws.name = next;
+		ws.updatedAt = Date.now();
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+		new Notice('已更新名称');
+	}
+
+	private persistOpenWindows(): void {
+		const ws = this.activeWorkspace();
+		if (!ws) return;
+		ws.windows = this.serializeOpenWindowsSnapshot();
+		ws.updatedAt = Date.now();
 		this.scheduleSaveWorkspaces();
 	}
 

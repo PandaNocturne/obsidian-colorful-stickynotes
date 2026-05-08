@@ -6,10 +6,11 @@ const FILE_NAME = 'workspaces.json';
 
 export function defaultWorkspacesFile(): WorkspacesFile {
 	const id = 'default';
+	const now = Date.now();
 	return {
 		version: 1,
 		activeWorkspaceId: id,
-		workspaces: [{ id, name: '默认工作区', windows: [] }]
+		workspaces: [{ id, name: '默认工作区', windows: [], updatedAt: now }]
 	};
 }
 
@@ -34,7 +35,12 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 			workspaces: parsed.workspaces.map(w => ({
 				id: w.id,
 				name: w.name,
-				windows: Array.isArray(w.windows) ? w.windows : []
+				windows: Array.isArray(w.windows) ? w.windows : [],
+				updatedAt:
+					typeof (w as { updatedAt?: unknown }).updatedAt === 'number' &&
+					Number.isFinite((w as { updatedAt: number }).updatedAt)
+						? (w as { updatedAt: number }).updatedAt
+						: undefined
 			}))
 		};
 	} catch {
