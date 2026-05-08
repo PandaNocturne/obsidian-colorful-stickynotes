@@ -1,4 +1,5 @@
 import { Notice, Plugin, TFile, normalizePath } from 'obsidian';
+import { t } from './lang/helpers';
 import {
 	clampViewContentZoom,
 	ColorfulStickyNotesSettingTab,
@@ -100,21 +101,21 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			this.syncNoteListGridMetricsToOpenViews();
 		});
 
-		this.addRibbonIcon('square-pen', '打开便笺', () => {
+		this.addRibbonIcon('square-pen', t('RIBBON_OPEN_STICKY'), () => {
 			void this.toggleStickyWindowsForCurrentWorkspace();
 		});
 
-		this.addRibbonIcon('layout-list', '便笺列表', () => {
+		this.addRibbonIcon('layout-list', t('RIBBON_STICKY_LIST'), () => {
 			void this.openNoteListView();
 		});
 
-		this.addRibbonIcon('layers', '便笺工作区', () => {
+		this.addRibbonIcon('layers', t('RIBBON_WORKSPACE'), () => {
 			this.openWorkspacePanel();
 		});
 
 		this.addCommand({
 			id: 'open-sticky-note-windows',
-			name: '打开/关闭当前便笺工作区的便笺',
+			name: t('CMD_TOGGLE_STICKY_WINDOWS'),
 			callback: () => {
 				void this.toggleStickyWindowsForCurrentWorkspace();
 			}
@@ -122,7 +123,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'open-sticky-note-list',
-			name: '打开便笺列表',
+			name: t('CMD_OPEN_STICKY_LIST'),
 			callback: () => {
 				void this.openNoteListView();
 			}
@@ -130,7 +131,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'create-new-sticky-note',
-			name: '新建便笺',
+			name: t('CMD_NEW_STICKY'),
 			callback: () => {
 				void this.stickies.addStickyWindow();
 			}
@@ -138,7 +139,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'hide-current-sticky-note',
-			name: '隐藏当前便笺',
+			name: t('CMD_HIDE_CURRENT'),
 			callback: () => {
 				this.stickies.toggleHideCurrentSticky();
 			}
@@ -146,7 +147,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'toggle-sticky-notes-hide-others',
-			name: '隐藏其他便笺/取消',
+			name: t('CMD_TOGGLE_HIDE_OTHERS'),
 			callback: () => {
 				/* 兼容旧命令：按当前状态切换隐藏其他/显示其他。 */
 				if (this.stickies.isHideOthersMode()) {
@@ -159,7 +160,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'toggle-sticky-notes-visibility',
-			name: '显示/隐藏所有便笺',
+			name: t('CMD_TOGGLE_HIDE_ALL'),
 			callback: () => {
 				/* 若任意便笺处于隐藏状态，则优先“显示所有”；否则“隐藏所有”。 */
 				this.stickies.toggleHideAllByCurrentState();
@@ -168,7 +169,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'open-sticky-workspace-panel',
-			name: '打开便笺工作区',
+			name: t('CMD_OPEN_WORKSPACE_PANEL'),
 			callback: () => {
 				this.openWorkspacePanel();
 			}
@@ -352,7 +353,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			await this.saveData(payload);
 		} catch (e) {
 			console.error('[colorful-sticky-notes] saveSettings failed', e);
-			new Notice('多彩便笺：设置保存失败，请查看控制台。');
+			new Notice(t('NOTICE_SAVE_SETTINGS_FAILED'));
 			throw e;
 		}
 	}
@@ -455,7 +456,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			if (loc === 'left-sidebar') {
 				const L = workspace.getLeftLeaf(false);
 				if (!L) {
-					new Notice('无法创建左侧侧边栏视图');
+					new Notice(t('NOTICE_CANNOT_CREATE_LEFT_SIDEBAR'));
 					return;
 				}
 				await L.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
@@ -463,7 +464,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			} else if (loc === 'right-sidebar') {
 				const R = workspace.getRightLeaf(false);
 				if (!R) {
-					new Notice('无法创建右侧侧边栏视图');
+					new Notice(t('NOTICE_CANNOT_CREATE_RIGHT_SIDEBAR'));
 					return;
 				}
 				await R.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });

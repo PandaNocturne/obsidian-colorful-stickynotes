@@ -14,6 +14,8 @@ import {
 	type Debouncer
 } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
+import { t } from '../lang/helpers';
+import type { MessageKey } from '../lang/locale/en';
 import { clampViewContentZoom } from '../settings';
 import { VIEW_STICKY_NOTE_LIST, type NoteListFloatOpenFilter, type NoteListSort } from '../types';
 import '../obsidian-augmentations';
@@ -35,31 +37,35 @@ const NOTE_LIST_SORT_SPECS: readonly {
 	mode: NoteListSort;
 	menuIcon: string;
 	toolbarIcon?: string;
-	title: string;
+	titleKey: MessageKey;
 }[] = [
-	{ mode: 'ctime-desc', menuIcon: 'calendar-arrow-down', title: '创建时间 · 新的在前' },
-	{ mode: 'ctime-asc', menuIcon: 'calendar-arrow-up', title: '创建时间 · 旧的在先' },
-	{ mode: 'mtime-desc', menuIcon: 'clock-arrow-down', title: '修改时间 · 新的在前' },
-	{ mode: 'mtime-asc', menuIcon: 'clock-arrow-up', title: '修改时间 · 旧的在先' },
+	{ mode: 'ctime-desc', menuIcon: 'calendar-arrow-down', titleKey: 'SORT_CTIME_DESC_NEW' },
+	{ mode: 'ctime-asc', menuIcon: 'calendar-arrow-up', titleKey: 'SORT_CTIME_ASC_OLD' },
+	{ mode: 'mtime-desc', menuIcon: 'clock-arrow-down', titleKey: 'SORT_MTIME_DESC_NEW' },
+	{ mode: 'mtime-asc', menuIcon: 'clock-arrow-up', titleKey: 'SORT_MTIME_ASC_OLD' },
 	{
 		mode: 'basename-asc',
 		menuIcon: 'arrow-up-narrow-wide',
 		toolbarIcon: 'arrow-up-narrow-wide',
-		title: '文件名称 · A→Z'
+		titleKey: 'SORT_BASENAME_AZ'
 	},
 	{
 		mode: 'basename-desc',
 		menuIcon: 'arrow-down-narrow-wide',
 		toolbarIcon: 'arrow-down-narrow-wide',
-		title: '文件名称 · Z→A'
+		titleKey: 'SORT_BASENAME_ZA'
 	}
 ];
 
 /** 工具栏「浮动窗口」筛选：与 `settings.noteListFloatOpenFilter` 一一对应。 */
-const NOTE_LIST_FLOAT_OPEN_SPECS: readonly { mode: NoteListFloatOpenFilter; icon: string; title: string }[] = [
-	{ mode: 'all', icon: 'layout-grid', title: '全部便笺' },
-	{ mode: 'open', icon: 'square-pen', title: '仅已打开浮动便笺' },
-	{ mode: 'closed', icon: 'file', title: '仅未打开浮动便笺' }
+const NOTE_LIST_FLOAT_OPEN_SPECS: readonly {
+	mode: NoteListFloatOpenFilter;
+	icon: string;
+	titleKey: MessageKey;
+}[] = [
+	{ mode: 'all', icon: 'layout-grid', titleKey: 'FLOAT_ALL_STICKIES' },
+	{ mode: 'open', icon: 'square-pen', titleKey: 'FLOAT_OPEN_ONLY' },
+	{ mode: 'closed', icon: 'file', titleKey: 'FLOAT_CLOSED_ONLY' }
 ];
 
 /** 侧栏较窄时，小于此宽度则切换为「窗口 / 排序 / 颜色」图标按钮 + 菜单 / 浮层。 */
@@ -251,7 +257,7 @@ export class StickyNoteListView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return '便笺列表';
+		return t('DISPLAY_STICKY_LIST');
 	}
 
 	getIcon(): string {
@@ -283,8 +289,8 @@ export class StickyNoteListView extends ItemView {
 		const on = pinnedSet.has(normalizePath(path));
 		pinBtn.toggleClass('is-active', on);
 		pinBtn.setAttr('aria-pressed', on ? 'true' : 'false');
-		pinBtn.setAttr('aria-label', on ? '取消置顶' : '置顶');
-		pinBtn.setAttr('title', on ? '取消置顶' : '置顶到列表最前');
+		pinBtn.setAttr('aria-label', on ? t('UNPIN_ARIA') : t('PIN_ARIA'));
+		pinBtn.setAttr('title', on ? t('UNPIN_ARIA') : t('PIN_TO_TOP_TITLE'));
 	}
 
 	private async togglePinForPath(path: string): Promise<void> {
@@ -374,9 +380,9 @@ export class StickyNoteListView extends ItemView {
 		this.listItemsDelegatedEvents = true;
 
 		this.registerDomEvent(this.listItemsEl, 'click', (evt: MouseEvent) => {
-			const t = evt.target;
-			if (!(t instanceof Element)) return;
-			const pinBtn = t.closest('.csn-list-card-pin-btn');
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const pinBtn = hit.closest('.csn-list-card-pin-btn');
 			if (pinBtn && this.listItemsEl?.contains(pinBtn)) {
 				const card = pinBtn.closest('.csn-list-card');
 				if (!card) return;
@@ -387,7 +393,7 @@ export class StickyNoteListView extends ItemView {
 				void this.togglePinForPath(path);
 				return;
 			}
-			const btn = t.closest('.csn-list-card-menu-btn');
+			const btn = hit.closest('.csn-list-card-menu-btn');
 			if (!btn || !this.listItemsEl?.contains(btn)) return;
 			const card = btn.closest('.csn-list-card');
 			if (!card) return;
@@ -402,7 +408,7 @@ export class StickyNoteListView extends ItemView {
 				rawListColor && rawListColor.length > 0 ? (rawListColor as StickyColorId) : null;
 			const menu = new Menu();
 			menu.addItem(item => {
-				item.setTitle('打开笔记')
+				item.setTitle(t('OPEN_NOTE'))
 					.setIcon('file-text')
 					.onClick(() => {
 						void this.app.workspace.getLeaf('tab').openFile(f);
@@ -410,12 +416,12 @@ export class StickyNoteListView extends ItemView {
 			});
 			menu.addSeparator();
 			menu.addItem(item => {
-				item.setTitle('修改背景').setIcon('palette');
+				item.setTitle(t('CHANGE_BG')).setIcon('palette');
 				const sub = item.setSubmenu();
 				for (const c of SHEET_COLOR_ORDER) {
 					const selected = color !== null && c.id === color;
 					sub.addItem(si => {
-						si.setTitle(buildStickyBgSubmenuTitle(document, c.id, c.label, selected));
+						si.setTitle(buildStickyBgSubmenuTitle(document, c.id, t(c.labelKey), selected));
 						si.setIcon(null);
 						si.onClick(() => {
 							void this.plugin.stickies.setStickyBackgroundColorForFile(f, c.id).then(() => {
@@ -427,7 +433,7 @@ export class StickyNoteListView extends ItemView {
 			});
 			menu.addSeparator();
 			menu.addItem(item => {
-				item.setTitle('删除笔记')
+				item.setTitle(t('DELETE_NOTE'))
 					.setIcon('trash-2')
 					.onClick(() => {
 						void this.plugin.stickies.trashStickyNoteFile(f);
@@ -437,10 +443,10 @@ export class StickyNoteListView extends ItemView {
 		});
 
 		this.registerDomEvent(this.listItemsEl, 'dblclick', (evt: MouseEvent) => {
-			const t = evt.target;
-			if (!(t instanceof Element)) return;
-			if (t.closest('.csn-list-card-pin-btn') || t.closest('.csn-list-card-menu-btn')) return;
-			const card = t.closest('.csn-list-card');
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			if (hit.closest('.csn-list-card-pin-btn') || hit.closest('.csn-list-card-menu-btn')) return;
+			const card = hit.closest('.csn-list-card');
 			if (!card || !this.listItemsEl?.contains(card)) return;
 			const path = (card as HTMLElement).dataset.csnNotePath;
 			if (!path) return;
@@ -535,9 +541,9 @@ export class StickyNoteListView extends ItemView {
 			type: 'text',
 			cls: 'csn-list-search-input',
 			attr: {
-				placeholder: '搜索标题、路径与正文（空格分隔，需同时包含）',
+				placeholder: t('SEARCH_PLACEHOLDER'),
 				spellcheck: 'false',
-				'aria-label': '搜索便笺',
+				'aria-label': t('SEARCH_ARIA'),
 				role: 'searchbox',
 				autocomplete: 'off'
 			}
@@ -545,7 +551,7 @@ export class StickyNoteListView extends ItemView {
 		this.searchClearBtn = searchInner.createEl('button', {
 			type: 'button',
 			cls: 'csn-list-search-clear csn-list-search-clear--hidden',
-			attr: { 'aria-label': '清除搜索', title: '清除' }
+			attr: { 'aria-label': t('CLEAR_SEARCH_ARIA'), title: t('CLEAR_SEARCH_TITLE') }
 		});
 		setIcon(this.searchClearBtn, 'x');
 		this.registerDomEvent(this.searchClearBtn, 'click', (e: MouseEvent) => {
@@ -566,15 +572,20 @@ export class StickyNoteListView extends ItemView {
 		const expanded = toolbarMain.createDiv({ cls: 'csn-list-toolbar-expanded' });
 		const floatBar = expanded.createDiv({ cls: 'csn-list-toolbar-float-open' });
 		this.floatOpenBarEl = floatBar;
-		const floatLabel = floatBar.createSpan({ cls: 'csn-list-toolbar-label', text: '窗口' });
+		const floatLabel = floatBar.createSpan({ cls: 'csn-list-toolbar-label', text: t('LABEL_WINDOW') });
 		floatLabel.setAttr('aria-hidden', 'true');
 		const floatWrap = floatBar.createDiv({ cls: 'csn-list-toolbar-btns' });
 		this.floatOpenBtnByMode.clear();
 		for (const spec of NOTE_LIST_FLOAT_OPEN_SPECS) {
+			const floatTitle = t(spec.titleKey);
 			const btn = floatWrap.createEl('button', {
 				type: 'button',
 				cls: 'clickable-icon csn-list-sort-btn',
-				attr: { 'aria-label': spec.title, title: spec.title, 'data-csn-list-float': spec.mode }
+				attr: {
+					'aria-label': floatTitle,
+					title: floatTitle,
+					'data-csn-list-float': spec.mode
+				}
 			});
 			setIcon(btn, spec.icon);
 			this.floatOpenBtnByMode.set(spec.mode, btn);
@@ -589,15 +600,16 @@ export class StickyNoteListView extends ItemView {
 		});
 
 		const sortModule = expanded.createDiv({ cls: 'csn-list-toolbar-module' });
-		const sortLabel = sortModule.createSpan({ cls: 'csn-list-toolbar-label', text: '排序' });
+		const sortLabel = sortModule.createSpan({ cls: 'csn-list-toolbar-label', text: t('LABEL_SORT') });
 		sortLabel.setAttr('aria-hidden', 'true');
 		const sortWrap = sortModule.createDiv({ cls: 'csn-list-toolbar-btns' });
 		this.sortBtnByMode.clear();
 		for (const spec of NOTE_LIST_SORT_SPECS) {
+			const sortTitle = t(spec.titleKey);
 			const btn = sortWrap.createEl('button', {
 				type: 'button',
 				cls: 'clickable-icon csn-list-sort-btn',
-				attr: { 'aria-label': spec.title, title: spec.title }
+				attr: { 'aria-label': sortTitle, title: sortTitle }
 			});
 			setIcon(btn, spec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
 			this.sortBtnByMode.set(spec.mode, btn);
@@ -613,18 +625,19 @@ export class StickyNoteListView extends ItemView {
 
 		const colorBar = expanded.createDiv({ cls: 'csn-list-toolbar-color-filter' });
 		this.colorFilterBarEl = colorBar;
-		const colorLabel = colorBar.createSpan({ cls: 'csn-list-toolbar-label', text: '颜色' });
+		const colorLabel = colorBar.createSpan({ cls: 'csn-list-toolbar-label', text: t('LABEL_COLOR') });
 		colorLabel.setAttr('aria-hidden', 'true');
 		const colorBtns = colorBar.createDiv({ cls: 'csn-list-color-filter-btns' });
 		this.colorFilterBtnById.clear();
 
 		for (const c of SHEET_COLOR_ORDER) {
+			const lab = t(c.labelKey);
 			const sw = colorBtns.createEl('button', {
 				type: 'button',
 				cls: 'clickable-icon csn-list-color-filter-btn csn-list-color-filter-swatch',
 				attr: {
-					'aria-label': `${c.label}，点击加入或移出筛选；未选任何色时显示全部`,
-					title: `${c.label}（多选）`,
+					'aria-label': t('LIST_COLOR_SWATCH_FILTER_HINT', { label: lab }),
+					title: t('LIST_COLOR_SWATCH_TITLE', { label: lab }),
 					'data-csn-list-color': c.id
 				}
 			});
@@ -673,7 +686,7 @@ export class StickyNoteListView extends ItemView {
 		const newStickyBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-new-btn',
-			attr: { 'aria-label': '新建便笺', title: '新建便笺' }
+			attr: { 'aria-label': t('NEW_STICKY_ARIA'), title: t('NEW_STICKY_ARIA') }
 		});
 		setIcon(newStickyBtn, 'plus');
 		this.registerDomEvent(newStickyBtn, 'click', () => {
@@ -683,7 +696,7 @@ export class StickyNoteListView extends ItemView {
 		const refreshBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-refresh-btn',
-			attr: { 'aria-label': '刷新', title: '立即刷新列表与嵌入预览' }
+			attr: { 'aria-label': t('REFRESH_ARIA'), title: t('REFRESH_TITLE') }
 		});
 		setIcon(refreshBtn, 'refresh-ccw');
 		this.registerDomEvent(refreshBtn, 'click', () => {
@@ -701,13 +714,13 @@ export class StickyNoteListView extends ItemView {
 		this.paginationRowEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-row' });
 		this.paginationPrevBtn = this.paginationRowEl.createEl('button', {
 			type: 'button',
-			text: '上一页',
+			text: t('PREV_PAGE'),
 			cls: 'csn-list-pagination-btn csn-list-pagination-btn--nav'
 		});
 		this.paginationPagesEl = this.paginationRowEl.createDiv({ cls: 'csn-list-pagination-pages' });
 		this.paginationNextBtn = this.paginationRowEl.createEl('button', {
 			type: 'button',
-			text: '下一页',
+			text: t('NEXT_PAGE'),
 			cls: 'csn-list-pagination-btn csn-list-pagination-btn--nav'
 		});
 		this.paginationMetaEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-meta' });
@@ -721,9 +734,9 @@ export class StickyNoteListView extends ItemView {
 			void this.renderList();
 		});
 		this.registerDomEvent(this.paginationEl, 'click', (evt: MouseEvent) => {
-			const t = evt.target;
-			if (!(t instanceof Element)) return;
-			const btn = t.closest('button[data-csn-list-page]');
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const btn = hit.closest('button[data-csn-list-page]');
 			if (!btn || !this.paginationEl?.contains(btn)) return;
 			const raw = (btn as HTMLButtonElement).dataset.csnListPage;
 			const p0 = raw !== undefined ? parseInt(raw, 10) : NaN;
@@ -790,8 +803,9 @@ export class StickyNoteListView extends ItemView {
 			NOTE_LIST_SORT_SPECS[0]!;
 		if (this.compactSortBtn) {
 			setIcon(this.compactSortBtn, sortSpec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
-			this.compactSortBtn.setAttr('title', sortSpec.title);
-			this.compactSortBtn.setAttr('aria-label', `排序：${sortSpec.title}`);
+			const sortTitle = t(sortSpec.titleKey);
+			this.compactSortBtn.setAttr('title', sortTitle);
+			this.compactSortBtn.setAttr('aria-label', t('LIST_TOOLBAR_SORT_PREFIX', { title: sortTitle }));
 		}
 
 		const floatSpec =
@@ -800,15 +814,16 @@ export class StickyNoteListView extends ItemView {
 			) ?? NOTE_LIST_FLOAT_OPEN_SPECS[0]!;
 		if (this.compactFloatBtn) {
 			setIcon(this.compactFloatBtn, floatSpec.icon);
-			this.compactFloatBtn.setAttr('title', floatSpec.title);
-			this.compactFloatBtn.setAttr('aria-label', `窗口：${floatSpec.title}`);
+			const floatTitle = t(floatSpec.titleKey);
+			this.compactFloatBtn.setAttr('title', floatTitle);
+			this.compactFloatBtn.setAttr('aria-label', t('LIST_TOOLBAR_WINDOW_PREFIX', { title: floatTitle }));
 		}
 
 		const n = this.plugin.settings.noteListColorFilters.length;
 		if (this.compactColorBtn) {
 			setIcon(this.compactColorBtn, 'palette');
 			const title =
-				n === 0 ? '颜色筛选（未选则显示全部）' : `颜色筛选：已选 ${n} 种（多选）`;
+				n === 0 ? t('LIST_COLOR_FILTER_SUMMARY_ALL') : t('LIST_COLOR_FILTER_SUMMARY_SOME', { n });
 			this.compactColorBtn.setAttr('title', title);
 			this.compactColorBtn.setAttr('aria-label', title);
 		}
@@ -820,7 +835,7 @@ export class StickyNoteListView extends ItemView {
 		for (const spec of NOTE_LIST_SORT_SPECS) {
 			menu.addItem(item => {
 				item
-					.setTitle(spec.title)
+					.setTitle(t(spec.titleKey))
 					.setIcon(spec.menuIcon)
 					.setChecked(spec.mode === cur)
 					.onClick(() => {
@@ -837,7 +852,7 @@ export class StickyNoteListView extends ItemView {
 		for (const spec of NOTE_LIST_FLOAT_OPEN_SPECS) {
 			menu.addItem(item => {
 				item
-					.setTitle(spec.title)
+					.setTitle(t(spec.titleKey))
 					.setIcon(spec.icon)
 					.setChecked(spec.mode === cur)
 					.onClick(() => {
@@ -864,7 +879,7 @@ export class StickyNoteListView extends ItemView {
 		this.colorPopoverEl = root;
 		const row = root.createDiv({ cls: 'csn-list-color-popover-row' });
 		row.setAttr('role', 'group');
-		row.setAttr('aria-label', '颜色筛选，可多选');
+		row.setAttr('aria-label', t('LIST_COLOR_FILTER_POPOVER_GROUP_ARIA'));
 
 		const sel = new Set(this.plugin.settings.noteListColorFilters);
 		for (const c of SHEET_COLOR_ORDER) {
@@ -873,7 +888,7 @@ export class StickyNoteListView extends ItemView {
 				cls: 'csn-list-color-popover-swatch',
 				attr: {
 					'data-csn-list-color': c.id,
-					'aria-label': c.label,
+					'aria-label': t(c.labelKey),
 					'aria-pressed': sel.has(c.id) ? 'true' : 'false'
 				}
 			});
@@ -1044,7 +1059,7 @@ export class StickyNoteListView extends ItemView {
 	): Promise<HTMLElement> {
 		const cardAttr: Record<string, string> = {
 			'data-csn-note-path': f.path,
-			title: '双击打开便笺'
+			title: t('DOUBLE_CLICK_OPEN_TITLE')
 		};
 		if (color != null) cardAttr['data-csn-list-color'] = color;
 		const card = this.contentEl.createDiv({
@@ -1064,9 +1079,9 @@ export class StickyNoteListView extends ItemView {
 				type: 'button',
 				cls: `clickable-icon csn-list-card-pin-btn${isPinned ? ' is-active' : ''}`,
 				attr: {
-					'aria-label': isPinned ? '取消置顶' : '置顶',
+					'aria-label': isPinned ? t('UNPIN_ARIA') : t('PIN_ARIA'),
 					'aria-pressed': isPinned ? 'true' : 'false',
-					title: isPinned ? '取消置顶' : '置顶到列表最前'
+					title: isPinned ? t('UNPIN_ARIA') : t('PIN_TO_TOP_TITLE')
 				}
 			},
 			(btn: HTMLButtonElement) => setIcon(btn, 'pin')
@@ -1076,7 +1091,7 @@ export class StickyNoteListView extends ItemView {
 			{
 				type: 'button',
 				cls: 'clickable-icon csn-list-card-menu-btn',
-				attr: { 'aria-label': '更多操作', 'aria-haspopup': 'true' }
+				attr: { 'aria-label': t('MORE_ACTIONS_ARIA'), 'aria-haspopup': 'true' }
 			},
 			(btn: HTMLButtonElement) => setIcon(btn, 'more-horizontal')
 		);
@@ -1266,7 +1281,7 @@ export class StickyNoteListView extends ItemView {
 				this.lastListStructureKey = '';
 				this.lastRenderedPageIndex = null;
 				container.empty();
-				container.createDiv({ text: '没有匹配的便笺', cls: 'csn-list-empty' });
+				container.createDiv({ text: t('LIST_EMPTY'), cls: 'csn-list-empty' });
 				this.paginationPagesEl?.empty();
 				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
@@ -1321,7 +1336,7 @@ export class StickyNoteListView extends ItemView {
 
 			this.paginationEl?.show();
 			this.paginationMetaEl?.setText(
-				`本页 ${pageFiles.length} 条 · 共 ${filtered.length} 条`
+				t('LIST_PAGINATION_META', { pageCount: pageFiles.length, totalCount: filtered.length })
 			);
 
 			if (totalPages <= 1) {
@@ -1353,7 +1368,7 @@ export class StickyNoteListView extends ItemView {
 							text: String(ent),
 							attr: {
 								'data-csn-list-page': String(ent - 1),
-								'aria-label': `第 ${ent} 页`,
+								'aria-label': t('LIST_PAGINATION_PAGE_ARIA', { page: ent }),
 								...(isActive ? { 'aria-current': 'page' as const } : {})
 							}
 						});

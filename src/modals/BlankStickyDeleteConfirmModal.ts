@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
+import { t } from '../lang/helpers';
 
 export class BlankStickyDeleteConfirmModal extends Modal {
 	constructor(
@@ -13,15 +14,15 @@ export class BlankStickyDeleteConfirmModal extends Modal {
 	onOpen(): void {
 		const { contentEl } = this;
 		contentEl.empty();
-		this.titleEl.setText('确认删除空白便笺');
+		this.titleEl.setText(t('BLANK_TRASH_CONFIRM_TITLE'));
 		contentEl.createEl('p', {
-			text: '当前便笺无正文，是否自动移入回收站'
+			text: t('BLANK_TRASH_CONFIRM_BODY')
 		});
 		new Setting(contentEl)
 			.setName('')
-			.addButton(btn => btn.setButtonText('取消').onClick(() => this.close()))
+			.addButton(btn => btn.setButtonText(t('MODAL_CANCEL')).onClick(() => this.close()))
 			.addButton(btn =>
-				btn.setButtonText('确定').setCta().onClick(() => {
+				btn.setButtonText(t('MODAL_OK')).setCta().onClick(() => {
 					this.opts.onConfirm();
 					this.close();
 				})

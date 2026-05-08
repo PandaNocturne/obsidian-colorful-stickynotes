@@ -1,4 +1,5 @@
 import { App, FuzzySuggestModal, TFolder } from 'obsidian';
+import { t } from '../lang/helpers';
 
 function collectFolders(folder: TFolder, out: TFolder[] = []): TFolder[] {
 	out.push(folder);
@@ -17,7 +18,7 @@ export class FolderPickerModal extends FuzzySuggestModal<TFolder> {
 		this.onChoose = onChoose;
 		const root = app.vault.getRoot();
 		this.folders = collectFolders(root);
-		this.setPlaceholder('选择文件夹…');
+		this.setPlaceholder(t('FOLDER_PICKER_PLACEHOLDER'));
 	}
 
 	getItems(): TFolder[] {

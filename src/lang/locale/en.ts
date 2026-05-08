@@ -1,0 +1,227 @@
+export const en = {
+	COLOR_YELLOW: 'Bright yellow',
+	COLOR_MINT: 'Mint',
+	COLOR_PINK: 'Pink',
+	COLOR_LAVENDER: 'Lavender',
+	COLOR_BLUE: 'Sky blue',
+	COLOR_GRAY: 'Light gray',
+	COLOR_DEFAULT: 'Default',
+
+	RIBBON_OPEN_STICKY: 'Open stickies',
+	RIBBON_STICKY_LIST: 'Sticky list',
+	RIBBON_WORKSPACE: 'Sticky workspaces',
+	CMD_TOGGLE_STICKY_WINDOWS: 'Toggle stickies for current workspace',
+	CMD_OPEN_STICKY_LIST: 'Open sticky list',
+	CMD_NEW_STICKY: 'New sticky note',
+	CMD_HIDE_CURRENT: 'Hide current sticky',
+	CMD_TOGGLE_HIDE_OTHERS: 'Hide other stickies / show others',
+	CMD_TOGGLE_HIDE_ALL: 'Show/hide all stickies',
+	CMD_OPEN_WORKSPACE_PANEL: 'Open sticky workspaces',
+	NOTICE_SAVE_SETTINGS_FAILED:
+		'Colorful sticky notes: could not save settings. Check the console.',
+	NOTICE_CANNOT_CREATE_LEFT_SIDEBAR: 'Cannot create left sidebar view',
+	NOTICE_CANNOT_CREATE_RIGHT_SIDEBAR: 'Cannot create right sidebar view',
+
+	DEFAULT_WORKSPACE_NAME: 'Default sticky workspace',
+
+	NOTICE_NAME_EMPTY: 'Name cannot be empty',
+	NOTICE_WORKSPACE_RENAMED: 'Sticky workspace name updated',
+	NOTICE_INVALID_FILENAME_TEMPLATE:
+		'Invalid sticky filename template. Check Moment format in settings.',
+	NOTICE_CANNOT_CREATE_STICKY_FILE: 'Could not create sticky note file',
+	NOTICE_CANNOT_DELETE_STICKY: 'Could not delete this sticky',
+	NOTICE_CANNOT_DELETE_ACTIVE_NOTE_COMMAND:
+		'Could not run “Delete current file” command',
+	NOTICE_CANNOT_AUTO_DELETE_BLANK_STICKY: 'Could not auto-delete empty sticky',
+
+	SETTINGS_PLUGIN_TITLE: 'Colorful sticky notes',
+	SETTINGS_HEADING_GENERAL: 'General',
+	SETTINGS_STICKY_FOLDER_NAME: 'Sticky notes folder',
+	SETTINGS_STICKY_FOLDER_DESC: 'New stickies are created under this path.',
+	SETTINGS_CHOOSE_FOLDER: 'Choose…',
+	SETTINGS_FILENAME_DESC:
+		'Same as the Core Daily notes plugin: the whole template is a Moment format string (https://momentjs.com/docs/#/displaying/format/)—no {{date}} wrapper. Slashes (/) create subfolders under the sticky folder (e.g. YYYY/YYYY-MM-DD). Legacy templates using {{date:…}} still work.',
+	SETTINGS_FILENAME_SAMPLE_INTRO: 'Sample path using the current format:',
+	SETTINGS_FILENAME_INVALID: '(invalid format)',
+	SETTINGS_FILENAME_FORMAT_NAME: 'Sticky filename format',
+
+	SETTINGS_DEFAULT_TEMPLATE_NAME: 'Default template note',
+	SETTINGS_DEFAULT_TEMPLATE_DESC:
+		'When creating a sticky, insert this note’s contents (empty = blank). Path in the vault.',
+	SETTINGS_DEFAULT_TEMPLATE_PLACEHOLDER: 'e.g. Templates/sticky-template.md',
+
+	SETTINGS_HEADING_WINDOW: 'Window',
+	SETTINGS_RESTORE_ON_STARTUP_NAME: 'Restore last stickies on startup',
+	SETTINGS_RESTORE_ON_STARTUP_DESC:
+		'After Obsidian finishes layout, restore sticky windows from the last session (same as the restore command).',
+	SETTINGS_RESTORE_DELAY_NAME: 'Restore delay',
+	SETTINGS_RESTORE_DELAY_DESC:
+		'Wait a few seconds after layout before opening stickies; only applies when restore on startup is enabled.',
+	SETTINGS_RESTORE_DELAY_RESET_TOOLTIP: 'Reset to default 3 seconds',
+
+	SETTINGS_CONFIRM_BLANK_TRASH_NAME: 'Confirm before trashing empty sticky',
+	SETTINGS_CONFIRM_BLANK_TRASH_DESC:
+		'When closing an empty Markdown sticky under the sticky folder, confirm before moving to trash; turn off to delete without asking.',
+
+	SETTINGS_EDGE_STRETCH_NAME: 'Auto-stretch when docked to edge',
+	SETTINGS_EDGE_STRETCH_DESC:
+		'When a sticky docks to the left or right edge, stretch height automatically; restoring height when moved away.',
+	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_NAME: 'Double-click header to stretch',
+	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC:
+		'Double-click header to stretch full height; double-click again to restore.',
+
+	SETTINGS_HEADING_ASSIST: 'Assist alignment',
+	SETTINGS_ALIGN_SNAP_NAME: 'Snap to adjacent stickies',
+	SETTINGS_ALIGN_SNAP_DESC:
+		'While dragging, snap to neighbor edges. Hold Ctrl while dragging to ignore snap and unbind.',
+	SETTINGS_SNAP_THRESHOLD_NAME: 'Snap threshold',
+	SETTINGS_SNAP_THRESHOLD_DESC: 'Snaps when distance is below this many pixels.',
+	SETTINGS_BIND_AFTER_SNAP_NAME: 'Bind windows after snap',
+	SETTINGS_BIND_AFTER_SNAP_DESC:
+		'After snapping, linked windows move together. Hold Ctrl while dragging to detach.',
+
+	SETTINGS_DEFAULT_VIEW_NAME: 'Default view',
+	SETTINGS_MODE_SOURCE: 'Edit',
+	SETTINGS_MODE_PREVIEW: 'Read',
+	SETTINGS_STICKY_ZOOM_NAME: 'Sticky body zoom',
+	SETTINGS_STICKY_ZOOM_DESC: 'Floating sticky body scale ({min}%–{max}%).',
+	SETTINGS_LIST_PREVIEW_ZOOM_DESC:
+		'Markdown preview scale in list cards ({min}%–{max}%), independent from floating stickies.',
+	SETTINGS_RESET_ZOOM_TOOLTIP: 'Reset to default {value}',
+
+	SETTINGS_HEADING_NEW_STICKY: 'New sticky',
+	SETTINGS_HEADER_NEW_SIDE_NAME: 'New sticky beside header +',
+	SETTINGS_HEADER_NEW_SIDE_DESC:
+		'When clicking + in the header, prefer new window to the left or right of current; switches side if off-screen.',
+	SETTINGS_ADJACENT_LEFT: 'Adjacent left',
+	SETTINGS_ADJACENT_RIGHT: 'Adjacent right',
+	SETTINGS_DEFAULT_WIDTH_NAME: 'Default width',
+	SETTINGS_DEFAULT_WIDTH_DESC:
+		'Initial width for new floating stickies (px). New beside existing inherits current size.',
+	SETTINGS_DEFAULT_HEIGHT_NAME: 'Default height',
+	SETTINGS_DEFAULT_HEIGHT_DESC: 'Initial height for new floating stickies (px).',
+	SETTINGS_DEFAULT_BG_NAME: 'Default background',
+	SETTINGS_DEFAULT_BG_DESC:
+		'When no template or no colorful-sticky-bg, write this background (matches bottom color strip).',
+
+	SETTINGS_HEADING_LIST: 'Sticky list',
+	SETTINGS_LIST_OPEN_LOCATION_NAME: 'Open location',
+	SETTINGS_LIST_OPEN_LOCATION_DESC:
+		'When command or ribbon opens the list and no view exists yet, create here; otherwise focus the existing list.',
+	SETTINGS_LIST_LEFT_SIDEBAR: 'Left sidebar',
+	SETTINGS_LIST_RIGHT_SIDEBAR: 'Right sidebar',
+	SETTINGS_LIST_NEW_TAB: 'New tab',
+	SETTINGS_LIST_CARD_OVERFLOW_NAME: 'Clip preview overflow',
+	SETTINGS_LIST_CARD_OVERFLOW_DESC:
+		'When on, card preview uses overflow:auto and scrolls inside fixed height; when off, overflow:visible (outer card may still clip).',
+	SETTINGS_LIST_CARD_HEIGHT_NAME: 'List card height',
+	SETTINGS_LIST_CARD_HEIGHT_DESC: 'Height of each card in the list grid (px).',
+	SETTINGS_LIST_GRID_MIN_WIDTH_NAME: 'Grid minimum column width',
+	SETTINGS_LIST_GRID_MIN_WIDTH_DESC:
+		'Minimum width per column in the adaptive grid; fewer columns when sidebar is narrow.',
+	SETTINGS_LIST_PAGE_SIZE_NAME: 'Cards per page',
+	SETTINGS_LIST_PAGE_SIZE_DESC:
+		'Maximum cards per page (4–48); higher values load more per page and may scroll heavier.',
+	SETTINGS_LIST_PREVIEW_ZOOM_NAME: 'List preview zoom',
+
+	SETTINGS_HEADING_BOTTOM_BAR: 'Bottom toolbar',
+	SETTINGS_BOTTOM_BAR_AUTO_HIDE_NAME: 'Auto-hide',
+	SETTINGS_BOTTOM_BAR_AUTO_HIDE_DESC:
+		'Hide bottom bar when pointer leaves (file name and sticky settings); stays visible while settings sheet is open.',
+
+	DISPLAY_STICKY_LIST: 'Sticky list',
+	SORT_CTIME_DESC_NEW: 'Created · newest first',
+	SORT_CTIME_ASC_OLD: 'Created · oldest first',
+	SORT_MTIME_DESC_NEW: 'Modified · newest first',
+	SORT_MTIME_ASC_OLD: 'Modified · oldest first',
+	SORT_BASENAME_AZ: 'File name · A→Z',
+	SORT_BASENAME_ZA: 'File name · Z→A',
+	FLOAT_ALL_STICKIES: 'All stickies',
+	FLOAT_OPEN_ONLY: 'Open floating only',
+	FLOAT_CLOSED_ONLY: 'Not open floating',
+	LABEL_WINDOW: 'Window',
+	LABEL_SORT: 'Sort',
+	LABEL_COLOR: 'Color',
+	SEARCH_PLACEHOLDER: 'Search title, path, and body (space = all terms)',
+	SEARCH_ARIA: 'Search stickies',
+	CLEAR_SEARCH_ARIA: 'Clear search',
+	CLEAR_SEARCH_TITLE: 'Clear',
+	NEW_STICKY_ARIA: 'New sticky note',
+	REFRESH_ARIA: 'Refresh',
+	REFRESH_TITLE: 'Refresh list and embedded previews',
+	PREV_PAGE: 'Previous page',
+	NEXT_PAGE: 'Next page',
+	LIST_PAGINATION_META: 'This page {pageCount} · total {totalCount}',
+	LIST_PAGINATION_PAGE_ARIA: 'Page {page}',
+	LIST_EMPTY: 'No matching stickies',
+	OPEN_NOTE: 'Open note',
+	CHANGE_BG: 'Change background',
+	DELETE_NOTE: 'Delete note',
+	UNPIN_ARIA: 'Unpin',
+	PIN_ARIA: 'Pin',
+	PIN_TO_TOP_TITLE: 'Pin to top of list',
+	MORE_ACTIONS_ARIA: 'More actions',
+	DOUBLE_CLICK_OPEN_TITLE: 'Double-click to open sticky',
+	LIST_COLOR_FILTER_POPOVER_GROUP_ARIA: 'Color filter, multi-select',
+	LIST_TOOLBAR_SORT_PREFIX: 'Sort: {title}',
+	LIST_TOOLBAR_WINDOW_PREFIX: 'Window: {title}',
+	LIST_COLOR_FILTER_SUMMARY_ALL: 'Color filter (none selected = show all)',
+	LIST_COLOR_FILTER_SUMMARY_SOME: 'Color filter: {n} selected (multi-select)',
+	LIST_COLOR_SWATCH_FILTER_HINT:
+		'{label}: click to add or remove from filter; when none selected, show all',
+	LIST_COLOR_SWATCH_TITLE: '{label} (multi-select)',
+
+	WS_PANEL_TITLE: 'Sticky workspaces',
+	WS_RENAME_TITLE: 'Rename sticky workspace',
+	WS_DELETE_TITLE: 'Delete sticky workspace',
+	WS_DELETE_BODY: 'Delete sticky workspace “{name}”? This cannot be undone.',
+	MODAL_CANCEL: 'Cancel',
+	MODAL_OK: 'OK',
+	MODAL_DELETE: 'Delete',
+	WS_PLACEHOLDER_SAVE_NAME: 'Enter a name to save the current layout…',
+	WS_SAVE_ARIA_LABEL: 'Save as new sticky workspace',
+	WS_SAVE_TITLE: 'Save as new sticky workspace',
+	NOTICE_ENTER_WORKSPACE_NAME: 'Enter a sticky workspace name',
+	NOTICE_SAVED_AND_SWITCHED: 'Saved and switched to this workspace',
+	WS_BADGE_ACTIVE: 'Active',
+	WS_EDIT_NAME_ARIA: 'Edit workspace name',
+	WS_EDIT_NAME_TITLE: 'Edit workspace name',
+	WS_DELETE_ARIA: 'Delete workspace',
+	WS_DELETE_TITLE_SHORT: 'Delete workspace',
+	WS_DELETE_DEFAULT_ARIA: 'Delete workspace (default cannot be deleted)',
+	WS_DELETE_DEFAULT_TITLE: 'Default workspace cannot be deleted',
+	NOTICE_DEFAULT_WS_CANNOT_DELETE: 'The default workspace cannot be deleted',
+	WS_SWITCH_ARIA: 'Switch to this workspace',
+	WS_SWITCH_TITLE: 'Switch to this workspace',
+	NOTICE_SWITCHED_WORKSPACE: 'Switched workspace',
+
+	WS_TIME_UNKNOWN: 'Modified time unknown',
+	WS_TIME_SECONDS: 'Updated moments ago',
+	WS_TIME_ABOUT_MINUTE: 'Updated about 1 minute ago',
+	WS_TIME_MINUTES: 'Updated {n} minutes ago',
+	WS_TIME_HOURS: 'Updated {n} hours ago',
+	WS_TIME_DAYS: 'Updated {n} days ago',
+	WS_TIME_OLDER: 'Updated long ago',
+
+	BLANK_TRASH_CONFIRM_TITLE: 'Delete empty sticky?',
+	BLANK_TRASH_CONFIRM_BODY: 'This sticky has no body. Move it to trash automatically?',
+
+	FOLDER_PICKER_PLACEHOLDER: 'Choose folder…',
+
+	BOTTOM_SETTINGS_ARIA: 'Sticky settings',
+	YAML_HIDE: 'Hide YAML properties',
+	YAML_SHOW: 'Show YAML properties',
+	HIDE_CURRENT_STICKY: 'Hide current sticky',
+	HIDE_OTHERS_STICKY: 'Hide other stickies',
+	SHOW_OTHERS_STICKY: 'Show other stickies',
+	HEADER_NEW_STICKY: 'New sticky note',
+	MODE_READ_CLICK_EDIT: 'Reading mode — click to edit',
+	MODE_EDIT_CLICK_READ: 'Editing mode — click to read',
+	FOLD_ARIA: 'Collapse / expand',
+	FOLD_TITLE: 'Collapse / expand',
+	CLOSE_ARIA: 'Close',
+	DELETE_STICKY_ACTION: 'Delete sticky',
+	STICKY_LIST_ACTION: 'Sticky list'
+} as const;
+
+export type MessageKey = keyof typeof en;

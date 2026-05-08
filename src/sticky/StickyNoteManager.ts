@@ -1,4 +1,5 @@
 import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian';
+import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
 import type {
@@ -84,7 +85,7 @@ export class StickyNoteManager {
 	workspaces: WorkspacesFile = {
 		version: 1,
 		activeWorkspaceId: 'default',
-		workspaces: [{ id: 'default', name: '默认便笺工作区', windows: [], updatedAt: Date.now() }]
+		workspaces: [{ id: 'default', name: t('DEFAULT_WORKSPACE_NAME'), windows: [], updatedAt: Date.now() }]
 	};
 
 	constructor(
@@ -424,13 +425,13 @@ export class StickyNoteManager {
 		if (!ws) return;
 		const next = name.trim();
 		if (!next) {
-			new Notice('名称不能为空');
+			new Notice(t('NOTICE_NAME_EMPTY'));
 			return;
 		}
 		ws.name = next;
 		ws.updatedAt = Date.now();
 		await saveWorkspacesFile(this.plugin, this.workspaces);
-		new Notice('已更新便笺工作区名称');
+		new Notice(t('NOTICE_WORKSPACE_RENAMED'));
 	}
 
 	private persistOpenWindows(): void {
@@ -538,7 +539,7 @@ export class StickyNoteManager {
 			(this.plugin.settings.filenameTemplate || '').trim() || 'YYYY/YYYY-MM-DD';
 		const relativeFormatted = formatStickyNoteRelativePath(tmpl);
 		if (relativeFormatted === 'invalid-format') {
-			new Notice('便笺文件名格式无效，请在设置中检查 Moment 格式');
+			new Notice(t('NOTICE_INVALID_FILENAME_TEMPLATE'));
 			return;
 		}
 		let relativeNoExt = relativeFormatted;
@@ -575,7 +576,7 @@ export class StickyNoteManager {
 			if (this.plugin.listPrioritizeStickyPath === normalizedPath) {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
-			new Notice('无法创建便笺文件');
+			new Notice(t('NOTICE_CANNOT_CREATE_STICKY_FILE'));
 			return;
 		}
 
@@ -584,7 +585,7 @@ export class StickyNoteManager {
 			if (this.plugin.listPrioritizeStickyPath === normalizedPath) {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
-			new Notice('无法创建便笺文件');
+			new Notice(t('NOTICE_CANNOT_CREATE_STICKY_FILE'));
 			return;
 		}
 
@@ -784,7 +785,7 @@ export class StickyNoteManager {
 		try {
 			await this.app.vault.trash(file, false);
 		} catch {
-			new Notice('无法删除该便笺');
+			new Notice(t('NOTICE_CANNOT_DELETE_STICKY'));
 		}
 	}
 
@@ -822,7 +823,7 @@ export class StickyNoteManager {
 				const ok = executeCommandById(this.app, 'app:delete-file');
 				if (!ok) {
 					this.clearPendingDeleteListener();
-					new Notice('无法执行「删除当前笔记」命令');
+					new Notice(t('NOTICE_CANNOT_DELETE_ACTIVE_NOTE_COMMAND'));
 					return;
 				}
 				this.pendingDeleteSafetyTimer = window.setTimeout(() => this.clearPendingDeleteListener(), 120_000);
@@ -860,7 +861,7 @@ export class StickyNoteManager {
 		if (!trashIfBlank || !(file instanceof TFile)) return;
 		if (!this.app.vault.getAbstractFileByPath(file.path)) return;
 		void this.app.vault.trash(file, false).catch(() => {
-			new Notice('无法自动删除空白便笺');
+			new Notice(t('NOTICE_CANNOT_AUTO_DELETE_BLANK_STICKY'));
 		});
 	}
 

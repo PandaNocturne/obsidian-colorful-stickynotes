@@ -1,5 +1,6 @@
 import type { Plugin } from 'obsidian';
 import { normalizePath } from 'obsidian';
+import { t } from './lang/helpers';
 import type { WorkspacesFile } from './types';
 
 const FILE_NAME = 'workspaces.json';
@@ -10,7 +11,7 @@ export function defaultWorkspacesFile(): WorkspacesFile {
 	return {
 		version: 1,
 		activeWorkspaceId: id,
-		workspaces: [{ id, name: '默认便笺工作区', windows: [], updatedAt: now }]
+		workspaces: [{ id, name: t('DEFAULT_WORKSPACE_NAME'), windows: [], updatedAt: now }]
 	};
 }
 

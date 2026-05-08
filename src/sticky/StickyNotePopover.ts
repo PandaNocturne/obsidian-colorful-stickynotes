@@ -12,6 +12,7 @@ import {
 	setIcon
 } from 'obsidian';
 import type { TFile } from 'obsidian';
+import { t } from '../lang/helpers';
 import type { FloatingBounds, StickyColorId } from '../types';
 import { clampViewContentZoom } from '../settings';
 import { SHEET_COLOR_ORDER } from './sticky-color-order';
@@ -202,7 +203,7 @@ export class StickyNotePopover {
 
 		this.settingsBtn = this.bottomBarEl.createEl('button', {
 			cls: 'clickable-icon csn-sticky-bottombar-btn csn-sticky-bottombar-settings',
-			attr: { type: 'button', 'aria-label': '便笺设置', 'aria-expanded': 'false' }
+			attr: { type: 'button', 'aria-label': t('BOTTOM_SETTINGS_ARIA'), 'aria-expanded': 'false' }
 		});
 		setIcon(this.settingsBtn, 'settings');
 		this.plugin.registerDomEvent(this.settingsBtn, 'click', evt => {
@@ -415,7 +416,7 @@ export class StickyNotePopover {
 		const yamlVisible = this.yamlVisible;
 		menu.addItem(item => {
 			item
-				.setTitle(yamlVisible ? '隐藏 YAML 属性' : '显示 YAML 属性')
+				.setTitle(yamlVisible ? t('YAML_HIDE') : t('YAML_SHOW'))
 				.setIcon('alert-circle')
 				.onClick(() => {
 					this.yamlVisible = !this.yamlVisible;
@@ -426,7 +427,7 @@ export class StickyNotePopover {
 
 		menu.addItem(item => {
 			item
-				.setTitle('隐藏当前便笺')
+				.setTitle(t('HIDE_CURRENT_STICKY'))
 				.setIcon('eye-off')
 				.onClick(() => {
 					this.options.onHideCurrentSticky();
@@ -435,7 +436,7 @@ export class StickyNotePopover {
 
 		menu.addItem(item => {
 			item
-				.setTitle('隐藏其他便笺')
+				.setTitle(t('HIDE_OTHERS_STICKY'))
 				.setIcon('eye-off')
 				.onClick(() => {
 					this.options.onHideOthersSticky();
@@ -444,7 +445,7 @@ export class StickyNotePopover {
 
 		menu.addItem(item => {
 			item
-				.setTitle('显示其他便笺')
+				.setTitle(t('SHOW_OTHERS_STICKY'))
 				.setIcon('eye')
 				.onClick(() => {
 					this.options.onShowOthersSticky();
@@ -478,7 +479,7 @@ export class StickyNotePopover {
 		const left = this.headerEl.createDiv({ cls: 'csn-sticky-header-left' });
 		const addBtn = left.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',
-			attr: { type: 'button', 'aria-label': '新建便笺' }
+			attr: { type: 'button', 'aria-label': t('HEADER_NEW_STICKY') }
 		});
 		setIcon(addBtn, 'plus');
 		this.plugin.registerDomEvent(addBtn, 'click', evt => {
@@ -492,7 +493,7 @@ export class StickyNotePopover {
 		this.modeToggleWrap = this.headerEl.createDiv({ cls: 'csn-sticky-mode-toggle' });
 		this.markdownModeToggleBtn = this.modeToggleWrap.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',
-			attr: { type: 'button', 'aria-label': '阅读模式，点击进入编辑' }
+			attr: { type: 'button', 'aria-label': t('MODE_READ_CLICK_EDIT') }
 		});
 		setIcon(this.markdownModeToggleBtn, 'book-open');
 		this.plugin.registerDomEvent(this.markdownModeToggleBtn, 'click', async evt => {
@@ -512,8 +513,8 @@ export class StickyNotePopover {
 			cls: 'clickable-icon csn-sticky-header-btn',
 			attr: {
 				type: 'button',
-				'aria-label': '折叠/展开',
-				title: '折叠/展开',
+				'aria-label': t('FOLD_ARIA'),
+				title: t('FOLD_TITLE'),
 				'aria-expanded': 'true'
 			}
 		});
@@ -525,7 +526,7 @@ export class StickyNotePopover {
 
 		const closeBtn = right.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',
-			attr: { type: 'button', 'aria-label': '关闭' }
+			attr: { type: 'button', 'aria-label': t('CLOSE_ARIA') }
 		});
 		setIcon(closeBtn, 'x');
 		this.plugin.registerDomEvent(closeBtn, 'click', evt => {
@@ -556,7 +557,7 @@ export class StickyNotePopover {
 		});
 		const delIc = deleteBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
 		setIcon(delIc, 'trash-2');
-		deleteBtn.createSpan({ text: '删除便笺' });
+		deleteBtn.createSpan({ text: t('DELETE_STICKY_ACTION') });
 		this.plugin.registerDomEvent(deleteBtn, 'click', evt => {
 			evt.preventDefault();
 			evt.stopPropagation();
@@ -570,7 +571,7 @@ export class StickyNotePopover {
 		});
 		const listIc = listBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
 		setIcon(listIc, 'layout-list');
-		listBtn.createSpan({ text: '便笺列表' });
+		listBtn.createSpan({ text: t('STICKY_LIST_ACTION') });
 		this.plugin.registerDomEvent(listBtn, 'click', evt => {
 			evt.preventDefault();
 			evt.stopPropagation();
@@ -583,7 +584,7 @@ export class StickyNotePopover {
 			const sw = colorsRow.createEl('button', {
 				cls: 'csn-sticky-sheet-swatch',
 				type: 'button',
-				attr: { 'data-csn-sheet-color': c.id, 'aria-label': c.label }
+				attr: { 'data-csn-sheet-color': c.id, 'aria-label': t(c.labelKey) }
 			});
 			const checkWrap = sw.createSpan({ cls: 'csn-sticky-sheet-swatch-check' });
 			this.colorSwatchEls.set(c.id, sw);
@@ -665,8 +666,8 @@ export class StickyNotePopover {
 	/** 图标固定为「展开」态 chevrons-up-down；提示统一为「折叠/展开」。 */
 	private syncFoldButtonUi(): void {
 		setIcon(this.foldBtn, 'chevrons-up-down');
-		this.foldBtn.setAttr('aria-label', '折叠/展开');
-		this.foldBtn.setAttr('title', '折叠/展开');
+		this.foldBtn.setAttr('aria-label', t('FOLD_ARIA'));
+		this.foldBtn.setAttr('title', t('FOLD_TITLE'));
 		this.foldBtn.setAttr('aria-expanded', this.collapsed ? 'false' : 'true');
 	}
 
@@ -902,11 +903,11 @@ export class StickyNotePopover {
 			setIcon(this.markdownModeToggleBtn, mode === 'preview' ? 'book-open' : 'pencil');
 			this.markdownModeToggleBtn.setAttr(
 				'aria-label',
-				mode === 'preview' ? '阅读模式，点击进入编辑' : '编辑模式，点击进入阅读'
+				mode === 'preview' ? t('MODE_READ_CLICK_EDIT') : t('MODE_EDIT_CLICK_READ')
 			);
 		} else if (this.markdownModeTogglePending) {
 			setIcon(this.markdownModeToggleBtn, 'book-open');
-			this.markdownModeToggleBtn.setAttr('aria-label', '阅读模式，点击进入编辑');
+			this.markdownModeToggleBtn.setAttr('aria-label', t('MODE_READ_CLICK_EDIT'));
 		}
 		this.syncBottomBarTitle();
 	}
