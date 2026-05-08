@@ -49,8 +49,14 @@ export interface WorkspacesFile {
 
 export const VIEW_STICKY_NOTE_LIST = 'colorful-sticky-notes-list';
 
-/** 便笺列表排序方式（时间均为 vault 文件 stat）。 */
-export type NoteListSort = 'ctime-desc' | 'ctime-asc' | 'mtime-desc' | 'mtime-asc';
+/** 便笺列表排序方式（时间均为 vault 文件 stat；按文件名称时为 `TFile.basename`，含扩展名，`localeCompare` 带 numeric）。 */
+export type NoteListSort =
+	| 'ctime-desc'
+	| 'ctime-asc'
+	| 'mtime-desc'
+	| 'mtime-asc'
+	| 'basename-asc'
+	| 'basename-desc';
 
 /** 便笺列表首次打开时的挂载位置。 */
 export type NoteListOpenLocation = 'left-sidebar' | 'right-sidebar' | 'new-tab';

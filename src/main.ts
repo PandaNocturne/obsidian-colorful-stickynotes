@@ -30,7 +30,9 @@ const VALID_NOTE_LIST_SORT: readonly NoteListSort[] = [
 	'ctime-desc',
 	'ctime-asc',
 	'mtime-desc',
-	'mtime-asc'
+	'mtime-asc',
+	'basename-asc',
+	'basename-desc'
 ];
 
 const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [

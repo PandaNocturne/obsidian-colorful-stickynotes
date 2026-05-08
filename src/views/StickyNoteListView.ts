@@ -27,12 +27,32 @@ function listPreviewEmbedMarkdown(file: TFile): string {
 	return `![[${pathNoExt}]]\n`;
 }
 
-/** 工具栏排序按钮：与 `settings.noteListSort` 一一对应。 */
-const NOTE_LIST_SORT_SPECS: readonly { mode: NoteListSort; icon: string; title: string }[] = [
-	{ mode: 'ctime-desc', icon: 'calendar-arrow-down', title: '创建时间 · 新的在前' },
-	{ mode: 'ctime-asc', icon: 'calendar-arrow-up', title: '创建时间 · 旧的在先' },
-	{ mode: 'mtime-desc', icon: 'clock-arrow-down', title: '修改时间 · 新的在前' },
-	{ mode: 'mtime-asc', icon: 'clock-arrow-up', title: '修改时间 · 旧的在先' }
+/** 展开/紧凑工具栏上的排序按钮默认图标（时间类排序共用；文件名称排序另设 `toolbarIcon`）。 */
+const NOTE_LIST_SORT_TOOLBAR_ICON = 'arrow-down-wide-narrow';
+
+/** 排序模式：`menuIcon` 用于菜单行；`toolbarIcon` 省略时工具栏按钮用 `NOTE_LIST_SORT_TOOLBAR_ICON`。 */
+const NOTE_LIST_SORT_SPECS: readonly {
+	mode: NoteListSort;
+	menuIcon: string;
+	toolbarIcon?: string;
+	title: string;
+}[] = [
+	{ mode: 'ctime-desc', menuIcon: 'calendar-arrow-down', title: '创建时间 · 新的在前' },
+	{ mode: 'ctime-asc', menuIcon: 'calendar-arrow-up', title: '创建时间 · 旧的在先' },
+	{ mode: 'mtime-desc', menuIcon: 'clock-arrow-down', title: '修改时间 · 新的在前' },
+	{ mode: 'mtime-asc', menuIcon: 'clock-arrow-up', title: '修改时间 · 旧的在先' },
+	{
+		mode: 'basename-asc',
+		menuIcon: 'arrow-up-narrow-wide',
+		toolbarIcon: 'arrow-up-narrow-wide',
+		title: '文件名称 · A→Z'
+	},
+	{
+		mode: 'basename-desc',
+		menuIcon: 'arrow-down-narrow-wide',
+		toolbarIcon: 'arrow-down-narrow-wide',
+		title: '文件名称 · Z→A'
+	}
 ];
 
 /** 工具栏「浮动窗口」筛选：与 `settings.noteListFloatOpenFilter` 一一对应。 */
@@ -71,6 +91,16 @@ function compareStickyListFiles(a: TFile, b: TFile, sort: NoteListSort): number 
 		case 'mtime-asc': {
 			const d = a.stat.mtime - b.stat.mtime;
 			if (d !== 0) return d;
+			return a.path.localeCompare(b.path);
+		}
+		case 'basename-asc': {
+			const c = a.basename.localeCompare(b.basename, undefined, { numeric: true, sensitivity: 'base' });
+			if (c !== 0) return c;
+			return a.path.localeCompare(b.path);
+		}
+		case 'basename-desc': {
+			const c = b.basename.localeCompare(a.basename, undefined, { numeric: true, sensitivity: 'base' });
+			if (c !== 0) return c;
 			return a.path.localeCompare(b.path);
 		}
 		default:
@@ -569,7 +599,7 @@ export class StickyNoteListView extends ItemView {
 				cls: 'clickable-icon csn-list-sort-btn',
 				attr: { 'aria-label': spec.title, title: spec.title }
 			});
-			setIcon(btn, spec.icon);
+			setIcon(btn, spec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
 			this.sortBtnByMode.set(spec.mode, btn);
 			this.registerDomEvent(btn, 'click', () => {
 				void this.setListSort(spec.mode);
@@ -759,7 +789,7 @@ export class StickyNoteListView extends ItemView {
 			NOTE_LIST_SORT_SPECS.find(s => s.mode === this.plugin.settings.noteListSort) ??
 			NOTE_LIST_SORT_SPECS[0]!;
 		if (this.compactSortBtn) {
-			setIcon(this.compactSortBtn, sortSpec.icon);
+			setIcon(this.compactSortBtn, sortSpec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
 			this.compactSortBtn.setAttr('title', sortSpec.title);
 			this.compactSortBtn.setAttr('aria-label', `排序：${sortSpec.title}`);
 		}
@@ -791,7 +821,7 @@ export class StickyNoteListView extends ItemView {
 			menu.addItem(item => {
 				item
 					.setTitle(spec.title)
-					.setIcon(spec.icon)
+					.setIcon(spec.menuIcon)
 					.setChecked(spec.mode === cur)
 					.onClick(() => {
 						void this.setListSort(spec.mode);
