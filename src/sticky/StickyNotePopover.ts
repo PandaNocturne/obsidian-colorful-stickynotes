@@ -514,7 +514,6 @@ export class StickyNotePopover {
 			attr: {
 				type: 'button',
 				'aria-label': t('FOLD_ARIA'),
-				title: t('FOLD_TITLE'),
 				'aria-expanded': 'true'
 			}
 		});
@@ -667,7 +666,6 @@ export class StickyNotePopover {
 	private syncFoldButtonUi(): void {
 		setIcon(this.foldBtn, 'chevrons-up-down');
 		this.foldBtn.setAttr('aria-label', t('FOLD_ARIA'));
-		this.foldBtn.setAttr('title', t('FOLD_TITLE'));
 		this.foldBtn.setAttr('aria-expanded', this.collapsed ? 'false' : 'true');
 	}
 

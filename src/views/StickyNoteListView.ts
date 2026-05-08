@@ -290,7 +290,6 @@ export class StickyNoteListView extends ItemView {
 		pinBtn.toggleClass('is-active', on);
 		pinBtn.setAttr('aria-pressed', on ? 'true' : 'false');
 		pinBtn.setAttr('aria-label', on ? t('UNPIN_ARIA') : t('PIN_ARIA'));
-		pinBtn.setAttr('title', on ? t('UNPIN_ARIA') : t('PIN_TO_TOP_TITLE'));
 	}
 
 	private async togglePinForPath(path: string): Promise<void> {
@@ -551,7 +550,7 @@ export class StickyNoteListView extends ItemView {
 		this.searchClearBtn = searchInner.createEl('button', {
 			type: 'button',
 			cls: 'csn-list-search-clear csn-list-search-clear--hidden',
-			attr: { 'aria-label': t('CLEAR_SEARCH_ARIA'), title: t('CLEAR_SEARCH_TITLE') }
+			attr: { 'aria-label': t('CLEAR_SEARCH_ARIA') }
 		});
 		setIcon(this.searchClearBtn, 'x');
 		this.registerDomEvent(this.searchClearBtn, 'click', (e: MouseEvent) => {
@@ -583,7 +582,6 @@ export class StickyNoteListView extends ItemView {
 				cls: 'clickable-icon csn-list-sort-btn',
 				attr: {
 					'aria-label': floatTitle,
-					title: floatTitle,
 					'data-csn-list-float': spec.mode
 				}
 			});
@@ -609,7 +607,7 @@ export class StickyNoteListView extends ItemView {
 			const btn = sortWrap.createEl('button', {
 				type: 'button',
 				cls: 'clickable-icon csn-list-sort-btn',
-				attr: { 'aria-label': sortTitle, title: sortTitle }
+				attr: { 'aria-label': sortTitle }
 			});
 			setIcon(btn, spec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
 			this.sortBtnByMode.set(spec.mode, btn);
@@ -637,7 +635,6 @@ export class StickyNoteListView extends ItemView {
 				cls: 'clickable-icon csn-list-color-filter-btn csn-list-color-filter-swatch',
 				attr: {
 					'aria-label': t('LIST_COLOR_SWATCH_FILTER_HINT', { label: lab }),
-					title: t('LIST_COLOR_SWATCH_TITLE', { label: lab }),
 					'data-csn-list-color': c.id
 				}
 			});
@@ -686,7 +683,7 @@ export class StickyNoteListView extends ItemView {
 		const newStickyBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-new-btn',
-			attr: { 'aria-label': t('NEW_STICKY_ARIA'), title: t('NEW_STICKY_ARIA') }
+			attr: { 'aria-label': t('NEW_STICKY_ARIA') }
 		});
 		setIcon(newStickyBtn, 'plus');
 		this.registerDomEvent(newStickyBtn, 'click', () => {
@@ -696,7 +693,7 @@ export class StickyNoteListView extends ItemView {
 		const refreshBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-refresh-btn',
-			attr: { 'aria-label': t('REFRESH_ARIA'), title: t('REFRESH_TITLE') }
+			attr: { 'aria-label': t('REFRESH_TITLE') }
 		});
 		setIcon(refreshBtn, 'refresh-ccw');
 		this.registerDomEvent(refreshBtn, 'click', () => {
@@ -796,7 +793,7 @@ export class StickyNoteListView extends ItemView {
 		this.contentEl.toggleClass('csn-list-view--toolbar-compact', compact);
 	}
 
-	/** 窄工具栏：图标与 title / aria-label 随当前设置更新。 */
+	/** 窄工具栏：图标与 aria-label（Obsidian 黑色提示）随当前设置更新。 */
 	private syncToolbarCompactHints(): void {
 		const sortSpec =
 			NOTE_LIST_SORT_SPECS.find(s => s.mode === this.plugin.settings.noteListSort) ??
@@ -804,7 +801,6 @@ export class StickyNoteListView extends ItemView {
 		if (this.compactSortBtn) {
 			setIcon(this.compactSortBtn, sortSpec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
 			const sortTitle = t(sortSpec.titleKey);
-			this.compactSortBtn.setAttr('title', sortTitle);
 			this.compactSortBtn.setAttr('aria-label', t('LIST_TOOLBAR_SORT_PREFIX', { title: sortTitle }));
 		}
 
@@ -815,7 +811,6 @@ export class StickyNoteListView extends ItemView {
 		if (this.compactFloatBtn) {
 			setIcon(this.compactFloatBtn, floatSpec.icon);
 			const floatTitle = t(floatSpec.titleKey);
-			this.compactFloatBtn.setAttr('title', floatTitle);
 			this.compactFloatBtn.setAttr('aria-label', t('LIST_TOOLBAR_WINDOW_PREFIX', { title: floatTitle }));
 		}
 
@@ -824,7 +819,6 @@ export class StickyNoteListView extends ItemView {
 			setIcon(this.compactColorBtn, 'palette');
 			const title =
 				n === 0 ? t('LIST_COLOR_FILTER_SUMMARY_ALL') : t('LIST_COLOR_FILTER_SUMMARY_SOME', { n });
-			this.compactColorBtn.setAttr('title', title);
 			this.compactColorBtn.setAttr('aria-label', title);
 		}
 	}
@@ -1080,8 +1074,7 @@ export class StickyNoteListView extends ItemView {
 				cls: `clickable-icon csn-list-card-pin-btn${isPinned ? ' is-active' : ''}`,
 				attr: {
 					'aria-label': isPinned ? t('UNPIN_ARIA') : t('PIN_ARIA'),
-					'aria-pressed': isPinned ? 'true' : 'false',
-					title: isPinned ? t('UNPIN_ARIA') : t('PIN_TO_TOP_TITLE')
+					'aria-pressed': isPinned ? 'true' : 'false'
 				}
 			},
 			(btn: HTMLButtonElement) => setIcon(btn, 'pin')

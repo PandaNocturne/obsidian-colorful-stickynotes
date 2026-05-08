@@ -140,7 +140,7 @@ export class WorkspacePanelModal extends Modal {
 		});
 		const saveBtn = saveRow.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': t('WS_SAVE_ARIA_LABEL'), title: t('WS_SAVE_TITLE') }
+			attr: { 'aria-label': t('WS_SAVE_ARIA_LABEL') }
 		});
 		setIcon(saveBtn, 'save');
 		saveBtn.addEventListener('click', async () => {
@@ -192,7 +192,7 @@ export class WorkspacePanelModal extends Modal {
 		const actions = row.createDiv({ cls: 'csn-ws-panel-item-actions' });
 		const btnEdit = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': t('WS_EDIT_NAME_ARIA'), title: t('WS_EDIT_NAME_TITLE') }
+			attr: { 'aria-label': t('WS_EDIT_NAME_ARIA') }
 		});
 		setIcon(btnEdit, 'pen-line');
 		btnEdit.addEventListener('click', () => {
@@ -204,13 +204,12 @@ export class WorkspacePanelModal extends Modal {
 
 		const btnDel = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': t('WS_DELETE_ARIA'), title: t('WS_DELETE_TITLE_SHORT') }
+			attr: { 'aria-label': t('WS_DELETE_ARIA') }
 		});
 		setIcon(btnDel, 'trash-2');
 		const isDefault = ws.id === 'default';
 		if (isDefault) {
 			btnDel.setAttribute('aria-label', t('WS_DELETE_DEFAULT_ARIA'));
-			btnDel.title = t('WS_DELETE_DEFAULT_TITLE');
 		}
 		btnDel.addEventListener('click', () => {
 			if (isDefault) {
@@ -229,7 +228,7 @@ export class WorkspacePanelModal extends Modal {
 
 		const btnSwitch = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': t('WS_SWITCH_ARIA'), title: t('WS_SWITCH_TITLE') }
+			attr: { 'aria-label': t('WS_SWITCH_ARIA') }
 		});
 		setIcon(btnSwitch, 'download');
 		btnSwitch.addEventListener('click', async () => {
