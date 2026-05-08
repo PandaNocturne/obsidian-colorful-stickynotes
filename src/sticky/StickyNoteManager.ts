@@ -35,6 +35,8 @@ const FM_ID_KEY = 'colorful-sticky-id';
 const FM_ARCHIVED_KEY = 'colorful-sticky-archived';
 const STICKY_EDGE_GAP_PX = 5;
 const STICKY_TOP_ALIGN_SNAP_PX = 10;
+const STICKY_BOTTOM_ALIGN_SNAP_PX = 10;
+const GRID_LAYOUT_ITERATIONS = 4;
 
 /** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
 function executeCommandById(app: App, commandId: string): boolean {
@@ -58,6 +60,8 @@ export class StickyNoteManager {
 			ctrlDetach: boolean;
 			/** 同行吸附时的高度参照（被吸附侧），非发起拖动便笺的高度。 */
 			snapHeightSourceId: string | null;
+			/** 同列吸附时的宽度参照（被吸附侧）。 */
+			snapWidthSourceId: string | null;
 		}
 		| null = null;
 	private resizeSession:
@@ -376,7 +380,7 @@ export class StickyNoteManager {
 				collapsed: pop.getCollapsed(),
 				hidden: pop.isHidden(),
 				stretched: pop.isStretched(),
-				bindings: this.getBindingsForId(id),
+				bindings: this.getAllBindingsForId(id),
 				yamlVisible: pop.getYamlVisible()
 			};
 			if (popColor != null) row.color = popColor;
@@ -1063,11 +1067,11 @@ export class StickyNoteManager {
 		}
 	}
 
-	/** 仅同行（横向）绑定参与联动；纵向历史边不入链。 */
-	private getBindingsForId(id: string): string[] {
+	/** 全部绑定邻接（横纵均参与成组与网格排版）。 */
+	private getAllBindingsForId(id: string): string[] {
 		const set = this.bindings.get(id);
 		if (!set || set.size === 0) return [];
-		return [...set].filter(other => this.inferBindingAxis(id, other) === 'x');
+		return [...set].filter(other => this.popovers.has(other));
 	}
 
 	/** 仅同步折叠/拉伸状态，不排版、不落盘。返回是否有多窗绑定需要后续 repair。 */
@@ -1109,22 +1113,24 @@ export class StickyNoteManager {
 		});
 	}
 
-	/** 同行绑定在折叠/拉伸同步后：以最左便笺为锚做一次间距与顶/高对齐（含发起者贴边后链上错位的情况）。 */
+	/** 绑定组在折叠/拉伸同步后：以视口内最左最上便笺为锚重整网格（含链上错位）。 */
 	private repairBindingGroupRowAfterChromeSync(sourceId: string): void {
 		const group = this.resolveBindingGroupIds(sourceId);
 		if (group.length <= 1) return;
-		let leftmostId = group[0]!;
+		let anchorId = group[0]!;
 		let bestL = Number.POSITIVE_INFINITY;
+		let bestT = Number.POSITIVE_INFINITY;
 		for (const gid of group) {
 			const pop = this.popovers.get(gid);
 			if (!pop) continue;
-			const l = pop.getBounds().left;
-			if (l < bestL) {
-				bestL = l;
-				leftmostId = gid;
+			const phy = pop.getPhysicalBounds();
+			if (phy.left < bestL || (phy.left === bestL && phy.top < bestT)) {
+				bestL = phy.left;
+				bestT = phy.top;
+				anchorId = gid;
 			}
 		}
-		this.repairBindingAlignmentNear(leftmostId, sourceId);
+		this.layoutBindingGroupAsGrid(anchorId, { heightSourceId: sourceId });
 	}
 
 	/** 恢复工作区后统一各绑定组的折叠/拉伸，并以靠左便笺为准，最后落盘。 */
@@ -1137,13 +1143,15 @@ export class StickyNoteManager {
 			for (const g of group) seen.add(g);
 			if (group.length <= 1) continue;
 			let anchorId = group[0]!;
-			let bestLeft = Number.POSITIVE_INFINITY;
+			let bestL = Number.POSITIVE_INFINITY;
+			let bestT = Number.POSITIVE_INFINITY;
 			for (const gid of group) {
 				const pop = this.popovers.get(gid);
 				if (!pop) continue;
-				const l = pop.getBounds().left;
-				if (l < bestLeft) {
-					bestLeft = l;
+				const phy = pop.getPhysicalBounds();
+				if (phy.left < bestL || (phy.left === bestL && phy.top < bestT)) {
+					bestL = phy.left;
+					bestT = phy.top;
 					anchorId = gid;
 				}
 			}
@@ -1227,8 +1235,8 @@ export class StickyNoteManager {
 		if (!wants || wants.length === 0) return;
 		for (const other of wants) {
 			if (!this.popovers.has(other)) continue;
-			if (this.inferBindingAxis(id, other) !== 'x') continue;
-			this.bindPairWithAxis(id, other, 'x');
+			/* 恢复快照边：直接建边，避免 bindPairWithAxis 清掉同轴历史邻接。 */
+			this.bindPair(id, other);
 		}
 	}
 
@@ -1240,7 +1248,7 @@ export class StickyNoteManager {
 		while (q.length) {
 			const cur = q.shift()!;
 			out.push(cur);
-			for (const x of this.getBindingsForId(cur)) {
+			for (const x of this.getAllBindingsForId(cur)) {
 				if (seen.has(x)) continue;
 				if (!this.popovers.has(x)) continue;
 				seen.add(x);
@@ -1262,7 +1270,8 @@ export class StickyNoteManager {
 			groupIds,
 			lastPrimary: primary,
 			ctrlDetach: ctrl,
-			snapHeightSourceId: null
+			snapHeightSourceId: null,
+			snapWidthSourceId: null
 		};
 	}
 
@@ -1277,6 +1286,7 @@ export class StickyNoteManager {
 				session.groupIds = [id];
 			}
 			session.snapHeightSourceId = null;
+			session.snapWidthSourceId = null;
 			session.lastPrimary = next;
 			return next;
 		}
@@ -1291,11 +1301,13 @@ export class StickyNoteManager {
 		let adjusted = next;
 		let snappedToId: string | null = null;
 		let snappedAxis: 'x' | 'y' | null = null;
+		let rowEdgeAlign: 'top' | 'bottom' | null = null;
 		if (snapEnabled) {
 			const res = this.computeSnapForBounds(id, next, threshold, session.groupIds);
 			adjusted = res.bounds;
 			snappedToId = res.snappedToId;
 			snappedAxis = res.snappedAxis;
+			rowEdgeAlign = res.rowEdgeAlign;
 		}
 
 		if (bindEnabled && snappedToId && snappedAxis === 'x') {
@@ -1305,20 +1317,46 @@ export class StickyNoteManager {
 			const anchor = this.popovers.get(snappedToId);
 			if (anchor) {
 				const anchorB = anchor.getBounds();
-				/* 同行：左右贴靠，顶对齐。 */
+				/* 同行：左右贴靠，顶或底对齐。 */
 				const leftCandidate = anchorB.left - STICKY_EDGE_GAP_PX - adjusted.width;
 				const rightCandidate = anchorB.left + anchorB.width + STICKY_EDGE_GAP_PX;
 				const useLeft =
 					Math.abs(adjusted.left - leftCandidate) <= Math.abs(adjusted.left - rightCandidate);
+				const rowTop =
+					rowEdgeAlign === 'bottom'
+						? anchorB.top + anchorB.height - adjusted.height
+						: anchorB.top;
 				adjusted = {
 					...adjusted,
 					left: useLeft ? leftCandidate : rightCandidate,
-					top: anchorB.top,
+					top: rowTop,
 					/* 高度跟随被吸附侧（绑定参照端），而非发起吸附的便笺 */
 					height: anchorB.height
 				};
 				session.snapHeightSourceId = snappedToId;
+				session.snapWidthSourceId = null;
 				/* 参照端（被吸附便笺）的折叠/拉伸状态同步到本组，落盘在拖动结束统一写。 */
+				this.syncBindingPeersChrome(snappedToId, { persist: false });
+			}
+		} else if (bindEnabled && snappedToId && snappedAxis === 'y') {
+			this.bindPairWithAxis(id, snappedToId, 'y');
+			session.groupIds = this.resolveBindingGroupIds(id);
+			const anchor = this.popovers.get(snappedToId);
+			if (anchor) {
+				const anchorB = anchor.getBounds();
+				const below =
+					adjusted.top + adjusted.height / 2 >= anchorB.top + anchorB.height / 2;
+				const nextTop = below
+					? anchorB.top + anchorB.height + STICKY_EDGE_GAP_PX
+					: anchorB.top - adjusted.height - STICKY_EDGE_GAP_PX;
+				adjusted = {
+					...adjusted,
+					left: anchorB.left,
+					width: anchorB.width,
+					top: nextTop
+				};
+				session.snapWidthSourceId = snappedToId;
+				session.snapHeightSourceId = null;
 				this.syncBindingPeersChrome(snappedToId, { persist: false });
 			}
 		}
@@ -1386,7 +1424,8 @@ export class StickyNoteManager {
 	private handleDragEnd(id: string, _e: PointerEvent): void {
 		if (this.dragSession?.id === id) {
 			const heightSrc = this.dragSession.snapHeightSourceId;
-			this.repairBindingAlignmentNear(id, heightSrc);
+			const widthSrc = this.dragSession.snapWidthSourceId;
+			this.layoutBindingGroupAsGrid(id, { heightSourceId: heightSrc, widthSourceId: widthSrc });
 			this.dragSession = null;
 			this.persistOpenWindows();
 		}
@@ -1401,29 +1440,36 @@ export class StickyNoteManager {
 		const session = this.resizeSession;
 		if (!session || session.id !== id) return next;
 		if (session.groupIds.length <= 1) return next;
-		/**
-		 * 仅同行绑定：沿绑定边 BFS；顶对齐 + 同高，改宽时推挤邻窗 left（不同步宽度）。
-		 */
-		const visited = new Set<string>([id]);
-		const q: string[] = [id];
-		while (q.length > 0) {
-			const anchorId = q.shift()!;
-			const anchorBounds = anchorId === id ? next : this.popovers.get(anchorId)?.getBounds();
-			if (!anchorBounds) continue;
-			for (const nbId of this.getBindingsForId(anchorId)) {
-				if (visited.has(nbId)) continue;
-				const pop = this.popovers.get(nbId);
-				if (!pop) continue;
-				const b = pop.getBounds();
-				const anchorCx = anchorBounds.left + anchorBounds.width / 2;
-				const nbCx = b.left + b.width / 2;
-				const placeLeft = nbCx <= anchorCx;
-				const left = placeLeft
-					? anchorBounds.left - STICKY_EDGE_GAP_PX - b.width
-					: anchorBounds.left + anchorBounds.width + STICKY_EDGE_GAP_PX;
-				pop.setBounds({ ...b, left, top: anchorBounds.top, height: anchorBounds.height });
-				visited.add(nbId);
-				q.push(nbId);
+		/* 横纵绑定：迭代松弛，改宽推挤左右邻窗、改高推挤上下邻窗并同步列宽 / 行高。 */
+		for (let iter = 0; iter < GRID_LAYOUT_ITERATIONS; iter++) {
+			for (const anchorId of session.groupIds) {
+				const anchorBounds = anchorId === id ? next : this.popovers.get(anchorId)?.getBounds();
+				const anchorPhy = this.popovers.get(anchorId)?.getPhysicalBounds();
+				if (!anchorBounds || !anchorPhy) continue;
+				for (const nbId of this.getAllBindingsForId(anchorId)) {
+					if (!session.groupIds.includes(nbId)) continue;
+					const pop = this.popovers.get(nbId);
+					if (!pop) continue;
+					const b = pop.getBounds();
+					const nbPhy = pop.getPhysicalBounds();
+					if (this.isAxisBinding(anchorId, nbId, 'x')) {
+						const anchorCx = anchorBounds.left + anchorBounds.width / 2;
+						const nbCx = b.left + b.width / 2;
+						const placeLeft = nbCx <= anchorCx;
+						const left = placeLeft
+							? anchorBounds.left - STICKY_EDGE_GAP_PX - b.width
+							: anchorBounds.left + anchorBounds.width + STICKY_EDGE_GAP_PX;
+						pop.setBounds({ ...b, left, top: anchorBounds.top, height: anchorBounds.height });
+					} else {
+						const anchorCy = anchorPhy.top + anchorPhy.height / 2;
+						const nbCy = nbPhy.top + nbPhy.height / 2;
+						const placeAbove = nbCy <= anchorCy;
+						const top = placeAbove
+							? anchorBounds.top - STICKY_EDGE_GAP_PX - b.height
+							: anchorBounds.top + anchorBounds.height + STICKY_EDGE_GAP_PX;
+						pop.setBounds({ ...b, top, left: anchorBounds.left, width: anchorBounds.width });
+					}
+				}
 			}
 		}
 		return next;
@@ -1431,46 +1477,25 @@ export class StickyNoteManager {
 
 	private handleResizeEnd(id: string, _e: PointerEvent): void {
 		if (this.resizeSession?.id === id) {
-			this.repairBindingSizeOnly(id);
+			this.layoutBindingGroupAsGrid(id);
 			this.resizeSession = null;
 			this.persistOpenWindows();
 		}
 	}
 
-	private repairBindingSizeOnly(rootId: string): void {
-		const root = this.popovers.get(rootId);
-		if (!root) return;
-		const group = this.resolveBindingGroupIds(rootId);
-		if (group.length <= 1) return;
-		/* 仅同行：统一高度；不改宽度与 left/top。 */
-		const visited = new Set<string>();
-		const q: string[] = [rootId];
-		visited.add(rootId);
-		while (q.length > 0) {
-			const anchorId = q.shift()!;
-			const anchor = this.popovers.get(anchorId);
-			if (!anchor) continue;
-			const ab = anchor.getBounds();
-			for (const nbId of this.getBindingsForId(anchorId)) {
-				if (visited.has(nbId)) continue;
-				const nb = this.popovers.get(nbId);
-				if (!nb) continue;
-				const bb = nb.getBounds();
-				nb.setBounds({ ...bb, height: ab.height });
-				visited.add(nbId);
-				q.push(nbId);
-			}
-		}
-	}
-
 	private computeSnapForBounds(
-		movingId: string,
+		_movingId: string,
 		b: FloatingBounds,
 		threshold: number,
 		ignoreIds: readonly string[]
-	): { bounds: FloatingBounds; snappedToId: string | null; snappedAxis: 'x' | 'y' | null } {
+	): {
+		bounds: FloatingBounds;
+		snappedToId: string | null;
+		snappedAxis: 'x' | 'y' | null;
+		rowEdgeAlign: 'top' | 'bottom' | null;
+	} {
 		const ignore = new Set(ignoreIds);
-		ignore.add(movingId);
+		ignore.add(_movingId);
 		const left = b.left;
 		const top = b.top;
 		const right = b.left + b.width;
@@ -1482,6 +1507,7 @@ export class StickyNoteManager {
 		let bestDyAbs = threshold + 1;
 		let snappedToId: string | null = null;
 		let snappedAxis: 'x' | 'y' | null = null;
+		let rowEdgeAlign: 'top' | 'bottom' | null = null;
 
 		const overlapLen = (a0: number, a1: number, b0: number, b1: number): number =>
 			Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
@@ -1492,6 +1518,17 @@ export class StickyNoteManager {
 			const OVERLAP_MIN_RATIO = 0.3;
 			return overlapPx >= Math.min(OVERLAP_MIN_PX, minLen) || overlapPx / minLen >= OVERLAP_MIN_RATIO;
 		};
+
+		/** 横向贴边吸附（含顶对齐 / 底对齐）。 */
+		let bestRowDxAbs = threshold + 1;
+		let bestRowDx = 0;
+		let bestRowTarget: string | null = null;
+		let bestRowEdge: 'top' | 'bottom' = 'top';
+
+		/** 纵向贴靠吸附（同列）。 */
+		let bestColDyAbs = threshold + 1;
+		let bestColDy = 0;
+		let bestColTarget: string | null = null;
 
 		for (const [id, pop] of this.popovers) {
 			if (ignore.has(id)) continue;
@@ -1504,8 +1541,9 @@ export class StickyNoteManager {
 			const yOverlap = overlapLen(top, bottom, oTop, oBottom);
 			const sameRow = hasEnoughOverlap(yOverlap, b.height, ob.height);
 			const topNear = Math.abs(top - oTop) <= STICKY_TOP_ALIGN_SNAP_PX;
+			const bottomNear = Math.abs(bottom - oBottom) <= STICKY_BOTTOM_ALIGN_SNAP_PX;
 
-			/* 规则：当两窗接近共左/共右且高度接近时，优先吸附“顶部对齐”。 */
+			/* 规则：当两窗接近共左/共右且高度接近时，顶或底对齐。 */
 			const heightClose = Math.abs(b.height - ob.height) <= Math.max(8, Math.round(threshold * 1.2));
 			if (heightClose) {
 				const leftEdgeClose = Math.abs(left - oLeft) <= threshold;
@@ -1518,6 +1556,16 @@ export class StickyNoteManager {
 						bestDy = topDelta;
 						snappedToId = id;
 						snappedAxis = 'x';
+						rowEdgeAlign = 'top';
+					}
+					const bottomDelta = oBottom - bottom;
+					const bottomAbs = Math.abs(bottomDelta);
+					if (bottomAbs <= STICKY_BOTTOM_ALIGN_SNAP_PX && bottomAbs < bestDyAbs) {
+						bestDyAbs = bottomAbs;
+						bestDy = bottomDelta;
+						snappedToId = id;
+						snappedAxis = 'x';
+						rowEdgeAlign = 'bottom';
 					}
 				}
 			}
@@ -1528,76 +1576,301 @@ export class StickyNoteManager {
 				{ dx: oLeft - STICKY_EDGE_GAP_PX - right, target: id },
 				{ dx: oRight + STICKY_EDGE_GAP_PX - left, target: id }
 			];
-			if (sameRow && topNear) {
+			const considerRowSnap = sameRow && (topNear || bottomNear);
+			if (considerRowSnap) {
+				const preferBottom = bottomNear && !topNear;
+				const preferTop = topNear && !bottomNear;
+				const edge: 'top' | 'bottom' =
+					preferBottom ? 'bottom' : preferTop ? 'top' : Math.abs(top - oTop) <= Math.abs(bottom - oBottom) ? 'top' : 'bottom';
 				for (const c of candidatesX) {
 					const a = Math.abs(c.dx);
-					if (a <= threshold && a < bestDxAbs) {
-						bestDxAbs = a;
-						bestDx = c.dx;
-						snappedToId = c.target;
-						snappedAxis = 'x';
+					if (a <= threshold && a < bestRowDxAbs) {
+						bestRowDxAbs = a;
+						bestRowDx = c.dx;
+						bestRowTarget = c.target;
+						bestRowEdge = edge;
+					}
+				}
+			}
+
+			const xOverlap = overlapLen(left, right, oLeft, oRight);
+			const sameCol = hasEnoughOverlap(xOverlap, b.width, ob.width);
+			const widthClose = Math.abs(b.width - ob.width) <= Math.max(8, Math.round(threshold * 1.2));
+			const leftNear = Math.abs(left - oLeft) <= threshold;
+			if (sameCol && (leftNear || widthClose)) {
+				const candidatesY = [
+					{ dy: oTop - top, target: id },
+					{ dy: oBottom + STICKY_EDGE_GAP_PX - top, target: id },
+					{ dy: oTop - STICKY_EDGE_GAP_PX - bottom, target: id },
+					{ dy: oBottom - bottom, target: id }
+				];
+				for (const c of candidatesY) {
+					const a = Math.abs(c.dy);
+					if (a <= threshold && a < bestColDyAbs) {
+						bestColDyAbs = a;
+						bestColDy = c.dy;
+						bestColTarget = c.target;
 					}
 				}
 			}
 		}
 
+		/* 横向贴边与纵向贴靠同时命中时，取位移更小的一侧作为绑定轴，避免对角线误绑。 */
+		if (bestRowDxAbs <= threshold && bestColDyAbs <= threshold) {
+			if (bestRowDxAbs <= bestColDyAbs) {
+				bestDx = bestRowDx;
+				bestDxAbs = bestRowDxAbs;
+				snappedToId = bestRowTarget;
+				snappedAxis = 'x';
+				rowEdgeAlign = bestRowEdge;
+				if (bestRowEdge === 'top') {
+					const ob = bestRowTarget ? this.popovers.get(bestRowTarget)?.getBounds() : undefined;
+					if (ob) bestDy = ob.top - top;
+				} else {
+					const ob = bestRowTarget ? this.popovers.get(bestRowTarget)?.getBounds() : undefined;
+					if (ob) bestDy = ob.top + ob.height - bottom;
+				}
+				bestDyAbs = Math.abs(bestDy);
+			} else {
+				bestDy = bestColDy;
+				bestDyAbs = bestColDyAbs;
+				snappedToId = bestColTarget;
+				snappedAxis = 'y';
+				rowEdgeAlign = null;
+			}
+		} else if (bestRowDxAbs <= threshold) {
+			bestDx = bestRowDx;
+			bestDxAbs = bestRowDxAbs;
+			snappedToId = bestRowTarget;
+			snappedAxis = 'x';
+			rowEdgeAlign = bestRowEdge;
+			if (bestRowEdge === 'top') {
+				const ob = bestRowTarget ? this.popovers.get(bestRowTarget)?.getBounds() : undefined;
+				if (ob) bestDy = ob.top - top;
+			} else {
+				const ob = bestRowTarget ? this.popovers.get(bestRowTarget)?.getBounds() : undefined;
+				if (ob) bestDy = ob.top + ob.height - bottom;
+			}
+			bestDyAbs = Math.abs(bestDy);
+		} else if (bestColDyAbs <= threshold) {
+			bestDy = bestColDy;
+			bestDyAbs = bestColDyAbs;
+			snappedToId = bestColTarget;
+			snappedAxis = 'y';
+			rowEdgeAlign = null;
+		}
+
 		return {
 			bounds: { ...b, left: b.left + bestDx, top: b.top + bestDy },
 			snappedToId,
-			snappedAxis
+			snappedAxis,
+			rowEdgeAlign
 		};
 	}
 
-	private repairBindingAlignmentNear(rootId: string, heightSourceId?: string | null): void {
+	/**
+	 * 将绑定组整理为网格：同列等宽、同行等高（跨行 / 跨列由该列或行内最大尺寸决定），并夹紧在视口内。
+	 */
+	private layoutBindingGroupAsGrid(
+		rootId: string,
+		opts?: { heightSourceId?: string | null; widthSourceId?: string | null }
+	): void {
 		const root = this.popovers.get(rootId);
 		if (!root) return;
 		const group = this.resolveBindingGroupIds(rootId);
 		if (group.length <= 1) return;
-		const refPop =
-			heightSourceId && this.popovers.has(heightSourceId) ? this.popovers.get(heightSourceId) : null;
-		const refLogical = refPop?.getBounds();
-		const rowHeight = refLogical?.height;
-		/* 折叠态 getBounds() 为逻辑展开高；仅双方均为展开态时才同步高度，避免误写折叠占位 */
-		if (
-			refLogical &&
-			refPop &&
-			heightSourceId &&
-			rootId !== heightSourceId &&
-			!refPop.getCollapsed() &&
-			!root.getCollapsed()
-		) {
-			const rb = root.getBounds();
-			root.setBounds({ ...rb, height: refLogical.height });
-		}
-		const visited = new Set<string>();
-		const q: string[] = [rootId];
-		visited.add(rootId);
-		while (q.length > 0) {
-			const anchorId = q.shift()!;
-			const anchor = this.popovers.get(anchorId);
-			if (!anchor) continue;
-			const abPhy = anchor.getPhysicalBounds();
-			const abLogic = anchor.getBounds();
-			const syncH = rowHeight ?? abLogic.height;
-			for (const nbId of this.getBindingsForId(anchorId)) {
-				if (visited.has(nbId)) continue;
-				const nb = this.popovers.get(nbId);
-				if (!nb) continue;
-				const bbPhy = nb.getPhysicalBounds();
-				const bbLogic = nb.getBounds();
-				/* 左右判定与间距用 DOM 实际占位；落盘仍用逻辑宽高（折叠时保留 expanded） */
-				const placeLeft = bbPhy.left + bbPhy.width / 2 <= abPhy.left + abPhy.width / 2;
-				const left = placeLeft
-					? abPhy.left - STICKY_EDGE_GAP_PX - bbPhy.width
-					: abPhy.left + abPhy.width + STICKY_EDGE_GAP_PX;
-				const next: FloatingBounds = { ...bbLogic, left, top: abPhy.top };
-				if (!nb.getCollapsed() && !anchor.getCollapsed()) {
-					next.height = syncH;
-				}
-				nb.setBounds(next);
-				visited.add(nbId);
-				q.push(nbId);
+
+		const groupSet = new Set(group);
+		let anchorId = group[0]!;
+		let bestL = Number.POSITIVE_INFINITY;
+		let bestT = Number.POSITIVE_INFINITY;
+		for (const gid of group) {
+			const pop = this.popovers.get(gid);
+			if (!pop) continue;
+			const phy = pop.getPhysicalBounds();
+			if (phy.left < bestL || (phy.left === bestL && phy.top < bestT)) {
+				bestL = phy.left;
+				bestT = phy.top;
+				anchorId = gid;
 			}
+		}
+
+		const pos = new Map<string, { c: number; r: number }>();
+		pos.set(anchorId, { c: 0, r: 0 });
+		const q: string[] = [anchorId];
+		while (q.length > 0) {
+			const cur = q.shift()!;
+			const p = pos.get(cur);
+			if (!p) continue;
+			const curPop = this.popovers.get(cur);
+			if (!curPop) continue;
+			const cPhy = curPop.getPhysicalBounds();
+			for (const other of this.getAllBindingsForId(cur)) {
+				if (!groupSet.has(other)) continue;
+				const axis = this.inferBindingAxis(cur, other);
+				const oPop = this.popovers.get(other);
+				if (!oPop) continue;
+				const oPhy = oPop.getPhysicalBounds();
+				let nc = p.c;
+				let nr = p.r;
+				if (axis === 'x') {
+					nc = oPhy.left + oPhy.width / 2 < cPhy.left + cPhy.width / 2 ? p.c - 1 : p.c + 1;
+					nr = p.r;
+				} else {
+					nc = p.c;
+					nr = oPhy.top + oPhy.height / 2 < cPhy.top + cPhy.height / 2 ? p.r - 1 : p.r + 1;
+				}
+				if (!pos.has(other)) {
+					pos.set(other, { c: nc, r: nr });
+					q.push(other);
+				}
+			}
+		}
+
+		let minC = Number.POSITIVE_INFINITY;
+		let minR = Number.POSITIVE_INFINITY;
+		for (const pr of pos.values()) {
+			minC = Math.min(minC, pr.c);
+			minR = Math.min(minR, pr.r);
+		}
+		const norm = new Map<string, { c: number; r: number }>();
+		for (const [wid, pr] of pos) {
+			norm.set(wid, { c: pr.c - minC, r: pr.r - minR });
+		}
+
+		let maxC = 0;
+		let maxR = 0;
+		for (const pr of norm.values()) {
+			maxC = Math.max(maxC, pr.c);
+			maxR = Math.max(maxR, pr.r);
+		}
+
+		const colW = new Map<number, number>();
+		const rowH = new Map<number, number>();
+		for (const id of group) {
+			const pop = this.popovers.get(id);
+			if (!pop) continue;
+			const logic = pop.getBounds();
+			const phy = pop.getPhysicalBounds();
+			const cell = norm.get(id);
+			if (!cell) continue;
+			const wCell = phy.width;
+			const hCell = pop.getCollapsed() ? phy.height : logic.height;
+			colW.set(cell.c, Math.max(colW.get(cell.c) ?? 0, wCell));
+			rowH.set(cell.r, Math.max(rowH.get(cell.r) ?? 0, hCell));
+		}
+
+		const hRefId = opts?.heightSourceId;
+		const wRefId = opts?.widthSourceId;
+		if (hRefId && norm.has(hRefId)) {
+			const ref = this.popovers.get(hRefId);
+			const rr = norm.get(hRefId)?.r;
+			if (ref && rr !== undefined && !ref.getCollapsed()) {
+				const rh = ref.getBounds().height;
+				rowH.set(rr, Math.max(rowH.get(rr) ?? 0, rh));
+			}
+		}
+		if (wRefId && norm.has(wRefId)) {
+			const ref = this.popovers.get(wRefId);
+			const cc = norm.get(wRefId)?.c;
+			if (ref && cc !== undefined) {
+				const rw = ref.getPhysicalBounds().width;
+				colW.set(cc, Math.max(colW.get(cc) ?? 0, rw));
+			}
+		}
+
+		const aNorm = norm.get(anchorId);
+		const aPop = this.popovers.get(anchorId);
+		if (!aNorm || !aPop) return;
+		const aPhy = aPop.getPhysicalBounds();
+		const gap = STICKY_EDGE_GAP_PX;
+
+		const colStart = new Map<number, number>();
+		const rowStart = new Map<number, number>();
+		colStart.set(aNorm.c, aPhy.left);
+		rowStart.set(aNorm.r, aPhy.top);
+
+		for (let c = aNorm.c - 1; c >= 0; c--) {
+			const curW = colW.get(c) ?? 0;
+			const rightNeighborStart = colStart.get(c + 1)!;
+			colStart.set(c, rightNeighborStart - gap - curW);
+		}
+		for (let c = aNorm.c + 1; c <= maxC; c++) {
+			const prevW = colW.get(c - 1) ?? 0;
+			const prevStart = colStart.get(c - 1)!;
+			colStart.set(c, prevStart + prevW + gap);
+		}
+
+		for (let r = aNorm.r - 1; r >= 0; r--) {
+			const curH = rowH.get(r) ?? 0;
+			const belowStart = rowStart.get(r + 1)!;
+			rowStart.set(r, belowStart - gap - curH);
+		}
+		for (let r = aNorm.r + 1; r <= maxR; r++) {
+			const prevH = rowH.get(r - 1) ?? 0;
+			const prevStart = rowStart.get(r - 1)!;
+			rowStart.set(r, prevStart + prevH + gap);
+		}
+
+		for (const id of group) {
+			const pop = this.popovers.get(id);
+			const cell = norm.get(id);
+			if (!pop || !cell) continue;
+			const logic = pop.getBounds();
+			const nw = colW.get(cell.c) ?? logic.width;
+			const nh = rowH.get(cell.r) ?? logic.height;
+			const nl = colStart.get(cell.c) ?? logic.left;
+			const nt = rowStart.get(cell.r) ?? logic.top;
+
+			if (pop.getCollapsed()) {
+				pop.setBounds({
+					...logic,
+					left: nl,
+					top: nt,
+					width: nw
+				});
+			} else {
+				pop.setBounds({
+					...logic,
+					left: nl,
+					top: nt,
+					width: nw,
+					height: nh
+				});
+			}
+		}
+
+		this.ensureBindingGroupInViewport(group);
+	}
+
+	private ensureBindingGroupInViewport(groupIds: readonly string[]): void {
+		const margin = StickyNoteManager.VIEW_MARGIN;
+		let minLeft = Number.POSITIVE_INFINITY;
+		let minTop = Number.POSITIVE_INFINITY;
+		let maxRight = Number.NEGATIVE_INFINITY;
+		let maxBottom = Number.NEGATIVE_INFINITY;
+		for (const gid of groupIds) {
+			const pop = this.popovers.get(gid);
+			if (!pop) continue;
+			const b = pop.getPhysicalBounds();
+			minLeft = Math.min(minLeft, b.left);
+			minTop = Math.min(minTop, b.top);
+			maxRight = Math.max(maxRight, b.left + b.width);
+			maxBottom = Math.max(maxBottom, b.top + b.height);
+		}
+		if (!Number.isFinite(minLeft)) return;
+		const minDx = margin - minLeft;
+		const maxDx = window.innerWidth - margin - maxRight;
+		const minDy = margin - minTop;
+		const maxDy = window.innerHeight - margin - maxBottom;
+		const dx = Math.min(maxDx, Math.max(minDx, 0));
+		const dy = Math.min(maxDy, Math.max(minDy, 0));
+		if (dx === 0 && dy === 0) return;
+		for (const gid of groupIds) {
+			const pop = this.popovers.get(gid);
+			if (!pop) continue;
+			const b = pop.getBounds();
+			pop.setBounds({ ...b, left: b.left + dx, top: b.top + dy });
 		}
 	}
 

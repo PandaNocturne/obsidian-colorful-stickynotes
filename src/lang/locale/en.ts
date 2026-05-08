@@ -73,12 +73,12 @@ export const en = {
 	SETTINGS_HEADING_ASSIST: 'Assist alignment',
 	SETTINGS_ALIGN_SNAP_NAME: 'Snap to adjacent stickies',
 	SETTINGS_ALIGN_SNAP_DESC:
-		'While dragging, snap to neighbor edges. Hold Ctrl while dragging to ignore snap and unbind.',
+		'While dragging, snap to neighbor edges (including vertical stacks and bottom-edge row align). Hold Ctrl while dragging to ignore snap and unbind.',
 	SETTINGS_SNAP_THRESHOLD_NAME: 'Snap threshold',
 	SETTINGS_SNAP_THRESHOLD_DESC: 'Snaps when distance is below this many pixels.',
 	SETTINGS_BIND_AFTER_SNAP_NAME: 'Bind windows after snap',
 	SETTINGS_BIND_AFTER_SNAP_DESC:
-		'After snapping, linked windows move together. Hold Ctrl while dragging to detach.',
+		'After snapping, linked windows move together and tidy into a grid (equal width per column, equal height per row, driven by the largest sticky in that track). Hold Ctrl while dragging to detach.',
 
 	SETTINGS_DEFAULT_VIEW_NAME: 'Default view',
 	SETTINGS_MODE_SOURCE: 'Edit',
