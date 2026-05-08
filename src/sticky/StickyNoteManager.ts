@@ -1200,18 +1200,38 @@ export class StickyNoteManager {
 		const session = this.resizeSession;
 		if (!session || session.id !== id) return next;
 		if (session.groupIds.length <= 1) return next;
-		for (const gid of session.groupIds) {
-			if (gid === id) continue;
-			const pop = this.popovers.get(gid);
-			if (!pop) continue;
-			const b = pop.getBounds();
-			const axis = this.isAxisBinding(id, gid, 'y') ? 'y' : 'x';
-			if (axis === 'y') {
-				/* 上下绑定：左对齐 + 同宽（宽度变化联动）。 */
-				pop.setBounds({ ...b, left: next.left, width: next.width });
-			} else {
-				/* 左右绑定：顶对齐 + 同高（高度变化联动）。 */
-				pop.setBounds({ ...b, top: next.top, height: next.height });
+		/**
+		 * 仅按绑定图中的「直接边」推断轴向，并从发起窗口 BFS 传播。
+		 * 若对远端非相邻节点用「发起者 vs 远端」的几何中心猜测轴向，链式纵向排列且宽度不一致时
+		 * 易误判为横向绑定，从而错误改写 top/height，导致不相邻便笺错位。
+		 */
+		const visited = new Set<string>([id]);
+		const q: string[] = [id];
+		while (q.length > 0) {
+			const anchorId = q.shift()!;
+			const anchorBounds = anchorId === id ? next : this.popovers.get(anchorId)?.getBounds();
+			if (!anchorBounds) continue;
+			for (const nbId of this.getBindingsForId(anchorId)) {
+				if (visited.has(nbId)) continue;
+				const pop = this.popovers.get(nbId);
+				if (!pop) continue;
+				const b = pop.getBounds();
+				const axis = this.inferBindingAxis(anchorId, nbId);
+				if (axis === 'y') {
+					/* 上下绑定：左对齐 + 同宽（宽度变化联动）。 */
+					pop.setBounds({ ...b, left: anchorBounds.left, width: anchorBounds.width });
+				} else {
+					/* 左右绑定：顶对齐 + 同高；锚点改宽时按外沿+间距推挤邻窗 left（与 repairBindingAlignmentNear 一致）。 */
+					const anchorCx = anchorBounds.left + anchorBounds.width / 2;
+					const nbCx = b.left + b.width / 2;
+					const placeLeft = nbCx <= anchorCx;
+					const left = placeLeft
+						? anchorBounds.left - STICKY_EDGE_GAP_PX - b.width
+						: anchorBounds.left + anchorBounds.width + STICKY_EDGE_GAP_PX;
+					pop.setBounds({ ...b, left, top: anchorBounds.top, height: anchorBounds.height });
+				}
+				visited.add(nbId);
+				q.push(nbId);
 			}
 		}
 		return next;
@@ -1219,9 +1239,39 @@ export class StickyNoteManager {
 
 	private handleResizeEnd(id: string, _e: PointerEvent): void {
 		if (this.resizeSession?.id === id) {
-			this.repairBindingAlignmentNear(id);
+			this.repairBindingSizeOnly(id);
 			this.resizeSession = null;
 			this.persistOpenWindows();
+		}
+	}
+
+	private repairBindingSizeOnly(rootId: string): void {
+		const root = this.popovers.get(rootId);
+		if (!root) return;
+		const group = this.resolveBindingGroupIds(rootId);
+		if (group.length <= 1) return;
+		/* 仅修尺寸：横向绑定统一高度，纵向绑定统一宽度；不改 left/top。 */
+		const visited = new Set<string>();
+		const q: string[] = [rootId];
+		visited.add(rootId);
+		while (q.length > 0) {
+			const anchorId = q.shift()!;
+			const anchor = this.popovers.get(anchorId);
+			if (!anchor) continue;
+			const ab = anchor.getBounds();
+			for (const nbId of this.getBindingsForId(anchorId)) {
+				if (visited.has(nbId)) continue;
+				const nb = this.popovers.get(nbId);
+				if (!nb) continue;
+				const bb = nb.getBounds();
+				if (this.isAxisBinding(anchorId, nbId, 'y')) {
+					nb.setBounds({ ...bb, width: ab.width });
+				} else {
+					nb.setBounds({ ...bb, height: ab.height });
+				}
+				visited.add(nbId);
+				q.push(nbId);
+			}
 		}
 	}
 
