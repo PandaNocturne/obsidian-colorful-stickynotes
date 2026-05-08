@@ -1,4 +1,4 @@
-import { Notice, Plugin, TAbstractFile, TFile, normalizePath } from 'obsidian';
+import { Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from 'obsidian';
 import { t } from './lang/helpers';
 import {
 	clampViewContentZoom,
@@ -79,6 +79,33 @@ function normalizeNoteListPinnedPathsStorage(value: unknown): string[] {
 		out.push(p);
 	}
 	return out;
+}
+
+function samePinnedPathsOrder(a: readonly string[], b: readonly string[]): boolean {
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (normalizePath(a[i]!) !== normalizePath(b[i]!)) return false;
+	}
+	return true;
+}
+
+/**
+ * 便笺被删或整夹删除后，从置顶列表去掉对应路径（夹删除时去掉其下所有路径）。
+ */
+function pruneNoteListPinnedPathsAfterDelete(
+	pinned: readonly string[],
+	deletedPath: string,
+	isFolder: boolean
+): string[] {
+	const del = normalizePath(deletedPath);
+	const prefix = `${del}/`;
+	const kept = pinned.filter(p => {
+		const n = normalizePath(p);
+		if (n === del) return false;
+		if (isFolder && n.startsWith(prefix)) return false;
+		return true;
+	});
+	return normalizeNoteListPinnedPathsStorage(kept);
 }
 
 export default class ColorfulStickyNotesPlugin extends Plugin {
@@ -184,16 +211,37 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
 				const oldN = normalizePath(oldPath);
 				const newN = normalizePath(file.path);
+				const oldPrefix = `${oldN}/`;
 				let changed = false;
 				const next = this.settings.noteListPinnedPaths.map(p => {
-					if (normalizePath(p) === oldN) {
+					const pn = normalizePath(p);
+					if (pn === oldN) {
 						changed = true;
 						return newN;
+					}
+					if (file instanceof TFolder && pn.startsWith(oldPrefix)) {
+						changed = true;
+						return normalizePath(`${newN}/${pn.slice(oldPrefix.length)}`);
 					}
 					return p;
 				});
 				if (!changed) return;
 				this.settings.noteListPinnedPaths = normalizeNoteListPinnedPathsStorage(next);
+				void this.saveSettings();
+			})
+		);
+
+		this.registerEvent(
+			this.app.vault.on('delete', (file: TAbstractFile) => {
+				if (this.settings.noteListPinnedPaths.length === 0) return;
+				const isFolder = file instanceof TFolder;
+				const next = pruneNoteListPinnedPathsAfterDelete(
+					this.settings.noteListPinnedPaths,
+					file.path,
+					isFolder
+				);
+				if (samePinnedPathsOrder(this.settings.noteListPinnedPaths, next)) return;
+				this.settings.noteListPinnedPaths = next;
 				void this.saveSettings();
 			})
 		);
