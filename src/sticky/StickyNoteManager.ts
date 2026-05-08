@@ -21,6 +21,8 @@ type PreparedExistingStickyOpen = {
 };
 
 const FM_COLOR_KEY = 'colorful-sticky-bg';
+const FM_ID_KEY = 'colorful-sticky-id';
+const FM_ARCHIVED_KEY = 'colorful-sticky-archived';
 
 /** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
 function executeCommandById(app: App, commandId: string): boolean {
@@ -272,6 +274,59 @@ export class StickyNoteManager {
 		return this.workspaces.workspaces.find(w => w.id === this.workspaces.activeWorkspaceId);
 	}
 
+	private readStickyIdFromCache(file: TFile): string | null {
+		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+		const v = fm?.[FM_ID_KEY];
+		return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
+	}
+
+	/** 自动补齐便笺 frontmatter：id/archived/bg。 */
+	private async ensureStickyFrontmatterDefaults(
+		file: TFile,
+		opts?: { preferredId?: string; preferredColor?: StickyColorId }
+	): Promise<void> {
+		const preferredId = opts?.preferredId?.trim();
+		const preferredColor = opts?.preferredColor;
+		await this.app.fileManager.processFrontMatter(file, fm => {
+			const obj = fm as Record<string, unknown>;
+			const curId = obj[FM_ID_KEY];
+			if (typeof curId !== 'string' || curId.trim().length === 0) {
+				obj[FM_ID_KEY] = preferredId && preferredId.length > 0 ? preferredId : this.newId();
+			}
+			if (typeof obj[FM_ARCHIVED_KEY] !== 'boolean') {
+				obj[FM_ARCHIVED_KEY] = false;
+			}
+			if (
+				preferredColor &&
+				preferredColor !== 'default' &&
+				(typeof obj[FM_COLOR_KEY] !== 'string' || (obj[FM_COLOR_KEY] as string).trim().length === 0)
+			) {
+				obj[FM_COLOR_KEY] = preferredColor;
+			}
+		});
+	}
+
+	private resolveStickyFileByStickyId(stickyId: string): TFile | null {
+		const want = stickyId.trim();
+		if (!want) return null;
+		const files = this.app.vault.getMarkdownFiles();
+		for (const f of files) {
+			const got = this.readStickyIdFromCache(f);
+			if (got === want) return f;
+		}
+		return null;
+	}
+
+	private resolveStickyFileForSerialized(serial: SerializedStickyWindow): TFile | null {
+		const byPath = this.app.vault.getAbstractFileByPath(serial.path);
+		if (byPath instanceof TFile) return byPath;
+		if (typeof serial.stickyId === 'string' && serial.stickyId.trim().length > 0) {
+			const byId = this.resolveStickyFileByStickyId(serial.stickyId);
+			if (byId) return byId;
+		}
+		return null;
+	}
+
 	private persistOpenWindows(): void {
 		const ws = this.activeWorkspace();
 		if (!ws) return;
@@ -284,6 +339,7 @@ export class StickyNoteManager {
 			const row: SerializedStickyWindow = {
 				id,
 				path: file.path,
+				stickyId: this.readStickyIdFromCache(file) ?? id,
 				bounds,
 				collapsed: pop.getCollapsed(),
 				color: pop.getColor(),
@@ -349,6 +405,7 @@ export class StickyNoteManager {
 		await this.openExistingSticky({
 			id: this.newId(),
 			path: file.path,
+			stickyId: this.readStickyIdFromCache(file) ?? undefined,
 			bounds: this.getDefaultBounds()
 		});
 	}
@@ -501,6 +558,8 @@ export class StickyNoteManager {
 			if (yamlUi) pop.setColor(yamlUi);
 			scheduleListRefreshSoon();
 		}
+		/* 统一补齐 frontmatter 属性（id / archived / bg）。 */
+		await this.ensureStickyFrontmatterDefaults(f, { preferredId: id, preferredColor: color }).catch(() => undefined);
 		this.bringStickyToFront(pop);
 		this.persistOpenWindows();
 		this.notifyStickyListOpenIndicators();
@@ -743,7 +802,7 @@ export class StickyNoteManager {
 	private async prepareExistingStickyShell(
 		serial: SerializedStickyWindow
 	): Promise<PreparedExistingStickyOpen | null> {
-		const file = this.app.vault.getAbstractFileByPath(serial.path);
+		const file = this.resolveStickyFileForSerialized(serial);
 		if (!(file instanceof TFile)) {
 			new Notice(`找不到便笺：${serial.path}`);
 			return null;
@@ -767,6 +826,7 @@ export class StickyNoteManager {
 			defaultMarkdownMode: restoredMdMode
 		});
 		this.popovers.set(id, pop);
+		await this.ensureStickyFrontmatterDefaults(file, { preferredId: serial.stickyId ?? id }).catch(() => undefined);
 		return { pop, file, bounds: b, savedColor };
 	}
 

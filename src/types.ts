@@ -17,6 +17,8 @@ export type StickyColorId =
 export interface SerializedStickyWindow {
 	id: string;
 	path: string;
+	/** 便笺文件 frontmatter: `colorful-sticky-id`，用于改名后恢复定位。 */
+	stickyId?: string;
 	bounds?: FloatingBounds;
 	collapsed?: boolean;
 	color?: StickyColorId;
