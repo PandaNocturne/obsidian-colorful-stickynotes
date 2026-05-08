@@ -25,8 +25,7 @@ type WorkspaceSplitWithDom = WorkspaceSplit & { containerEl: HTMLElement };
 
 const MIN_WIDTH = 280;
 const MIN_HEIGHT = 200;
-const VIEWPORT_MARGIN = 12;
-const EDGE_SNAP_THRESHOLD_PX = 14;
+const VIEWPORT_MARGIN = 0;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 type ResizeDirection = (typeof RESIZE_DIRECTIONS)[number];
 
@@ -41,6 +40,8 @@ export interface StickyNotePopoverOptions {
 	bottomBarAutoHide: boolean;
 	/** 左右贴边时自动拉伸高度；移开后恢复。 */
 	edgeAutoStretchHeight: boolean;
+	/** 双击头部切换拉伸/恢复。 */
+	headerDoubleClickStretch: boolean;
 	/** 将要打开 Markdown 便笺时，外壳阶段即显示阅读/编辑切换（占位为阅读），叶视图就绪后再同步真实模式。 */
 	expectMarkdownOpen?: boolean;
 	/** 正文区域 zoom（0.3–1），作用于 `.view-content`。 */
@@ -109,6 +110,8 @@ export class StickyNotePopover {
 	private modeToggleLayoutRaf: number | null = null;
 	private disposed = false;
 	private edgeAutoStretchHeight = false;
+	private headerDoubleClickStretch = false;
+	private manualHeaderStretchActive = false;
 	private edgeStretchRestoreState: { top: number; height: number } | null = null;
 	private collapsed: boolean;
 	private yamlVisible: boolean;
@@ -123,6 +126,7 @@ export class StickyNotePopover {
 		this.collapsed = options.initialCollapsed;
 		this.yamlVisible = options.initialYamlVisible;
 		this.edgeAutoStretchHeight = options.edgeAutoStretchHeight;
+		this.headerDoubleClickStretch = options.headerDoubleClickStretch;
 		this.markdownModeTogglePending = options.expectMarkdownOpen === true;
 
 		const mount = options.mountEl;
@@ -157,6 +161,12 @@ export class StickyNotePopover {
 			},
 			{ capture: true }
 		);
+		this.plugin.registerDomEvent(this.headerEl, 'dblclick', (evt: MouseEvent) => {
+			const t = evt.target;
+			if (!(t instanceof HTMLElement)) return;
+			if (t.closest('.csn-sticky-header-btn')) return;
+			this.toggleHeaderDoubleClickStretch();
+		});
 
 		const SplitCtor = WorkspaceSplit as unknown as WorkspaceSplitCtor;
 		this.rootSplit = new SplitCtor(this.plugin.app.workspace, 'vertical');
@@ -313,6 +323,15 @@ export class StickyNotePopover {
 			return;
 		}
 		this.syncEdgeAutoStretchFromCurrentBounds();
+	}
+
+	setHeaderDoubleClickStretch(enabled: boolean): void {
+		this.headerDoubleClickStretch = enabled;
+		if (!enabled && this.manualHeaderStretchActive) {
+			this.manualHeaderStretchActive = false;
+			this.restoreFromEdgeStretchIfNeeded();
+			this.syncEdgeAutoStretchFromCurrentBounds();
+		}
 	}
 
 	setHidden(hidden: boolean): void {
@@ -638,6 +657,37 @@ export class StickyNotePopover {
 		this.rootEl.toggleClass('csn-metadata-on', this.yamlVisible);
 	}
 
+	private shouldUseEdgeStretchClamplessBounds(): boolean {
+		if (this.collapsed) return false;
+		if (this.manualHeaderStretchActive && this.edgeStretchRestoreState) return true;
+		if (!this.edgeAutoStretchHeight) return false;
+		if (!this.edgeStretchRestoreState) return false;
+		const b = this.getBounds();
+		return this.isNearHorizontalEdge(b);
+	}
+
+	private toggleHeaderDoubleClickStretch(): void {
+		if (!this.headerDoubleClickStretch || this.disposed || this.collapsed) return;
+		const b = this.getBounds();
+		if (this.manualHeaderStretchActive) {
+			this.manualHeaderStretchActive = false;
+			this.restoreFromEdgeStretchIfNeeded();
+			this.syncEdgeAutoStretchFromCurrentBounds();
+			this.onBoundsChange(this.getBounds());
+			return;
+		}
+		if (!this.edgeStretchRestoreState) {
+			this.edgeStretchRestoreState = { top: b.top, height: b.height };
+		}
+		this.manualHeaderStretchActive = true;
+		this.applyBounds(
+			{ left: b.left, top: 0, width: b.width, height: window.innerHeight },
+			false,
+			{ clampToViewportMargin: false }
+		);
+		this.onBoundsChange(this.getBounds());
+	}
+
 	focus(): void {
 		this.options.onActivate();
 		if (this.leaf) {
@@ -649,7 +699,9 @@ export class StickyNotePopover {
 	setActiveHighlight(on: boolean): void {
 		this.rootEl.toggleClass('csn-sticky--active', on);
 		this.rootEl.style.setProperty('--csn-sticky-active-fine-lift', on ? '1' : '0');
-		this.applyBounds(this.getBounds(), false);
+		this.applyBounds(this.getBounds(), false, {
+			clampToViewportMargin: !this.shouldUseEdgeStretchClamplessBounds()
+		});
 		/* 切换激活时与打开设置类似：同步底栏高度变量并触发叶视图测量，缓解嵌套 workspace 首帧高度链断裂 */
 		if (on) {
 			window.requestAnimationFrame(() => {
@@ -864,9 +916,15 @@ export class StickyNotePopover {
 		return this.cachedLayerPopover;
 	}
 
-	private applyBounds(bounds: FloatingBounds, emit: boolean): void {
-		const width = Math.max(MIN_WIDTH, Math.min(bounds.width, window.innerWidth - VIEWPORT_MARGIN));
-		const height = Math.max(MIN_HEIGHT, Math.min(bounds.height, window.innerHeight - VIEWPORT_MARGIN));
+	private applyBounds(
+		bounds: FloatingBounds,
+		emit: boolean,
+		opts?: { clampToViewportMargin?: boolean }
+	): void {
+		const clampToViewportMargin = opts?.clampToViewportMargin !== false;
+		const viewportInset = clampToViewportMargin ? VIEWPORT_MARGIN : 0;
+		const width = Math.max(MIN_WIDTH, Math.min(bounds.width, window.innerWidth - viewportInset));
+		const height = Math.max(MIN_HEIGHT, Math.min(bounds.height, window.innerHeight - viewportInset));
 		/*
 		 * 折叠态 CSS 为 height:auto，实际占位远低于存储 height；若用完整 height 算 maxTop，
 		 * 会把 top 夹死在「大屏顶部」，表现为无法拖到视口最下方。
@@ -876,10 +934,11 @@ export class StickyNotePopover {
 			const rh = this.rootEl.getBoundingClientRect().height;
 			if (rh > 1) viewportClampHeight = Math.min(height, Math.ceil(rh));
 		}
-		const maxLeft = Math.max(0, window.innerWidth - width);
-		const maxTop = Math.max(0, window.innerHeight - viewportClampHeight);
-		const left = Math.min(maxLeft, Math.max(0, bounds.left));
-		const top = Math.min(maxTop, Math.max(0, bounds.top));
+		const minPos = clampToViewportMargin ? VIEWPORT_MARGIN : 0;
+		const maxLeft = Math.max(minPos, window.innerWidth - width - minPos);
+		const maxTop = Math.max(minPos, window.innerHeight - viewportClampHeight - minPos);
+		const left = Math.min(maxLeft, Math.max(minPos, bounds.left));
+		const top = Math.min(maxTop, Math.max(minPos, bounds.top));
 
 		this.rootEl.style.width = `${width}px`;
 		this.rootEl.style.height = `${height}px`;
@@ -1040,10 +1099,18 @@ export class StickyNotePopover {
 	};
 
 	private isNearHorizontalEdge(bounds: FloatingBounds): boolean {
-		const nearLeft = bounds.left <= EDGE_SNAP_THRESHOLD_PX;
+		const nearLeft = bounds.left <= 0;
 		const right = bounds.left + bounds.width;
-		const nearRight = right >= window.innerWidth - EDGE_SNAP_THRESHOLD_PX;
+		const nearRight = right >= window.innerWidth;
 		return nearLeft || nearRight;
+	}
+
+	private resolveSnappedLeft(bounds: FloatingBounds): number {
+		const right = bounds.left + bounds.width;
+		const leftGap = Math.abs(bounds.left);
+		const rightGap = Math.abs(window.innerWidth - right);
+		if (leftGap <= rightGap) return 0;
+		return Math.max(0, window.innerWidth - bounds.width);
 	}
 
 	private restoreFromEdgeStretchIfNeeded(): void {
@@ -1057,6 +1124,7 @@ export class StickyNotePopover {
 
 	private syncEdgeAutoStretchFromCurrentBounds(): void {
 		if (this.disposed || this.collapsed || this.isDragging || this.isResizing) return;
+		if (this.manualHeaderStretchActive) return;
 		if (!this.edgeAutoStretchHeight) {
 			this.restoreFromEdgeStretchIfNeeded();
 			return;
@@ -1070,7 +1138,12 @@ export class StickyNotePopover {
 		if (!this.edgeStretchRestoreState) {
 			this.edgeStretchRestoreState = { top: b.top, height: b.height };
 		}
-		this.applyBounds({ left: b.left, top: 0, width: b.width, height: window.innerHeight }, false);
+		const snappedLeft = this.resolveSnappedLeft(b);
+		this.applyBounds(
+			{ left: snappedLeft, top: 0, width: b.width, height: window.innerHeight },
+			false,
+			{ clampToViewportMargin: false }
+		);
 	}
 
 	private getResizedBounds(event: PointerEvent): FloatingBounds | null {

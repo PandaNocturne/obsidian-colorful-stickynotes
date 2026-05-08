@@ -219,6 +219,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.stickyEdgeAutoStretchHeight !== 'boolean') {
 			this.settings.stickyEdgeAutoStretchHeight = DEFAULT_SETTINGS.stickyEdgeAutoStretchHeight;
 		}
+		if (typeof this.settings.stickyHeaderDoubleClickStretch !== 'boolean') {
+			this.settings.stickyHeaderDoubleClickStretch = DEFAULT_SETTINGS.stickyHeaderDoubleClickStretch;
+		}
 
 		this.settings.noteListPinnedPaths = normalizeNoteListPinnedPathsStorage(
 			'noteListPinnedPaths' in raw ? raw.noteListPinnedPaths : this.settings.noteListPinnedPaths
@@ -391,6 +394,11 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 将「贴边自动拉伸」同步到已打开的浮动便笺。 */
 	syncStickyEdgeAutoStretchToOpenViews(): void {
 		this.stickies.updateEdgeAutoStretchFromSettings();
+	}
+
+	/** 将「双击头部拉伸」同步到已打开的浮动便笺。 */
+	syncStickyHeaderDoubleClickStretchToOpenViews(): void {
+		this.stickies.updateHeaderDoubleClickStretchFromSettings();
 	}
 
 	/** 将列表预览缩放同步到已打开的便笺列表（不重渲 Markdown）。 */

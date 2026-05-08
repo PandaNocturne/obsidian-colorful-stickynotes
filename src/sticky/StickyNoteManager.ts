@@ -355,7 +355,7 @@ export class StickyNoteManager {
 	}
 
 	/** 新建便笺落在当前便笺左侧，间隔 10px；左侧溢出则尝试贴到右侧 */
-	private static readonly NEW_STICKY_GAP_PX = 10;
+	private static readonly NEW_STICKY_GAP_PX = 5;
 	private static readonly VIEW_MARGIN = 12;
 
 	private offsetBoundsFromSource(source: FloatingBounds): FloatingBounds {
@@ -623,6 +623,7 @@ export class StickyNoteManager {
 			expectMarkdownOpen: extra.expectMarkdownOpen,
 			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
 			edgeAutoStretchHeight: this.plugin.settings.stickyEdgeAutoStretchHeight,
+			headerDoubleClickStretch: this.plugin.settings.stickyHeaderDoubleClickStretch,
 			viewContentZoom: this.plugin.settings.stickyViewContentZoom,
 			onClose: () => void this.handleStickyCloseRequest(id),
 			onBoundsChange: () => this.persistOpenWindows(),
@@ -900,6 +901,13 @@ export class StickyNoteManager {
 		const enabled = this.plugin.settings.stickyEdgeAutoStretchHeight;
 		for (const p of this.popovers.values()) {
 			p.setEdgeAutoStretch(enabled);
+		}
+	}
+
+	updateHeaderDoubleClickStretchFromSettings(): void {
+		const enabled = this.plugin.settings.stickyHeaderDoubleClickStretch;
+		for (const p of this.popovers.values()) {
+			p.setHeaderDoubleClickStretch(enabled);
 		}
 	}
 
