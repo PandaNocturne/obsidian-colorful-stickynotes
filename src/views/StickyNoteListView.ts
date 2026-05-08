@@ -17,11 +17,17 @@ import type ColorfulStickyNotesPlugin from '../main';
 import { t } from '../lang/helpers';
 import type { MessageKey } from '../lang/locale/en';
 import { clampViewContentZoom } from '../settings';
-import { VIEW_STICKY_NOTE_LIST, type NoteListFloatOpenFilter, type NoteListSort } from '../types';
+import {
+	VIEW_STICKY_NOTE_LIST,
+	type NoteListArchiveFilter,
+	type NoteListFloatOpenFilter,
+	type NoteListSort,
+	type StickyColorId
+} from '../types';
 import '../obsidian-augmentations';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
+import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
-import type { StickyColorId } from '../types';
 
 /** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
 function listPreviewEmbedMarkdown(file: TFile): string {
@@ -68,8 +74,16 @@ const NOTE_LIST_FLOAT_OPEN_SPECS: readonly {
 	{ mode: 'closed', icon: 'file', titleKey: 'FLOAT_CLOSED_ONLY' }
 ];
 
-/** 侧栏较窄时，小于此宽度则切换为「窗口 / 排序 / 颜色」图标按钮 + 菜单 / 浮层。 */
-const TOOLBAR_COMPACT_MAX_WIDTH_PX = 600;
+/** 工具栏「归档」筛选：与 `settings.noteListArchiveFilter` 一一对应。 */
+const NOTE_LIST_ARCHIVE_SPECS: readonly {
+	mode: NoteListArchiveFilter;
+	icon: string;
+	titleKey: MessageKey;
+}[] = [
+	{ mode: 'all', icon: 'list', titleKey: 'ARCHIVE_FILTER_ALL' },
+	{ mode: 'unarchived', icon: 'inbox', titleKey: 'ARCHIVE_FILTER_UNARCHIVED' },
+	{ mode: 'archived', icon: 'archive', titleKey: 'ARCHIVE_FILTER_ARCHIVED' }
+];
 
 /** `pinnedNorm` 为已 normalize 的路径数组，顺序即置顶顺序；不在数组中为未置顶。 */
 function pinnedSortRank(notePath: string, pinnedNorm: readonly string[]): number {
@@ -211,13 +225,24 @@ async function filterStickyFilesByColors(
 	return rows.filter((f): f is TFile => f !== null);
 }
 
+async function filterStickyFilesByArchiveFilter(
+	app: App,
+	files: TFile[],
+	mode: NoteListArchiveFilter
+): Promise<TFile[]> {
+	if (mode === 'all') return files;
+	const flags = await Promise.all(files.map(f => resolveStickyArchivedForFile(app, f)));
+	if (mode === 'archived') return files.filter((_, i) => flags[i]!);
+	return files.filter((_, i) => !flags[i]!);
+}
+
 export class StickyNoteListView extends ItemView {
 	private listItemsEl: HTMLElement | null = null;
-	private readonly sortBtnByMode = new Map<NoteListSort, HTMLButtonElement>();
-	private readonly floatOpenBtnByMode = new Map<NoteListFloatOpenFilter, HTMLButtonElement>();
-	private floatOpenBarEl: HTMLElement | null = null;
+	private toolbarEl: HTMLElement | null = null;
 	private readonly colorFilterBtnById = new Map<StickyColorId, HTMLButtonElement>();
-	private colorFilterBarEl: HTMLElement | null = null;
+	private floatFilterDropdownBtn: HTMLButtonElement | null = null;
+	private archiveFilterDropdownBtn: HTMLButtonElement | null = null;
+	private sortDropdownBtn: HTMLButtonElement | null = null;
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
 	private searchClearBtn: HTMLButtonElement | null = null;
@@ -236,14 +261,9 @@ export class StickyNoteListView extends ItemView {
 	private listPageIndex = 0;
 	private debouncedListStructureRefresh: Debouncer<[], void> | null = null;
 	private debouncedListContentRefresh: Debouncer<[], void> | null = null;
-	private toolbarLayoutObserver: ResizeObserver | null = null;
-	private compactSortBtn: HTMLButtonElement | null = null;
-	private compactFloatBtn: HTMLButtonElement | null = null;
-	private compactColorBtn: HTMLButtonElement | null = null;
-	/** 紧凑工具栏「颜色」：水平色块浮层（非 Menu，可多选、点选不关）。 */
-	private colorPopoverEl: HTMLElement | null = null;
-	private colorPopoverOutsidePointerDown: ((e: PointerEvent) => void) | null = null;
-	private colorPopoverResizeBound: (() => void) | null = null;
+	/** 开启后卡片头部显示归档复选框，便于勾选修改。 */
+	private listArchiveCheckboxEditMode = false;
+	private listBulkEditBtn: HTMLButtonElement | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -261,7 +281,7 @@ export class StickyNoteListView extends ItemView {
 	}
 
 	getIcon(): string {
-		return 'layout-grid';
+		return 'layout-list';
 	}
 
 	/** 立即整表重绘（不取消已排队的防抖；一般不要用在与 `create` 防抖叠加的场景）。 */
@@ -290,6 +310,39 @@ export class StickyNoteListView extends ItemView {
 		pinBtn.toggleClass('is-active', on);
 		pinBtn.setAttr('aria-pressed', on ? 'true' : 'false');
 		pinBtn.setAttr('aria-label', on ? t('UNPIN_ARIA') : t('PIN_ARIA'));
+	}
+
+	/** 根节点类名控制归档复选框是否可见（与「编辑」按钮联动）。 */
+	private syncListArchiveCheckboxEditUI(): void {
+		this.contentEl.toggleClass('csn-list-view--archive-checkbox-edit', this.listArchiveCheckboxEditMode);
+		if (this.listBulkEditBtn) {
+			this.listBulkEditBtn.toggleClass('is-active', this.listArchiveCheckboxEditMode);
+			this.listBulkEditBtn.setAttr(
+				'aria-pressed',
+				this.listArchiveCheckboxEditMode ? 'true' : 'false'
+			);
+		}
+	}
+
+	private syncArchiveChromeOnCard(card: HTMLElement, archived: boolean): void {
+		card.setAttr('data-csn-archived', archived ? 'true' : 'false');
+		const wrap = card.querySelector('.csn-list-card-archive-wrap');
+		const input = card.querySelector('.csn-list-card-archive-checkbox');
+		if (wrap instanceof HTMLElement) wrap.toggleClass('is-archived', archived);
+		if (input instanceof HTMLInputElement) {
+			input.checked = archived;
+			input.setAttr(
+				'aria-label',
+				archived ? t('LIST_CARD_ARCHIVE_CBOX_ARIA_CHECKED') : t('LIST_CARD_ARCHIVE_CBOX_ARIA_UNCHECKED')
+			);
+		}
+	}
+
+	private listShouldRerenderForArchiveState(archived: boolean): boolean {
+		const m = this.plugin.settings.noteListArchiveFilter;
+		if (m === 'all') return false;
+		if (m === 'unarchived') return archived;
+		return !archived;
 	}
 
 	private async togglePinForPath(path: string): Promise<void> {
@@ -357,6 +410,7 @@ export class StickyNoteListView extends ItemView {
 		query: string,
 		colorFilters: readonly StickyColorId[],
 		floatOpen: NoteListFloatOpenFilter,
+		archiveFilter: NoteListArchiveFilter,
 		pageSize: number,
 		prioPath: string | null,
 		filtered: TFile[],
@@ -367,6 +421,7 @@ export class StickyNoteListView extends ItemView {
 			query,
 			colors: [...colorFilters].sort(),
 			floatOpen,
+			archive: archiveFilter,
 			pageSize,
 			prio: prioPath ?? '',
 			paths: filtered.map(f => f.path),
@@ -450,6 +505,22 @@ export class StickyNoteListView extends ItemView {
 				}
 			});
 			menu.addSeparator();
+			const archivedNow = (card as HTMLElement).dataset.csnArchived === 'true';
+			menu.addItem(item => {
+				item.setTitle(archivedNow ? t('LIST_UNARCHIVE_CARD') : t('LIST_ARCHIVE_CARD'))
+					.setIcon(archivedNow ? 'archive-restore' : 'archive')
+					.onClick(() => {
+						const next = !archivedNow;
+						void this.plugin.stickies.setStickyArchivedForFile(f, next).then(() => {
+							if (this.listShouldRerenderForArchiveState(next)) {
+								void this.renderList();
+							} else {
+								this.syncArchiveChromeOnCard(card as HTMLElement, next);
+							}
+						});
+					});
+			});
+			menu.addSeparator();
 			menu.addItem(item => {
 				item.setTitle(t('DELETE_NOTE'))
 					.setIcon('trash-2')
@@ -460,10 +531,33 @@ export class StickyNoteListView extends ItemView {
 			menu.showAtMouseEvent(evt);
 		});
 
+		this.registerDomEvent(this.listItemsEl, 'change', (evt: Event) => {
+			const t = evt.target;
+			if (!(t instanceof HTMLInputElement) || !t.classList.contains('csn-list-card-archive-checkbox')) return;
+			const card = t.closest('.csn-list-card');
+			if (!card || !this.listItemsEl?.contains(card)) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			const wantArchived = t.checked;
+			void this.plugin.stickies.setStickyArchivedForFile(f, wantArchived).then(() => {
+				if (this.listShouldRerenderForArchiveState(wantArchived)) {
+					void this.renderList();
+				} else {
+					this.syncArchiveChromeOnCard(card as HTMLElement, wantArchived);
+				}
+			});
+		});
+
 		this.registerDomEvent(this.listItemsEl, 'dblclick', (evt: MouseEvent) => {
 			const hit = evt.target;
 			if (!(hit instanceof Element)) return;
-			if (hit.closest('.csn-list-card-pin-btn') || hit.closest('.csn-list-card-menu-btn')) {
+			if (
+				hit.closest('.csn-list-card-pin-btn') ||
+				hit.closest('.csn-list-card-menu-btn') ||
+				hit.closest('.csn-list-card-archive-wrap')
+			) {
 				return;
 			}
 			const card = hit.closest('.csn-list-card');
@@ -587,66 +681,34 @@ export class StickyNoteListView extends ItemView {
 		});
 
 		const toolbar = root.createDiv({ cls: 'csn-list-toolbar' });
-		const toolbarMain = toolbar.createDiv({ cls: 'csn-list-toolbar-main' });
+		this.toolbarEl = toolbar;
 
-		const expanded = toolbarMain.createDiv({ cls: 'csn-list-toolbar-expanded' });
-		const floatBar = expanded.createDiv({ cls: 'csn-list-toolbar-float-open' });
-		this.floatOpenBarEl = floatBar;
-		const floatLabel = floatBar.createSpan({ cls: 'csn-list-toolbar-label', text: t('LABEL_WINDOW') });
-		floatLabel.setAttr('aria-hidden', 'true');
-		const floatWrap = floatBar.createDiv({ cls: 'csn-list-toolbar-btns' });
-		this.floatOpenBtnByMode.clear();
-		for (const spec of NOTE_LIST_FLOAT_OPEN_SPECS) {
-			const floatTitle = t(spec.titleKey);
-			const btn = floatWrap.createEl('button', {
-				type: 'button',
-				cls: 'clickable-icon csn-list-sort-btn',
-				attr: {
-					'aria-label': floatTitle,
-					'data-csn-list-float': spec.mode
-				}
-			});
-			setIcon(btn, spec.icon);
-			this.floatOpenBtnByMode.set(spec.mode, btn);
-			this.registerDomEvent(btn, 'click', () => {
-				void this.setListFloatOpenFilter(spec.mode);
-			});
-		}
+		const toolbarLeft = toolbar.createDiv({ cls: 'csn-list-toolbar-left' });
 
-		expanded.createDiv({
-			cls: 'csn-list-toolbar-divider',
-			attr: { 'aria-hidden': 'true' }
+		const floatGroup = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-dropdown-group' });
+		this.floatFilterDropdownBtn = floatGroup.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn',
+			attr: { 'aria-haspopup': 'menu' }
+		});
+		this.registerDomEvent(this.floatFilterDropdownBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openFloatFilterMenu(evt);
 		});
 
-		const sortModule = expanded.createDiv({ cls: 'csn-list-toolbar-module' });
-		const sortLabel = sortModule.createSpan({ cls: 'csn-list-toolbar-label', text: t('LABEL_SORT') });
-		sortLabel.setAttr('aria-hidden', 'true');
-		const sortWrap = sortModule.createDiv({ cls: 'csn-list-toolbar-btns' });
-		this.sortBtnByMode.clear();
-		for (const spec of NOTE_LIST_SORT_SPECS) {
-			const sortTitle = t(spec.titleKey);
-			const btn = sortWrap.createEl('button', {
-				type: 'button',
-				cls: 'clickable-icon csn-list-sort-btn',
-				attr: { 'aria-label': sortTitle }
-			});
-			setIcon(btn, spec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
-			this.sortBtnByMode.set(spec.mode, btn);
-			this.registerDomEvent(btn, 'click', () => {
-				void this.setListSort(spec.mode);
-			});
-		}
-
-		expanded.createDiv({
-			cls: 'csn-list-toolbar-divider',
-			attr: { 'aria-hidden': 'true' }
+		const archiveGroup = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-dropdown-group' });
+		this.archiveFilterDropdownBtn = archiveGroup.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn',
+			attr: { 'aria-haspopup': 'menu' }
+		});
+		this.registerDomEvent(this.archiveFilterDropdownBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openArchiveFilterMenu(evt);
 		});
 
-		const colorBar = expanded.createDiv({ cls: 'csn-list-toolbar-color-filter' });
-		this.colorFilterBarEl = colorBar;
-		const colorLabel = colorBar.createSpan({ cls: 'csn-list-toolbar-label', text: t('LABEL_COLOR') });
-		colorLabel.setAttr('aria-hidden', 'true');
-		const colorBtns = colorBar.createDiv({ cls: 'csn-list-color-filter-btns' });
+		const colorRow = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-color-row' });
+		const colorBtns = colorRow.createDiv({ cls: 'csn-list-color-filter-btns' });
 		this.colorFilterBtnById.clear();
 
 		for (const c of SHEET_COLOR_ORDER) {
@@ -665,45 +727,11 @@ export class StickyNoteListView extends ItemView {
 			});
 		}
 
-		const compact = toolbarMain.createDiv({ cls: 'csn-list-toolbar-compact' });
-		this.compactFloatBtn = compact.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-list-toolbar-chip',
-			attr: { 'aria-haspopup': 'menu' }
-		});
-		this.compactSortBtn = compact.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-list-toolbar-chip',
-			attr: { 'aria-haspopup': 'menu' }
-		});
-		this.compactColorBtn = compact.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-list-toolbar-chip',
-			attr: { 'aria-haspopup': 'dialog', 'aria-expanded': 'false' }
-		});
-		this.registerDomEvent(this.compactFloatBtn, 'click', (evt: MouseEvent) => {
-			evt.preventDefault();
-			this.openCompactFloatMenu(evt);
-		});
-		this.registerDomEvent(this.compactSortBtn, 'click', (evt: MouseEvent) => {
-			evt.preventDefault();
-			this.openCompactSortMenu(evt);
-		});
-		this.registerDomEvent(this.compactColorBtn, 'click', (evt: MouseEvent) => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			this.toggleCompactColorPopover();
-		});
+		const toolbarActions = toolbar.createDiv({ cls: 'csn-list-toolbar-actions' });
 
-		this.installToolbarLayoutObserver();
-		this.register(() => {
-			this.closeCompactColorPopover();
-		});
-
-		toolbar.createDiv({ cls: 'csn-list-toolbar-spacer' });
-		const newStickyBtn = toolbar.createEl('button', {
+		const newStickyBtn = toolbarActions.createEl('button', {
 			type: 'button',
-			cls: 'clickable-icon csn-list-new-btn',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn',
 			attr: { 'aria-label': t('NEW_STICKY_ARIA') }
 		});
 		setIcon(newStickyBtn, 'plus');
@@ -711,9 +739,33 @@ export class StickyNoteListView extends ItemView {
 			void this.plugin.stickies.addStickyWindow();
 		});
 
-		const refreshBtn = toolbar.createEl('button', {
+		this.listBulkEditBtn = toolbarActions.createEl('button', {
 			type: 'button',
-			cls: 'clickable-icon csn-list-refresh-btn',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-list-bulk-edit-btn',
+			attr: {
+				'aria-label': t('LIST_EDIT_CARDS_TOGGLE_ARIA'),
+				'aria-pressed': 'false'
+			}
+		});
+		setIcon(this.listBulkEditBtn, 'pencil');
+		this.registerDomEvent(this.listBulkEditBtn, 'click', () => {
+			this.listArchiveCheckboxEditMode = !this.listArchiveCheckboxEditMode;
+			this.syncListArchiveCheckboxEditUI();
+		});
+
+		this.sortDropdownBtn = toolbarActions.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn',
+			attr: { 'aria-haspopup': 'menu' }
+		});
+		this.registerDomEvent(this.sortDropdownBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openSortDropdownMenu(evt);
+		});
+
+		const refreshBtn = toolbarActions.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn',
 			attr: { 'aria-label': t('REFRESH_TITLE') }
 		});
 		setIcon(refreshBtn, 'refresh-ccw');
@@ -778,10 +830,9 @@ export class StickyNoteListView extends ItemView {
 			render();
 		});
 		this.registerVaultListRefresh();
-		this.syncSortToolbarActive();
-		this.syncFloatOpenToolbarActive();
+		this.syncToolbarDropdownHints();
 		this.syncColorFilterToolbarActive();
-		this.syncToolbarCompactHints();
+		this.syncListArchiveCheckboxEditUI();
 		this.syncSearchClearVisibility();
 		void this.renderList();
 	}
@@ -794,57 +845,47 @@ export class StickyNoteListView extends ItemView {
 		this.searchClearBtn?.setAttr('tabindex', has ? '0' : '-1');
 	}
 
-	private installToolbarLayoutObserver(): void {
-		this.toolbarLayoutObserver?.disconnect();
-		const ro = new ResizeObserver(entries => {
-			const w = entries[0]?.contentRect.width ?? this.contentEl.clientWidth;
-			this.applyToolbarCompactForWidth(w);
-		});
-		this.toolbarLayoutObserver = ro;
-		ro.observe(this.contentEl);
-		this.register(() => {
-			ro.disconnect();
-			this.toolbarLayoutObserver = null;
-		});
-		this.applyToolbarCompactForWidth(this.contentEl.clientWidth);
-	}
-
-	private applyToolbarCompactForWidth(width: number): void {
-		const compact = width > 0 && width < TOOLBAR_COMPACT_MAX_WIDTH_PX;
-		this.contentEl.toggleClass('csn-list-view--toolbar-compact', compact);
-	}
-
-	/** 窄工具栏：图标与 aria-label（Obsidian 黑色提示）随当前设置更新。 */
-	private syncToolbarCompactHints(): void {
+	/** 下拉按钮：主图标与无障碍说明随当前筛选/排序同步。 */
+	private syncToolbarDropdownHints(): void {
 		const sortSpec =
 			NOTE_LIST_SORT_SPECS.find(s => s.mode === this.plugin.settings.noteListSort) ??
 			NOTE_LIST_SORT_SPECS[0]!;
-		if (this.compactSortBtn) {
-			setIcon(this.compactSortBtn, sortSpec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
+		if (this.sortDropdownBtn) {
+			this.sortDropdownBtn.empty();
+			setIcon(this.sortDropdownBtn, sortSpec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
 			const sortTitle = t(sortSpec.titleKey);
-			this.compactSortBtn.setAttr('aria-label', t('LIST_TOOLBAR_SORT_PREFIX', { title: sortTitle }));
+			this.sortDropdownBtn.setAttr('aria-label', t('LIST_TOOLBAR_SORT_PREFIX', { title: sortTitle }));
+		}
+
+		const archiveSpec =
+			NOTE_LIST_ARCHIVE_SPECS.find(s => s.mode === this.plugin.settings.noteListArchiveFilter) ??
+			NOTE_LIST_ARCHIVE_SPECS[0]!;
+		if (this.archiveFilterDropdownBtn) {
+			this.archiveFilterDropdownBtn.empty();
+			setIcon(this.archiveFilterDropdownBtn, archiveSpec.icon);
+			const archiveTitle = t(archiveSpec.titleKey);
+			this.archiveFilterDropdownBtn.setAttr(
+				'aria-label',
+				t('LIST_TOOLBAR_ARCHIVE_PREFIX', { title: archiveTitle })
+			);
 		}
 
 		const floatSpec =
 			NOTE_LIST_FLOAT_OPEN_SPECS.find(
 				s => s.mode === this.plugin.settings.noteListFloatOpenFilter
 			) ?? NOTE_LIST_FLOAT_OPEN_SPECS[0]!;
-		if (this.compactFloatBtn) {
-			setIcon(this.compactFloatBtn, floatSpec.icon);
+		if (this.floatFilterDropdownBtn) {
+			this.floatFilterDropdownBtn.empty();
+			setIcon(this.floatFilterDropdownBtn, floatSpec.icon);
 			const floatTitle = t(floatSpec.titleKey);
-			this.compactFloatBtn.setAttr('aria-label', t('LIST_TOOLBAR_WINDOW_PREFIX', { title: floatTitle }));
-		}
-
-		const n = this.plugin.settings.noteListColorFilters.length;
-		if (this.compactColorBtn) {
-			setIcon(this.compactColorBtn, 'palette');
-			const title =
-				n === 0 ? t('LIST_COLOR_FILTER_SUMMARY_ALL') : t('LIST_COLOR_FILTER_SUMMARY_SOME', { n });
-			this.compactColorBtn.setAttr('aria-label', title);
+			this.floatFilterDropdownBtn.setAttr(
+				'aria-label',
+				t('LIST_TOOLBAR_WINDOW_PREFIX', { title: floatTitle })
+			);
 		}
 	}
 
-	private openCompactSortMenu(evt: MouseEvent): void {
+	private openSortDropdownMenu(evt: MouseEvent): void {
 		const menu = new Menu();
 		const cur = this.plugin.settings.noteListSort;
 		for (const spec of NOTE_LIST_SORT_SPECS) {
@@ -861,7 +902,7 @@ export class StickyNoteListView extends ItemView {
 		menu.showAtMouseEvent(evt);
 	}
 
-	private openCompactFloatMenu(evt: MouseEvent): void {
+	private openFloatFilterMenu(evt: MouseEvent): void {
 		const menu = new Menu();
 		const cur = this.plugin.settings.noteListFloatOpenFilter;
 		for (const spec of NOTE_LIST_FLOAT_OPEN_SPECS) {
@@ -878,122 +919,8 @@ export class StickyNoteListView extends ItemView {
 		menu.showAtMouseEvent(evt);
 	}
 
-	private toggleCompactColorPopover(): void {
-		if (this.colorPopoverEl) {
-			this.closeCompactColorPopover();
-			return;
-		}
-		this.openCompactColorPopover();
-	}
-
-	private openCompactColorPopover(): void {
-		if (!this.compactColorBtn) return;
-		this.closeCompactColorPopover();
-
-		const root = document.body.createDiv({ cls: 'csn-list-color-popover' });
-		this.colorPopoverEl = root;
-		const row = root.createDiv({ cls: 'csn-list-color-popover-row' });
-		row.setAttr('role', 'group');
-		row.setAttr('aria-label', t('LIST_COLOR_FILTER_POPOVER_GROUP_ARIA'));
-
-		const sel = new Set(this.plugin.settings.noteListColorFilters);
-		for (const c of SHEET_COLOR_ORDER) {
-			const sw = row.createEl('button', {
-				type: 'button',
-				cls: 'csn-list-color-popover-swatch',
-				attr: {
-					'data-csn-list-color': c.id,
-					'aria-label': t(c.labelKey),
-					'aria-pressed': sel.has(c.id) ? 'true' : 'false'
-				}
-			});
-			if (sel.has(c.id)) sw.addClass('is-active');
-			this.registerDomEvent(sw, 'click', (e: MouseEvent) => {
-				e.preventDefault();
-				e.stopPropagation();
-				void this.toggleListColorFilter(c.id);
-			});
-		}
-
-		this.compactColorBtn.setAttr('aria-expanded', 'true');
-		this.positionCompactColorPopover();
-
-		const onResize = (): void => {
-			this.positionCompactColorPopover();
-		};
-		this.colorPopoverResizeBound = onResize;
-		window.addEventListener('resize', onResize);
-
-		const onOutside = (e: PointerEvent) => {
-			const t = e.target;
-			if (!(t instanceof Node)) return;
-			if (this.colorPopoverEl?.contains(t)) return;
-			if (this.compactColorBtn?.contains(t)) return;
-			this.closeCompactColorPopover();
-		};
-		this.colorPopoverOutsidePointerDown = onOutside;
-		/* capture：先于子控件，避免与浮层内点击竞态 */
-		window.addEventListener('pointerdown', onOutside, true);
-	}
-
-	private positionCompactColorPopover(): void {
-		const pop = this.colorPopoverEl;
-		const anchor = this.compactColorBtn;
-		if (!pop || !anchor) return;
-		const r = anchor.getBoundingClientRect();
-		const margin = 6;
-		pop.style.setProperty('position', 'fixed');
-		pop.style.setProperty('z-index', 'var(--layer-popover, 65)');
-		let top = r.bottom + margin;
-		let left = r.left;
-		pop.style.setProperty('visibility', 'hidden');
-		pop.style.setProperty('top', `${top}px`);
-		pop.style.setProperty('left', `${left}px`);
-		const pr = pop.getBoundingClientRect();
-		const vw = window.innerWidth;
-		const vh = window.innerHeight;
-		if (left + pr.width > vw - 8) left = Math.max(8, vw - pr.width - 8);
-		if (top + pr.height > vh - 8) top = Math.max(8, r.top - pr.height - margin);
-		pop.style.setProperty('top', `${top}px`);
-		pop.style.setProperty('left', `${left}px`);
-		pop.style.removeProperty('visibility');
-	}
-
-	private closeCompactColorPopover(): void {
-		if (this.colorPopoverResizeBound) {
-			window.removeEventListener('resize', this.colorPopoverResizeBound);
-			this.colorPopoverResizeBound = null;
-		}
-		if (this.colorPopoverOutsidePointerDown) {
-			window.removeEventListener('pointerdown', this.colorPopoverOutsidePointerDown, true);
-			this.colorPopoverOutsidePointerDown = null;
-		}
-		this.compactColorBtn?.setAttr('aria-expanded', 'false');
-		this.colorPopoverEl?.remove();
-		this.colorPopoverEl = null;
-	}
-
-	private syncColorPopoverSelection(): void {
-		const pop = this.colorPopoverEl;
-		if (!pop) return;
-		const sel = new Set(this.plugin.settings.noteListColorFilters);
-		const nodes = pop.querySelectorAll<HTMLButtonElement>('.csn-list-color-popover-swatch');
-		for (let i = 0; i < nodes.length; i++) {
-			const btn = nodes.item(i);
-			const id = btn.dataset.csnListColor as StickyColorId | undefined;
-			if (!id) continue;
-			const on = sel.has(id);
-			btn.toggleClass('is-active', on);
-			btn.setAttr('aria-pressed', on ? 'true' : 'false');
-		}
-	}
-
 	private syncSortToolbarActive(): void {
-		const mode = this.plugin.settings.noteListSort;
-		for (const [m, btn] of this.sortBtnByMode) {
-			btn.toggleClass('is-active', m === mode);
-		}
-		this.syncToolbarCompactHints();
+		this.syncToolbarDropdownHints();
 	}
 
 	private async setListSort(sort: NoteListSort): Promise<void> {
@@ -1006,11 +933,7 @@ export class StickyNoteListView extends ItemView {
 	}
 
 	private syncFloatOpenToolbarActive(): void {
-		const mode = this.plugin.settings.noteListFloatOpenFilter;
-		for (const [m, btn] of this.floatOpenBtnByMode) {
-			btn.toggleClass('is-active', m === mode);
-		}
-		this.syncToolbarCompactHints();
+		this.syncToolbarDropdownHints();
 	}
 
 	private async setListFloatOpenFilter(mode: NoteListFloatOpenFilter): Promise<void> {
@@ -1022,13 +945,41 @@ export class StickyNoteListView extends ItemView {
 		void this.renderList();
 	}
 
+	private syncArchiveToolbarActive(): void {
+		this.syncToolbarDropdownHints();
+	}
+
+	private async setListArchiveFilter(mode: NoteListArchiveFilter): Promise<void> {
+		if (this.plugin.settings.noteListArchiveFilter === mode) return;
+		this.plugin.settings.noteListArchiveFilter = mode;
+		await this.plugin.saveSettings();
+		this.syncArchiveToolbarActive();
+		this.listPageIndex = 0;
+		void this.renderList();
+	}
+
+	private openArchiveFilterMenu(evt: MouseEvent): void {
+		const menu = new Menu();
+		const cur = this.plugin.settings.noteListArchiveFilter;
+		for (const spec of NOTE_LIST_ARCHIVE_SPECS) {
+			menu.addItem(item => {
+				item
+					.setTitle(t(spec.titleKey))
+					.setIcon(spec.icon)
+					.setChecked(spec.mode === cur)
+					.onClick(() => {
+						void this.setListArchiveFilter(spec.mode);
+					});
+			});
+		}
+		menu.showAtMouseEvent(evt);
+	}
+
 	private syncColorFilterToolbarActive(): void {
 		const sel = new Set(this.plugin.settings.noteListColorFilters);
 		for (const [id, btn] of this.colorFilterBtnById) {
 			btn.toggleClass('is-active', sel.has(id));
 		}
-		this.syncColorPopoverSelection();
-		this.syncToolbarCompactHints();
 	}
 
 	/** 切换某色是否参与筛选；均未选中时显示全部便笺。 */
@@ -1055,7 +1006,8 @@ export class StickyNoteListView extends ItemView {
 		card: HTMLElement,
 		f: TFile,
 		color: StickyColorId | null,
-		pinnedSet: ReadonlySet<string>
+		pinnedSet: ReadonlySet<string>,
+		archived: boolean
 	): void {
 		card.setAttr('data-csn-note-path', f.path);
 		if (color == null) card.removeAttribute('data-csn-list-color');
@@ -1065,15 +1017,18 @@ export class StickyNoteListView extends ItemView {
 		const titleEl = card.querySelector('.csn-list-card-title');
 		if (titleEl) titleEl.setText(f.basename);
 		this.syncPinButton(card, f.path, pinnedSet);
+		this.syncArchiveChromeOnCard(card, archived);
 	}
 
 	private async createListCardElement(
 		f: TFile,
 		color: StickyColorId | null,
-		pinnedSet: ReadonlySet<string>
+		pinnedSet: ReadonlySet<string>,
+		archived: boolean
 	): Promise<HTMLElement> {
 		const cardAttr: Record<string, string> = {
 			'data-csn-note-path': f.path,
+			'data-csn-archived': archived ? 'true' : 'false',
 			title: t('DOUBLE_CLICK_OPEN_TITLE')
 		};
 		if (color != null) cardAttr['data-csn-list-color'] = color;
@@ -1085,7 +1040,22 @@ export class StickyNoteListView extends ItemView {
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 		const head = card.createDiv({ cls: 'csn-list-card-head' });
-		head.createDiv({
+		const headLeft = head.createDiv({ cls: 'csn-list-card-head-left' });
+		const archiveWrap = headLeft.createEl('label', {
+			cls: `csn-list-card-archive-wrap${archived ? ' is-archived' : ''}`,
+			attr: { 'aria-hidden': 'false' }
+		});
+		const archiveCb = archiveWrap.createEl('input', {
+			type: 'checkbox',
+			cls: 'csn-list-card-archive-checkbox',
+			attr: {
+				'aria-label': archived
+					? t('LIST_CARD_ARCHIVE_CBOX_ARIA_CHECKED')
+					: t('LIST_CARD_ARCHIVE_CBOX_ARIA_UNCHECKED')
+			}
+		});
+		archiveCb.checked = archived;
+		headLeft.createDiv({
 			cls: 'csn-list-card-title',
 			text: f.basename,
 			attr: {
@@ -1147,7 +1117,8 @@ export class StickyNoteListView extends ItemView {
 	): Promise<void> {
 		for (const f of pageFiles) {
 			const color = await resolveStickyBgColorForFile(this.app, f);
-			const card = await this.createListCardElement(f, color, pinnedSet);
+			const archived = await resolveStickyArchivedForFile(this.app, f);
+			const card = await this.createListCardElement(f, color, pinnedSet, archived);
 			container.appendChild(card);
 		}
 	}
@@ -1176,10 +1147,11 @@ export class StickyNoteListView extends ItemView {
 			let card = pool.get(f.path);
 			pool.delete(f.path);
 			const color = await resolveStickyBgColorForFile(this.app, f);
+			const archived = await resolveStickyArchivedForFile(this.app, f);
 			if (!card) {
-				card = await this.createListCardElement(f, color, pinnedSet);
+				card = await this.createListCardElement(f, color, pinnedSet, archived);
 			} else {
-				this.updateListCardChrome(card, f, color, pinnedSet);
+				this.updateListCardChrome(card, f, color, pinnedSet, archived);
 				await this.maybeRefreshCardPreview(card, f);
 			}
 			container.appendChild(card);
@@ -1217,7 +1189,8 @@ export class StickyNoteListView extends ItemView {
 				return;
 			}
 			const color = await resolveStickyBgColorForFile(this.app, f);
-			this.updateListCardChrome(card, f, color, pinnedSet);
+			const archived = await resolveStickyArchivedForFile(this.app, f);
+			this.updateListCardChrome(card, f, color, pinnedSet, archived);
 			await this.maybeRefreshCardPreview(card, f);
 		}
 	}
@@ -1240,8 +1213,7 @@ export class StickyNoteListView extends ItemView {
 				this.paginationPagesEl?.empty();
 				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
-				this.colorFilterBarEl?.hide();
-				this.floatOpenBarEl?.hide();
+				this.toolbarEl?.hide();
 				return;
 			}
 			if (!(folderAbs instanceof TFolder)) {
@@ -1253,13 +1225,11 @@ export class StickyNoteListView extends ItemView {
 				this.paginationPagesEl?.empty();
 				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
-				this.colorFilterBarEl?.hide();
-				this.floatOpenBarEl?.hide();
+				this.toolbarEl?.hide();
 				return;
 			}
 
-			this.colorFilterBarEl?.show();
-			this.floatOpenBarEl?.show();
+			this.toolbarEl?.show();
 
 			const keywords = query
 				.split(/\s+/)
@@ -1270,6 +1240,9 @@ export class StickyNoteListView extends ItemView {
 			let filtered =
 				keywords.length === 0 ? files : await filterStickyFilesByKeywords(this.app, files, keywords);
 			filtered = await filterStickyFilesByColors(this.app, filtered, this.plugin.settings.noteListColorFilters);
+
+			const archiveMode = this.plugin.settings.noteListArchiveFilter;
+			filtered = await filterStickyFilesByArchiveFilter(this.app, filtered, archiveMode);
 
 			const floatMode = this.plugin.settings.noteListFloatOpenFilter;
 			if (floatMode !== 'all') {
@@ -1323,6 +1296,7 @@ export class StickyNoteListView extends ItemView {
 				query,
 				this.plugin.settings.noteListColorFilters,
 				floatMode,
+				archiveMode,
 				pageSize,
 				prio,
 				filtered,
@@ -1408,12 +1382,11 @@ export class StickyNoteListView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
-		this.closeCompactColorPopover();
-		this.toolbarLayoutObserver?.disconnect();
-		this.toolbarLayoutObserver = null;
-		this.compactSortBtn = null;
-		this.compactFloatBtn = null;
-		this.compactColorBtn = null;
+		this.toolbarEl = null;
+		this.floatFilterDropdownBtn = null;
+		this.archiveFilterDropdownBtn = null;
+		this.sortDropdownBtn = null;
+		this.listBulkEditBtn = null;
 		this.cancelListRefreshDebouncers();
 		this.debouncedListStructureRefresh = null;
 		this.debouncedListContentRefresh = null;
@@ -1431,10 +1404,7 @@ export class StickyNoteListView extends ItemView {
 		this.paginationPrevBtn = null;
 		this.paginationNextBtn = null;
 		this.paginationMetaEl = null;
-		this.colorFilterBarEl = null;
 		this.colorFilterBtnById.clear();
-		this.floatOpenBarEl = null;
-		this.floatOpenBtnByMode.clear();
 		this.contentEl.empty();
 	}
 }

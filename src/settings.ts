@@ -6,6 +6,7 @@ import { FolderPickerModal } from './modals/FolderPickerModal';
 import { SHEET_COLOR_ORDER } from './sticky/sticky-color-order';
 import type {
 	HeaderNewStickyAdjacentSide,
+	NoteListArchiveFilter,
 	NoteListFloatOpenFilter,
 	NoteListOpenLocation,
 	NoteListSort,
@@ -63,6 +64,8 @@ export interface ColorfulStickyNotesSettings {
 	noteListColorFilters: StickyColorId[];
 	/** 便笺列表：仅显示已打开浮动窗口 / 未打开 / 全部。 */
 	noteListFloatOpenFilter: NoteListFloatOpenFilter;
+	/** 便笺列表：按归档属性筛选（`colorful-sticky-archived`）。 */
+	noteListArchiveFilter: NoteListArchiveFilter;
 	/** 便笺列表首次打开时的挂载位置。 */
 	noteListOpenLocation: NoteListOpenLocation;
 	/** 关闭空白便笺移入回收站前是否弹出确认框（默认开启）。 */
@@ -100,6 +103,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	noteListPinnedPaths: [],
 	noteListColorFilters: [],
 	noteListFloatOpenFilter: 'all',
+	noteListArchiveFilter: 'all',
 	noteListOpenLocation: 'right-sidebar',
 	confirmBlankStickyTrashOnClose: true,
 	defaultNewStickyWidth: 420,

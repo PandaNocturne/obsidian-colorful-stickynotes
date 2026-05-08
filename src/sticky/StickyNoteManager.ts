@@ -773,6 +773,13 @@ export class StickyNoteManager {
 		this.persistOpenWindows();
 	}
 
+	/** 写入 frontmatter `colorful-sticky-archived`（便笺列表等可调用）。 */
+	async setStickyArchivedForFile(file: TFile, archived: boolean): Promise<void> {
+		await this.app.fileManager.processFrontMatter(file, fm => {
+			(fm as Record<string, unknown>)[FM_ARCHIVED_KEY] = archived;
+		});
+	}
+
 	/** 移入库回收站并关闭对应便笺窗口（若有）。 */
 	async trashStickyNoteFile(file: TFile): Promise<void> {
 		const ids: string[] = [];

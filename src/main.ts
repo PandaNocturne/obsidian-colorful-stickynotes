@@ -12,6 +12,7 @@ import { StickyNoteListView } from './views/StickyNoteListView';
 import {
 	VIEW_STICKY_NOTE_LIST,
 	type HeaderNewStickyAdjacentSide,
+	type NoteListArchiveFilter,
 	type NoteListFloatOpenFilter,
 	type NoteListOpenLocation,
 	type NoteListSort,
@@ -44,6 +45,8 @@ const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [
 ];
 
 const VALID_NOTE_LIST_FLOAT_OPEN_FILTER: readonly NoteListFloatOpenFilter[] = ['all', 'open', 'closed'];
+
+const VALID_NOTE_LIST_ARCHIVE_FILTER: readonly NoteListArchiveFilter[] = ['all', 'unarchived', 'archived'];
 
 const VALID_HEADER_NEW_STICKY_ADJACENT_SIDE: readonly HeaderNewStickyAdjacentSide[] = ['left', 'right'];
 
@@ -275,6 +278,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			!VALID_NOTE_LIST_FLOAT_OPEN_FILTER.includes(nf as NoteListFloatOpenFilter)
 		) {
 			this.settings.noteListFloatOpenFilter = DEFAULT_SETTINGS.noteListFloatOpenFilter;
+		}
+
+		const naf = this.settings.noteListArchiveFilter;
+		if (
+			typeof naf !== 'string' ||
+			!VALID_NOTE_LIST_ARCHIVE_FILTER.includes(naf as NoteListArchiveFilter)
+		) {
+			this.settings.noteListArchiveFilter = DEFAULT_SETTINGS.noteListArchiveFilter;
 		}
 
 		const hasNewColorFilters = 'noteListColorFilters' in raw;

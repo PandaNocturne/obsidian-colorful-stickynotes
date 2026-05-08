@@ -67,3 +67,6 @@ export type HeaderNewStickyAdjacentSide = 'left' | 'right';
 /** 便笺列表：按当前是否已打开浮动便笺窗口筛选。 */
 export type NoteListFloatOpenFilter = 'all' | 'open' | 'closed';
 
+/** 便笺列表：按 frontmatter `colorful-sticky-archived` 筛选。 */
+export type NoteListArchiveFilter = 'all' | 'unarchived' | 'archived';
+
