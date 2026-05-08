@@ -154,14 +154,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'toggle-sticky-notes-visibility',
-			name: '全部隐藏/显示所有便笺',
+			name: '显示/隐藏所有便笺',
 			callback: () => {
-				/* 兼容旧命令：按当前状态切换全部隐藏/显示全部。 */
-				if (this.stickies.isHideAllMode()) {
-					this.stickies.showAllStickies();
-				} else {
-					this.stickies.hideAllStickies();
-				}
+				/* 若任意便笺处于隐藏状态，则优先“显示所有”；否则“隐藏所有”。 */
+				this.stickies.toggleHideAllByCurrentState();
 			}
 		});
 

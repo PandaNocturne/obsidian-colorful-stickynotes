@@ -200,6 +200,21 @@ export class StickyNoteManager {
 		return this.hideAllMode;
 	}
 
+	hasAnyHiddenStickies(): boolean {
+		if (this.hideAllMode) return this.popovers.size > 0;
+		if (this.hideOthersMode && this.popovers.size > 1) return true;
+		if (this.manualHiddenIds.size > 0) return true;
+		for (const pop of this.popovers.values()) {
+			if (pop.isHidden()) return true;
+		}
+		return false;
+	}
+
+	toggleHideAllByCurrentState(): void {
+		if (this.hasAnyHiddenStickies()) this.showAllStickies();
+		else this.hideAllStickies();
+	}
+
 	/** 统一合并“隐藏来源”并写回 DOM。 */
 	private applyHiddenStateToAll(): void {
 		const activeId = this.activePopoverId;
