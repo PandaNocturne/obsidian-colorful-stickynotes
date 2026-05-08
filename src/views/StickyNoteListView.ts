@@ -238,7 +238,8 @@ async function filterStickyFilesByArchiveFilter(
 
 export class StickyNoteListView extends ItemView {
 	private listItemsEl: HTMLElement | null = null;
-	private toolbarEl: HTMLElement | null = null;
+	/** 搜索 + 工具栏外层容器（与卡片区分隔）。 */
+	private listToolRegionEl: HTMLElement | null = null;
 	private readonly colorFilterBtnById = new Map<StickyColorId, HTMLButtonElement>();
 	private floatFilterDropdownBtn: HTMLButtonElement | null = null;
 	private archiveFilterDropdownBtn: HTMLButtonElement | null = null;
@@ -655,7 +656,10 @@ export class StickyNoteListView extends ItemView {
 		root.empty();
 		root.addClass('csn-list-view');
 
-		const searchWrap = root.createDiv({ cls: 'csn-list-search' });
+		const toolRegion = root.createDiv({ cls: 'csn-list-tool-region' });
+		this.listToolRegionEl = toolRegion;
+
+		const searchWrap = toolRegion.createDiv({ cls: 'csn-list-search' });
 		const searchInner = searchWrap.createDiv({ cls: 'csn-list-search-inner' });
 		this.searchInnerEl = searchInner;
 		this.searchInput = searchInner.createEl('input', {
@@ -687,8 +691,7 @@ export class StickyNoteListView extends ItemView {
 			void this.renderList();
 		});
 
-		const toolbar = root.createDiv({ cls: 'csn-list-toolbar' });
-		this.toolbarEl = toolbar;
+		const toolbar = toolRegion.createDiv({ cls: 'csn-list-toolbar' });
 
 		const toolbarLeft = toolbar.createDiv({ cls: 'csn-list-toolbar-left' });
 
@@ -1280,7 +1283,7 @@ export class StickyNoteListView extends ItemView {
 				this.paginationPagesEl?.empty();
 				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
-				this.toolbarEl?.hide();
+				this.listToolRegionEl?.hide();
 				return;
 			}
 			if (!(folderAbs instanceof TFolder)) {
@@ -1292,11 +1295,11 @@ export class StickyNoteListView extends ItemView {
 				this.paginationPagesEl?.empty();
 				this.paginationMetaEl?.setText('');
 				this.paginationEl.hide();
-				this.toolbarEl?.hide();
+				this.listToolRegionEl?.hide();
 				return;
 			}
 
-			this.toolbarEl?.show();
+			this.listToolRegionEl?.show();
 
 			const keywords = query
 				.split(/\s+/)
@@ -1450,7 +1453,7 @@ export class StickyNoteListView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.closeColorFilterStrip();
-		this.toolbarEl = null;
+		this.listToolRegionEl = null;
 		this.floatFilterDropdownBtn = null;
 		this.archiveFilterDropdownBtn = null;
 		this.sortDropdownBtn = null;

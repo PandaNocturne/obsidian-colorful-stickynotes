@@ -513,6 +513,17 @@
   gap: 8px;
   height: 100%;
 }
+/* 便笺列表顶部工具区：搜索 + 工具栏，与下方卡片网格分隔 */
+.csn-list-tool-region {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  flex-shrink: 0;
+  padding-bottom: 12px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
 /* 鎼滅储锛氳緭鍏?+ 鏈夊唴瀹规椂鍙充晶鎮诞鍦嗗舰娓呴櫎 */
 .csn-list-search {
   width: 100%;
