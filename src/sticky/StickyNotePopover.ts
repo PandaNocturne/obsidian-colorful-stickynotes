@@ -131,6 +131,7 @@ export class StickyNotePopover {
 	constructor(private readonly options: StickyNotePopoverOptions) {
 		this.plugin = options.plugin;
 		this.onBoundsChange = options.onBoundsChange;
+		this.bottomBarAutoHide = options.bottomBarAutoHide;
 		this.collapsed = options.initialCollapsed;
 		this.yamlVisible = options.initialYamlVisible;
 		this.edgeAutoStretchHeight = options.edgeAutoStretchHeight;

@@ -63,11 +63,12 @@
 // }
 
 /* 正文区：与便笺纸面同色；缩放由 StickyNotePopover#setViewContentZoom 写入 --csn-sticky-view-content-zoom */
-.csn-sticky .view-content {
-	--background-primary: var(--csn-b);
+.csn-sticky .workspace-leaf-content>.view-content {
+	// --background-primary: var(--csn-b);
+	background-color: var(--csn-b);
 	zoom: var(--csn-sticky-view-content-zoom, 0.65);
 
-	.empty-state{
+	.empty-state {
 		display: none;
 	}
 }
