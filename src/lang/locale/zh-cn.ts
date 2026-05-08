@@ -200,6 +200,8 @@ export const zhCn: Record<MessageKey, string> = {
 	BOTTOM_SETTINGS_ARIA: '便笺设置',
 	YAML_HIDE: '隐藏 YAML 属性',
 	YAML_SHOW: '显示 YAML 属性',
+	HEADER_ARCHIVE_CURRENT_STICKY: '归档当前便笺',
+	HEADER_UNARCHIVE_CURRENT_STICKY: '取消归档当前便笺',
 	HIDE_CURRENT_STICKY: '隐藏当前便笺',
 	HIDE_OTHERS_STICKY: '隐藏其他便笺',
 	SHOW_OTHERS_STICKY: '显示其他便笺',

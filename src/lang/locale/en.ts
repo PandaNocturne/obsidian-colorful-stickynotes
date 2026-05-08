@@ -214,6 +214,8 @@ export const en = {
 	BOTTOM_SETTINGS_ARIA: 'Sticky settings',
 	YAML_HIDE: 'Hide YAML properties',
 	YAML_SHOW: 'Show YAML properties',
+	HEADER_ARCHIVE_CURRENT_STICKY: 'Archive current sticky',
+	HEADER_UNARCHIVE_CURRENT_STICKY: 'Unarchive current sticky',
 	HIDE_CURRENT_STICKY: 'Hide current sticky',
 	HIDE_OTHERS_STICKY: 'Hide other stickies',
 	SHOW_OTHERS_STICKY: 'Show other stickies',

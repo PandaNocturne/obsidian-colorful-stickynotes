@@ -15,6 +15,7 @@ import {
 	resolveStickyBgColorForFile
 } from '../utils/sticky-bg-from-file';
 import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
+import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
 import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
 import { StickyNotePopover } from './StickyNotePopover';
@@ -743,6 +744,7 @@ export class StickyNoteManager {
 			onHideOthersSticky: () => void this.hideOthersRelativeToId(id),
 			onShowOthersSticky: () => void this.showOthersSticky(),
 			onShowAllStickies: () => void this.showAllStickies(),
+			onToggleArchiveCurrentSticky: () => void this.toggleArchiveCurrentStickyForPopover(id),
 			onActivate: () => this.bringStickyToFrontById(id),
 			onDragStart: e => this.handleDragStart(id, e),
 			onDragMove: (next, e) => this.handleDragMove(id, next, e),
@@ -778,6 +780,19 @@ export class StickyNoteManager {
 		await this.app.fileManager.processFrontMatter(file, fm => {
 			(fm as Record<string, unknown>)[FM_ARCHIVED_KEY] = archived;
 		});
+	}
+
+	private async toggleArchiveCurrentStickyForPopover(popoverId: string): Promise<void> {
+		const pop = this.popovers.get(popoverId);
+		const file =
+			pop?.leaf?.view && 'file' in pop.leaf.view
+				? (pop.leaf.view as { file?: TFile }).file
+				: undefined;
+		if (!(file instanceof TFile) || file.extension !== 'md') return;
+		const cur = await resolveStickyArchivedForFile(this.app, file);
+		const nextArchived = !cur;
+		await this.setStickyArchivedForFile(file, nextArchived);
+		if (nextArchived) this.closeSticky(popoverId);
 	}
 
 	/** 移入库回收站并关闭对应便笺窗口（若有）。 */

@@ -9,11 +9,12 @@ import {
 	WorkspaceLeaf,
 	WorkspaceSplit,
 	WorkspaceTabs,
-	setIcon
+	setIcon,
+	TFile
 } from 'obsidian';
-import type { TFile } from 'obsidian';
 import { t } from '../lang/helpers';
 import type { FloatingBounds, StickyColorId } from '../types';
+import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { clampViewContentZoom } from '../settings';
 import { SHEET_COLOR_ORDER } from './sticky-color-order';
 
@@ -63,6 +64,8 @@ export interface StickyNotePopoverOptions {
 	onHideOthersSticky: () => void;
 	onShowOthersSticky: () => void;
 	onShowAllStickies: () => void;
+	/** 切换当前便笺 frontmatter 归档状态（无 Markdown 文件时由实现侧忽略）。 */
+	onToggleArchiveCurrentSticky: () => void;
 	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
 	onActivate: () => void;
 	onDragStart?: (e: PointerEvent) => void;
@@ -169,7 +172,7 @@ export class StickyNotePopover {
 			evt => {
 				evt.preventDefault();
 				evt.stopPropagation();
-				this.openHeaderContextMenu(evt);
+				void this.openHeaderContextMenu(evt);
 			},
 			{ capture: true }
 		);
@@ -410,7 +413,7 @@ export class StickyNotePopover {
 
 	// 其它“隐藏相关”按钮已迁移到便笺头部右键菜单中。
 
-	private openHeaderContextMenu(evt: MouseEvent): void {
+	private async openHeaderContextMenu(evt: MouseEvent): Promise<void> {
 		const menu = new Menu();
 
 		const yamlVisible = this.yamlVisible;
@@ -451,6 +454,22 @@ export class StickyNotePopover {
 					this.options.onShowOthersSticky();
 				});
 		});
+
+		const view = this.leaf?.view;
+		const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
+		if (file instanceof TFile && file.extension === 'md') {
+			const archived = await resolveStickyArchivedForFile(this.plugin.app, file);
+			menu.addItem(item => {
+				item
+					.setTitle(
+						archived ? t('HEADER_UNARCHIVE_CURRENT_STICKY') : t('HEADER_ARCHIVE_CURRENT_STICKY')
+					)
+					.setIcon('archive')
+					.onClick(() => {
+						this.options.onToggleArchiveCurrentSticky();
+					});
+			});
+		}
 
 		menu.showAtMouseEvent(evt);
 	}
