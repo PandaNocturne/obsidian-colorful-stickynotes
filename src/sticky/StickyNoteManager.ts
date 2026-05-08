@@ -35,6 +35,9 @@ export class StickyNoteManager {
 	private readonly mount = document.body;
 	/** 便笺间 z-index 微调，单调递增即可。 */
 	private stickyZStackSeq = 0;
+	/** 是否处于“隐藏其他（仅显示当前）”模式。 */
+	private hideOtherStickies = false;
+	private activePopoverId: string | null = null;
 	private saveTimer: number | null = null;
 	/** 等待内置删除命令完成时挂起的 vault 监听，避免重复注册。 */
 	private pendingDeleteListener: EventRef | null = null;
@@ -85,16 +88,41 @@ export class StickyNoteManager {
 	}
 
 	private bringStickyToFront(pop: StickyNotePopover): void {
+		for (const [id, p] of this.popovers) {
+			if (p === pop) this.activePopoverId = id;
+		}
 		for (const p of this.popovers.values()) {
 			p.setActiveHighlight(p === pop);
 		}
 		pop.setZStackBoost(++this.stickyZStackSeq);
+		if (this.hideOtherStickies) this.applyHideOtherStickiesToAll();
 	}
 
 	private bringStickyToFrontById(id: string): void {
 		const pop = this.popovers.get(id);
 		if (!pop) return;
+		this.activePopoverId = id;
 		this.bringStickyToFront(pop);
+	}
+
+	/** 显示/隐藏所有便笺（实现为“隐藏其他 / 显示全部”）。返回切换后的“隐藏其他”状态。 */
+	toggleAllStickiesVisibility(): boolean {
+		this.hideOtherStickies = !this.hideOtherStickies;
+		/* 若没有活动便笺，尽量选一个作为“当前”以避免全隐藏后无法交互。 */
+		if (!this.activePopoverId) {
+			this.activePopoverId = this.popovers.keys().next().value ?? null;
+		}
+		this.applyHideOtherStickiesToAll();
+		return this.hideOtherStickies;
+	}
+
+	private applyHideOtherStickiesToAll(): void {
+		const activeId = this.activePopoverId;
+		for (const [id, pop] of this.popovers) {
+			const hidden = this.hideOtherStickies && activeId !== null && id !== activeId;
+			pop.setHidden(hidden);
+			pop.syncToggleAllStickiesButtonUi(this.hideOtherStickies);
+		}
 	}
 
 	private scheduleSaveWorkspaces(): void {
@@ -410,6 +438,8 @@ export class StickyNoteManager {
 			onMarkdownModeChange: () => this.persistOpenWindows(),
 			onOpenNoteList: () => void this.plugin.openNoteListView(),
 			onDeleteCurrentSticky: () => void this.deleteCurrentStickyNote(id),
+			onToggleAllStickiesVisibility: () => this.toggleAllStickiesVisibility(),
+			isOtherStickiesHidden: () => this.hideOtherStickies,
 			onActivate: () => this.bringStickyToFrontById(id)
 		});
 	}

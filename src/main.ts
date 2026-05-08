@@ -132,6 +132,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: 'toggle-sticky-notes-visibility',
+			name: '显示/隐藏所有便笺',
+			callback: () => {
+				this.stickies.toggleAllStickiesVisibility();
+			}
+		});
+
+		this.addCommand({
 			id: 'open-sticky-workspace-panel',
 			name: '打开便笺工作区',
 			callback: () => {

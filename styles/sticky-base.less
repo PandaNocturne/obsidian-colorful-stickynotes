@@ -16,6 +16,14 @@
 		box-shadow 0.16s ease;
 }
 
+.csn-sticky--hidden {
+	/* 不用 display:none：避免被隐藏后 offsetLeft/offsetTop 变成 0/NaN，
+	 * 触发 setActiveHighlight/applyBounds 重算时把窗口“抛飞”到错误位置。 */
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
 /* 非当前激活便笺：压暗，便于分辨哪一扇在最前 */
 .csn-sticky:not(.csn-sticky--active) {
 	// opacity: 0.68;
