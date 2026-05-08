@@ -34,7 +34,8 @@ export interface StickyNotePopoverOptions {
 	mountEl: HTMLElement;
 	bounds?: FloatingBounds | null;
 	defaultMarkdownMode: 'preview' | 'source';
-	initialColor: StickyColorId;
+	/** `null`：无 `colorful-sticky-bg` 等来源时，不套便笺色板（界面主题底栏）。 */
+	initialColor: StickyColorId | null;
 	initialCollapsed: boolean;
 	initialYamlVisible: boolean;
 	bottomBarAutoHide: boolean;
@@ -138,9 +139,11 @@ export class StickyNotePopover {
 
 		const mount = options.mountEl;
 		/* 勿使用 mod-root：会与主工作区根节点样式冲突，导致叶视图高度为 0、内容不可见 */
+		const rootAttr: Record<string, string> = { 'data-csn-sticky': 'true' };
+		if (options.initialColor != null) rootAttr['data-csn-color'] = options.initialColor;
 		this.rootEl = mount.createDiv({
 			cls: 'csn-sticky',
-			attr: { 'data-csn-sticky': 'true', 'data-csn-color': options.initialColor }
+			attr: rootAttr
 		});
 		this.rootEl.style.setProperty('--csn-sticky-stack', '0');
 		this.rootEl.style.setProperty('--csn-sticky-active-fine-lift', '0');
@@ -290,13 +293,17 @@ export class StickyNotePopover {
 		this.syncEdgeAutoStretchFromCurrentBounds();
 	}
 
-	setColor(c: StickyColorId): void {
-		this.rootEl.setAttribute('data-csn-color', c);
+	setColor(c: StickyColorId | null): void {
+		if (c == null) this.rootEl.removeAttribute('data-csn-color');
+		else this.rootEl.setAttribute('data-csn-color', c);
 		if (this.sheetOpen) this.refreshSheetColorSelection();
 	}
 
-	getColor(): StickyColorId {
-		return (this.rootEl.getAttribute('data-csn-color') as StickyColorId) ?? 'default';
+	/** 无 `data-csn-color` 时表示未设置便笺底色（与 YAML 无 `colorful-sticky-bg` 一致）。 */
+	getColor(): StickyColorId | null {
+		const raw = this.rootEl.getAttribute('data-csn-color');
+		if (raw === null || raw === '') return null;
+		return raw as StickyColorId;
 	}
 
 	getCollapsed(): boolean {
@@ -594,7 +601,7 @@ export class StickyNotePopover {
 	private refreshSheetColorSelection(): void {
 		const cur = this.getColor();
 		for (const [id, el] of this.colorSwatchEls) {
-			el.toggleClass('is-selected', id === cur);
+			el.toggleClass('is-selected', cur !== null && id === cur);
 			const check = el.querySelector('.csn-sticky-sheet-swatch-check');
 			if (check instanceof HTMLElement) {
 				check.replaceChildren();

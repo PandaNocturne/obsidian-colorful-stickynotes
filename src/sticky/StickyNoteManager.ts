@@ -365,6 +365,7 @@ export class StickyNoteManager {
 			const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
 			if (!file) continue;
 			const bounds = pop.getBounds();
+			const popColor = pop.getColor();
 			const row: SerializedStickyWindow = {
 				id,
 				path: file.path,
@@ -374,9 +375,9 @@ export class StickyNoteManager {
 				hidden: pop.isHidden(),
 				stretched: pop.isStretched(),
 				bindings: this.getBindingsForId(id),
-				color: pop.getColor(),
 				yamlVisible: pop.getYamlVisible()
 			};
+			if (popColor != null) row.color = popColor;
 			if (file.extension === 'md') {
 				row.markdownMode = pop.getMarkdownMode();
 			}
@@ -385,25 +386,15 @@ export class StickyNoteManager {
 		return ser;
 	}
 
-	private remapStickyWindowIds(windows: SerializedStickyWindow[]): SerializedStickyWindow[] {
-		const idMap = new Map<string, string>();
-		for (const w of windows) {
-			idMap.set(w.id, this.newId());
-		}
-		return windows.map(w => ({
-			...w,
-			id: idMap.get(w.id) ?? w.id,
-			bindings: (w.bindings ?? [])
-				.map(b => (typeof b === 'string' ? idMap.get(b) : undefined))
-				.filter((x): x is string => typeof x === 'string' && x.length > 0)
-		}));
-	}
-
-	/** 以当前窗口布局新建一条命名工作区（便笺窗口 ID 重新分配，避免与运行中会话冲突）。 */
+	/**
+	 * 以当前窗口布局新建一条命名便笺工作区，并切换为当前活动工作区。
+	 * 快照与运行中窗口 id 一致，便于继续编辑时 `persistOpenWindows` 与界面状态一致。
+	 */
 	async createWorkspaceFromCurrentLayout(name: string): Promise<void> {
+		this.persistOpenWindows();
 		const trimmed = name.trim();
 		const finalName = trimmed || `便笺工作区 ${this.workspaces.workspaces.length + 1}`;
-		const snapshot = this.remapStickyWindowIds(this.serializeOpenWindowsSnapshot());
+		const snapshot = this.serializeOpenWindowsSnapshot();
 		const id = `ws_${Date.now().toString(36)}`;
 		const nw: StickyWorkspace = {
 			id,
@@ -412,6 +403,7 @@ export class StickyNoteManager {
 			updatedAt: Date.now()
 		};
 		this.workspaces.workspaces.push(nw);
+		this.workspaces.activeWorkspaceId = id;
 		await saveWorkspacesFile(this.plugin, this.workspaces);
 	}
 
@@ -700,7 +692,7 @@ export class StickyNoteManager {
 		id: string,
 		extra: {
 			bounds: FloatingBounds;
-			initialColor: StickyColorId;
+			initialColor: StickyColorId | null;
 			initialCollapsed: boolean;
 			initialYamlVisible: boolean;
 			defaultMarkdownMode?: 'preview' | 'source';
@@ -913,8 +905,10 @@ export class StickyNoteManager {
 		const id = serial.id || this.newId();
 		const b = serial.bounds ?? this.getDefaultBounds();
 		const savedColor = serial.color;
-		const initialColor: StickyColorId =
-			savedColor ?? (await resolveStickyBgColorForFile(this.app, file)) ?? 'default';
+		const fromYaml = await resolveStickyBgColorForFile(this.app, file);
+		/* 工作区里未存 `color` 时以 YAML 为准；二者皆无时便笺无底色（不强制 `default` 色板）。 */
+		const initialColor: StickyColorId | null =
+			savedColor !== undefined ? savedColor : fromYaml;
 		const restoredMdMode: 'preview' | 'source' | undefined =
 			file.extension === 'md' &&
 				(serial.markdownMode === 'preview' || serial.markdownMode === 'source')

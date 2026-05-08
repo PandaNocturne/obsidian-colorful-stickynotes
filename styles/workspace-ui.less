@@ -33,8 +33,9 @@
 	gap: 0;
 	padding: 2px 2px 8px;
 
-	.csn-ws-panel-list .csn-ws-panel-item{
+	.csn-ws-panel-list .csn-ws-panel-item {
 		box-shadow: none;
+		border: none;
 	}
 }
 
@@ -123,7 +124,7 @@
 
 .csn-ws-panel-item {
 	display: flex;
-	align-items: flex-start;
+	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
 	padding: 12px 12px;
@@ -174,6 +175,7 @@
 	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
+	justify-content: center;
 	gap: 8px;
 }
 
@@ -205,6 +207,35 @@
 
 .csn-ws-panel-icon-btn svg {
 	flex-shrink: 0;
+}
+
+/* 顶部保存与列表操作图标：无背景、无悬停/焦点装饰 */
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn,
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn {
+	background: transparent !important;
+	box-shadow: none !important;
+	border: none !important;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:hover:not(:disabled),
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:active:not(:disabled),
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:focus:not(:disabled),
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:focus-visible,
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:hover:not(:disabled),
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:active:not(:disabled),
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:focus:not(:disabled),
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:focus-visible {
+	background: transparent !important;
+	box-shadow: none !important;
+	outline: none;
+	color: var(--text-muted);
+}
+
+.csn-ws-panel-save-row .csn-ws-panel-icon-btn:disabled,
+.csn-ws-panel-item-actions .csn-ws-panel-icon-btn:disabled {
+	background: transparent !important;
 }
 
 /* 重命名小弹窗 */

@@ -138,7 +138,7 @@ export class WorkspacePanelModal extends Modal {
 			attr: { placeholder: '输入名称以保存当前便笺工作区布局…' }
 		});
 		const saveBtn = saveRow.createEl('button', {
-			cls: 'csn-ws-panel-icon-btn csn-ws-panel-icon-btn--bordered',
+			cls: 'csn-ws-panel-icon-btn',
 			attr: { 'aria-label': '保存为新的便笺工作区', title: '保存为新的便笺工作区' }
 		});
 		setIcon(saveBtn, 'save');
@@ -152,7 +152,7 @@ export class WorkspacePanelModal extends Modal {
 			try {
 				await mgr.createWorkspaceFromCurrentLayout(v);
 				nameInput.value = '';
-				new Notice('已保存为新的便笺工作区');
+				new Notice('已保存并切换到该便笺工作区');
 				this.render();
 			} finally {
 				saveBtn.disabled = false;

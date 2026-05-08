@@ -367,8 +367,9 @@ export class StickyNoteListView extends ItemView {
 			if (!(f instanceof TFile)) return;
 			evt.preventDefault();
 			evt.stopPropagation();
-			const color =
-				((card as HTMLElement).dataset.csnListColor as StickyColorId | undefined) ?? 'default';
+			const rawListColor = (card as HTMLElement).dataset.csnListColor;
+			const color: StickyColorId | null =
+				rawListColor && rawListColor.length > 0 ? (rawListColor as StickyColorId) : null;
 			const menu = new Menu();
 			menu.addItem(item => {
 				item.setTitle('打开笔记')
@@ -382,7 +383,7 @@ export class StickyNoteListView extends ItemView {
 				item.setTitle('修改背景').setIcon('palette');
 				const sub = item.setSubmenu();
 				for (const c of SHEET_COLOR_ORDER) {
-					const selected = c.id === color;
+					const selected = color !== null && c.id === color;
 					sub.addItem(si => {
 						si.setTitle(buildStickyBgSubmenuTitle(document, c.id, c.label, selected));
 						si.setIcon(null);
@@ -993,11 +994,12 @@ export class StickyNoteListView extends ItemView {
 	private updateListCardChrome(
 		card: HTMLElement,
 		f: TFile,
-		color: StickyColorId,
+		color: StickyColorId | null,
 		pinnedSet: ReadonlySet<string>
 	): void {
 		card.setAttr('data-csn-note-path', f.path);
-		card.setAttr('data-csn-list-color', color);
+		if (color == null) card.removeAttribute('data-csn-list-color');
+		else card.setAttr('data-csn-list-color', color);
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 		const titleEl = card.querySelector('.csn-list-card-title');
@@ -1007,16 +1009,17 @@ export class StickyNoteListView extends ItemView {
 
 	private async createListCardElement(
 		f: TFile,
-		color: StickyColorId,
+		color: StickyColorId | null,
 		pinnedSet: ReadonlySet<string>
 	): Promise<HTMLElement> {
+		const cardAttr: Record<string, string> = {
+			'data-csn-note-path': f.path,
+			title: '双击打开便笺'
+		};
+		if (color != null) cardAttr['data-csn-list-color'] = color;
 		const card = this.contentEl.createDiv({
 			cls: 'csn-list-card',
-			attr: {
-				'data-csn-note-path': f.path,
-				'data-csn-list-color': color,
-				title: '双击打开便笺'
-			}
+			attr: cardAttr
 		});
 		card.remove();
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
@@ -1076,7 +1079,7 @@ export class StickyNoteListView extends ItemView {
 		pinnedSet: ReadonlySet<string>
 	): Promise<void> {
 		for (const f of pageFiles) {
-			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
+			const color = await resolveStickyBgColorForFile(this.app, f);
 			const card = await this.createListCardElement(f, color, pinnedSet);
 			container.appendChild(card);
 		}
@@ -1105,7 +1108,7 @@ export class StickyNoteListView extends ItemView {
 		for (const f of pageFiles) {
 			let card = pool.get(f.path);
 			pool.delete(f.path);
-			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
+			const color = await resolveStickyBgColorForFile(this.app, f);
 			if (!card) {
 				card = await this.createListCardElement(f, color, pinnedSet);
 			} else {
@@ -1146,7 +1149,7 @@ export class StickyNoteListView extends ItemView {
 				await this.renderListCardsFull(container, pageFiles, sortMode, pinnedSet);
 				return;
 			}
-			const color: StickyColorId = (await resolveStickyBgColorForFile(this.app, f)) ?? 'default';
+			const color = await resolveStickyBgColorForFile(this.app, f);
 			this.updateListCardChrome(card, f, color, pinnedSet);
 			await this.maybeRefreshCardPreview(card, f);
 		}
