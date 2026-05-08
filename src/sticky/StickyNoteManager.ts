@@ -35,9 +35,15 @@ export class StickyNoteManager {
 	private readonly mount = document.body;
 	/** 便笺间 z-index 微调，单调递增即可。 */
 	private stickyZStackSeq = 0;
-	/** 是否处于“隐藏其他（仅显示当前）”模式。 */
-	private hideOtherStickies = false;
+	/** “隐藏当前便笺”产生的手动隐藏集合（独立于模式）。 */
+	private readonly manualHiddenIds = new Set<string>();
+	/** “隐藏其他便笺”模式：仅显示当前，其它隐藏。 */
+	private hideOthersMode = false;
+	/** “全部隐藏便笺”模式：全部隐藏。 */
+	private hideAllMode = false;
 	private activePopoverId: string | null = null;
+	/** 上一次 bringStickyToFront 命中的 id，用于区分“重新激活隐藏便笺” vs “同一便笺重复激活”。 */
+	private lastActivatedPopoverId: string | null = null;
 	private saveTimer: number | null = null;
 	/** 等待内置删除命令完成时挂起的 vault 监听，避免重复注册。 */
 	private pendingDeleteListener: EventRef | null = null;
@@ -88,14 +94,29 @@ export class StickyNoteManager {
 	}
 
 	private bringStickyToFront(pop: StickyNotePopover): void {
+		let activeId: string | null = null;
 		for (const [id, p] of this.popovers) {
-			if (p === pop) this.activePopoverId = id;
+			if (p === pop) activeId = id;
 		}
+		if (activeId) this.activePopoverId = activeId;
+
+		/* 若用户从面板切换激活到一个隐藏便笺：自动取消其隐藏。 */
+		const switchedToDifferent = activeId !== null && activeId !== this.lastActivatedPopoverId;
+		if (activeId && switchedToDifferent && pop.isHidden()) {
+			/* 取消手动隐藏该便笺 */
+			this.manualHiddenIds.delete(activeId);
+			/* 若处于“全部隐藏”，必须退出，否则永远不可见 */
+			if (this.hideAllMode) this.hideAllMode = false;
+			/* “隐藏其他”模式下无需退出：切换 active 后它会自然变成“唯一显示”。 */
+			this.applyHiddenStateToAll();
+		}
+
 		for (const p of this.popovers.values()) {
 			p.setActiveHighlight(p === pop);
 		}
 		pop.setZStackBoost(++this.stickyZStackSeq);
-		if (this.hideOtherStickies) this.applyHideOtherStickiesToAll();
+		if (this.hideOthersMode) this.applyHiddenStateToAll();
+		this.lastActivatedPopoverId = activeId;
 	}
 
 	private bringStickyToFrontById(id: string): void {
@@ -105,23 +126,91 @@ export class StickyNoteManager {
 		this.bringStickyToFront(pop);
 	}
 
-	/** 显示/隐藏所有便笺（实现为“隐藏其他 / 显示全部”）。返回切换后的“隐藏其他”状态。 */
-	toggleAllStickiesVisibility(): boolean {
-		this.hideOtherStickies = !this.hideOtherStickies;
-		/* 若没有活动便笺，尽量选一个作为“当前”以避免全隐藏后无法交互。 */
-		if (!this.activePopoverId) {
-			this.activePopoverId = this.popovers.keys().next().value ?? null;
-		}
-		this.applyHideOtherStickiesToAll();
-		return this.hideOtherStickies;
+	private ensureActivePopoverId(): string | null {
+		if (this.activePopoverId && this.popovers.has(this.activePopoverId)) return this.activePopoverId;
+		const next = this.popovers.keys().next().value ?? null;
+		this.activePopoverId = next;
+		return next;
 	}
 
-	private applyHideOtherStickiesToAll(): void {
+	/** “隐藏当前”：切换仅隐藏当前便笺（其它显示）。 */
+	toggleHideCurrentSticky(): void {
+		const id = this.ensureActivePopoverId();
+		if (!id) return;
+		this.hideCurrentStickyById(id);
+	}
+
+	private hideCurrentStickyById(id: string): void {
+		if (!this.popovers.has(id)) return;
+		/* 规则：隐藏当前为“单独隐藏”，进入前先清空其它隐藏模式，避免叠加导致难以理解。 */
+		this.hideAllMode = false;
+		this.hideOthersMode = false;
+		this.manualHiddenIds.add(id);
+		this.applyHiddenStateToAll();
+		this.popovers.get(id)?.setActiveHighlight(false);
+	}
+
+	/** 仅隐藏其他便笺（固定动作，不做切换）。 */
+	hideOthersSticky(): void {
+		const id = this.ensureActivePopoverId();
+		if (!id) return;
+		this.hideOthersRelativeToId(id);
+	}
+
+	private hideOthersRelativeToId(id: string): void {
+		if (!this.popovers.has(id)) return;
+		/* 以指定便笺作为“当前显示”的参照对象，避免与全局 active 竞态。 */
+		this.activePopoverId = id;
+		/* 规则：隐藏其他为独占模式，进入前清空其它隐藏来源。 */
+		this.hideAllMode = false;
+		this.manualHiddenIds.clear();
+		this.hideOthersMode = true;
+		this.applyHiddenStateToAll();
+		this.popovers.get(id)?.setActiveHighlight(true);
+	}
+
+	/** 显示其他便笺（仅退出“隐藏其他”模式）。 */
+	showOthersSticky(): void {
+		this.hideOthersMode = false;
+		this.hideAllMode = false;
+		this.manualHiddenIds.clear();
+		this.applyHiddenStateToAll();
+	}
+
+	isHideOthersMode(): boolean {
+		return this.hideOthersMode;
+	}
+
+	hideAllStickies(): void {
+		/* 规则：全部隐藏为独占模式，进入前清空其它隐藏来源。 */
+		this.hideOthersMode = false;
+		this.manualHiddenIds.clear();
+		this.hideAllMode = true;
+		this.applyHiddenStateToAll();
+	}
+
+	showAllStickies(): void {
+		this.hideAllMode = false;
+		this.hideOthersMode = false;
+		this.manualHiddenIds.clear();
+		this.applyHiddenStateToAll();
+	}
+
+	isHideAllMode(): boolean {
+		return this.hideAllMode;
+	}
+
+	/** 统一合并“隐藏来源”并写回 DOM。 */
+	private applyHiddenStateToAll(): void {
 		const activeId = this.activePopoverId;
 		for (const [id, pop] of this.popovers) {
-			const hidden = this.hideOtherStickies && activeId !== null && id !== activeId;
+			const hidden =
+				this.hideAllMode ||
+				this.manualHiddenIds.has(id) ||
+				(this.hideOthersMode && activeId !== null && id !== activeId);
 			pop.setHidden(hidden);
-			pop.syncToggleAllStickiesButtonUi(this.hideOtherStickies);
+			/* 隐藏便笺后移除激活状态（高亮/细微提升等）。 */
+			if (hidden) pop.setActiveHighlight(false);
 		}
 	}
 
@@ -438,8 +527,11 @@ export class StickyNoteManager {
 			onMarkdownModeChange: () => this.persistOpenWindows(),
 			onOpenNoteList: () => void this.plugin.openNoteListView(),
 			onDeleteCurrentSticky: () => void this.deleteCurrentStickyNote(id),
-			onToggleAllStickiesVisibility: () => this.toggleAllStickiesVisibility(),
-			isOtherStickiesHidden: () => this.hideOtherStickies,
+			onHideCurrentSticky: () => void this.hideCurrentStickyById(id),
+			onHideOthersSticky: () => void this.hideOthersRelativeToId(id),
+			onShowOthersSticky: () => void this.showOthersSticky(),
+			onHideAllStickies: () => void this.hideAllStickies(),
+			onShowAllStickies: () => void this.showAllStickies(),
 			onActivate: () => this.bringStickyToFrontById(id)
 		});
 	}

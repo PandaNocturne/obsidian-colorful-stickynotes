@@ -1,6 +1,7 @@
 import { around } from 'monkey-around';
 import {
 	FileView,
+	Menu,
 	MarkdownView,
 	Plugin,
 	Workspace,
@@ -52,10 +53,11 @@ export interface StickyNotePopoverOptions {
 	onOpenNoteList: () => void;
 	/** 删除便笺：由管理器激活当前叶视图并执行 Obsidian 默认「删除当前笔记」命令。 */
 	onDeleteCurrentSticky: () => void;
-	/** 显示/隐藏所有便笺（通常实现为「隐藏其他 / 显示全部」）。返回切换后的“隐藏其他”状态。 */
-	onToggleAllStickiesVisibility: () => boolean;
-	/** 当前是否处于“隐藏其他（仅显示当前）”状态。 */
-	isOtherStickiesHidden: () => boolean;
+	onHideCurrentSticky: () => void;
+	onHideOthersSticky: () => void;
+	onShowOthersSticky: () => void;
+	onHideAllStickies: () => void;
+	onShowAllStickies: () => void;
 	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
 	onActivate: () => void;
 }
@@ -67,7 +69,6 @@ export class StickyNotePopover {
 	private readonly mainColumnEl: HTMLElement;
 	private readonly bottomBarEl: HTMLElement;
 	private readonly bottomTitleEl: HTMLElement;
-	private readonly bottomToggleAllBtn: HTMLButtonElement;
 	private readonly settingsBtn: HTMLButtonElement;
 	private readonly sheetLayerEl: HTMLElement;
 	private readonly sheetBackdropEl: HTMLElement;
@@ -140,6 +141,16 @@ export class StickyNotePopover {
 
 		this.headerEl = this.rootEl.createDiv({ cls: 'csn-sticky-header' });
 		this.wireHeader();
+		this.plugin.registerDomEvent(
+			this.headerEl,
+			'contextmenu',
+			evt => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.openHeaderContextMenu(evt);
+			},
+			{ capture: true }
+		);
 
 		const SplitCtor = WorkspaceSplit as unknown as WorkspaceSplitCtor;
 		this.rootSplit = new SplitCtor(this.plugin.app.workspace, 'vertical');
@@ -161,18 +172,6 @@ export class StickyNotePopover {
 
 		this.bottomBarEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-bottombar' });
 		this.bottomTitleEl = this.bottomBarEl.createSpan({ cls: 'csn-sticky-bottombar-title' });
-
-		this.bottomToggleAllBtn = this.bottomBarEl.createEl('button', {
-			cls: 'clickable-icon csn-sticky-bottombar-btn csn-sticky-bottombar-toggle-all',
-			attr: { type: 'button' }
-		});
-		this.syncToggleAllStickiesButtonUi();
-		this.plugin.registerDomEvent(this.bottomToggleAllBtn, 'click', evt => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			const hidden = this.options.onToggleAllStickiesVisibility();
-			this.syncToggleAllStickiesButtonUi(hidden);
-		});
 
 		this.settingsBtn = this.bottomBarEl.createEl('button', {
 			cls: 'clickable-icon csn-sticky-bottombar-btn csn-sticky-bottombar-settings',
@@ -301,12 +300,65 @@ export class StickyNotePopover {
 		this.rootEl.toggleClass('csn-sticky--hidden', hidden);
 	}
 
-	syncToggleAllStickiesButtonUi(forceHiddenState?: boolean): void {
-		const hiddenOthers = forceHiddenState ?? this.options.isOtherStickiesHidden();
-		const title = hiddenOthers ? '显示全部便笺' : '隐藏其他便笺';
-		this.bottomToggleAllBtn.setAttr('aria-label', title);
-		this.bottomToggleAllBtn.setAttr('title', title);
-		setIcon(this.bottomToggleAllBtn, hiddenOthers ? 'eye' : 'eye-off');
+	isHidden(): boolean {
+		return this.rootEl.hasClass('csn-sticky--hidden');
+	}
+
+	// 其它“隐藏相关”按钮已迁移到便笺头部右键菜单中。
+
+	private openHeaderContextMenu(evt: MouseEvent): void {
+		const menu = new Menu();
+
+		const yamlVisible = this.yamlVisible;
+		menu.addItem(item => {
+			item
+				.setTitle(yamlVisible ? '隐藏 YAML 属性' : '显示 YAML 属性')
+				.setIcon('alert-circle')
+				.onClick(() => {
+					this.yamlVisible = !this.yamlVisible;
+					this.applyYamlClass();
+					this.options.onYamlVisibilityChange?.(this.yamlVisible);
+				});
+		});
+
+		menu.addItem(item => {
+			item
+				.setTitle('隐藏当前便笺')
+				.setIcon('eye-off')
+				.onClick(() => {
+					this.options.onHideCurrentSticky();
+				});
+		});
+
+		menu.addItem(item => {
+			item
+				.setTitle('隐藏其他便笺')
+				.setIcon('eye-off')
+				.onClick(() => {
+					this.options.onHideOthersSticky();
+				});
+		});
+
+		menu.addItem(item => {
+			item
+				.setTitle('显示其他便笺')
+				.setIcon('eye')
+				.onClick(() => {
+					this.options.onShowOthersSticky();
+				});
+		});
+
+		menu.addSeparator();
+		menu.addItem(item => {
+			item
+				.setTitle('全部隐藏便笺')
+				.setIcon('eye-off')
+				.onClick(() => {
+					this.options.onHideAllStickies();
+				});
+		});
+
+		menu.showAtMouseEvent(evt);
 	}
 
 	/** 与 HoverNoteLeafPopover#setPreviewScale 相同思路：根节点 CSS 变量 + `.view-content` 的 zoom。 */
@@ -362,18 +414,6 @@ export class StickyNotePopover {
 		});
 
 		const right = this.headerEl.createDiv({ cls: 'csn-sticky-header-right' });
-		const yamlBtn = right.createEl('button', {
-			cls: 'clickable-icon csn-sticky-header-btn',
-			attr: { type: 'button', 'aria-label': 'YAML 属性' }
-		});
-		setIcon(yamlBtn, 'alert-circle');
-		this.plugin.registerDomEvent(yamlBtn, 'click', evt => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			this.yamlVisible = !this.yamlVisible;
-			this.applyYamlClass();
-			this.options.onYamlVisibilityChange?.(this.yamlVisible);
-		});
 
 		this.foldBtn = right.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',

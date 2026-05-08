@@ -132,10 +132,36 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: 'toggle-sticky-notes-visibility',
-			name: '显示/隐藏所有便笺',
+			id: 'hide-current-sticky-note',
+			name: '隐藏当前便笺',
 			callback: () => {
-				this.stickies.toggleAllStickiesVisibility();
+				this.stickies.toggleHideCurrentSticky();
+			}
+		});
+
+		this.addCommand({
+			id: 'toggle-sticky-notes-hide-others',
+			name: '隐藏其他便笺/取消',
+			callback: () => {
+				/* 兼容旧命令：按当前状态切换隐藏其他/显示其他。 */
+				if (this.stickies.isHideOthersMode()) {
+					this.stickies.showOthersSticky();
+				} else {
+					this.stickies.hideOthersSticky();
+				}
+			}
+		});
+
+		this.addCommand({
+			id: 'toggle-sticky-notes-visibility',
+			name: '全部隐藏/显示所有便笺',
+			callback: () => {
+				/* 兼容旧命令：按当前状态切换全部隐藏/显示全部。 */
+				if (this.stickies.isHideAllMode()) {
+					this.stickies.showAllStickies();
+				} else {
+					this.stickies.hideAllStickies();
+				}
 			}
 		});
 
