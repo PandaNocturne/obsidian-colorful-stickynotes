@@ -1134,6 +1134,8 @@ export class StickyNoteManager {
 
 	/** ?????????????/??????????????????????????????????????????????????????????? */
 	private repairBindingGroupRowAfterChromeSync(sourceId: string): void {
+		/* Dragging: only the title bar moves the active sticky; defer grid layout to drag end. */
+		if (this.dragSession) return;
 		const group = this.resolveBindingGroupIds(sourceId);
 		if (group.length <= 1) return;
 		let anchorId = group[0]!;
@@ -1348,7 +1350,7 @@ export class StickyNoteManager {
 		let snappedAxis: 'x' | 'y' | null = null;
 		let rowEdgeAlign: 'top' | 'bottom' | null = null;
 		if (snapEnabled) {
-			const res = this.computeSnapForBounds(id, next, threshold, session.groupIds);
+			const res = this.computeSnapForBounds(id, next, threshold, this.resolveBindingGroupIds(id));
 			adjusted = res.bounds;
 			snappedToId = res.snappedToId;
 			snappedAxis = res.snappedAxis;
@@ -1357,8 +1359,6 @@ export class StickyNoteManager {
 
 		if (bindEnabled && snappedToId && snappedAxis === 'x') {
 			this.bindPairWithAxis(id, snappedToId, 'x');
-			/* ??????????????????????????????????????????????????????????????????? */
-			session.groupIds = this.resolveBindingGroupIds(id);
 			const anchor = this.popovers.get(snappedToId);
 			if (anchor) {
 				const anchorB = anchor.getBounds();
@@ -1385,7 +1385,6 @@ export class StickyNoteManager {
 			}
 		} else if (bindEnabled && snappedToId && snappedAxis === 'y') {
 			this.bindPairWithAxis(id, snappedToId, 'y');
-			session.groupIds = this.resolveBindingGroupIds(id);
 			const anchor = this.popovers.get(snappedToId);
 			if (anchor) {
 				const anchorB = anchor.getBounds();
