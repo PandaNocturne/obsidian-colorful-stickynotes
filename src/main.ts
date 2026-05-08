@@ -10,6 +10,7 @@ import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
 import {
 	VIEW_STICKY_NOTE_LIST,
+	type HeaderNewStickyAdjacentSide,
 	type NoteListFloatOpenFilter,
 	type NoteListOpenLocation,
 	type NoteListSort,
@@ -42,6 +43,8 @@ const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [
 ];
 
 const VALID_NOTE_LIST_FLOAT_OPEN_FILTER: readonly NoteListFloatOpenFilter[] = ['all', 'open', 'closed'];
+
+const VALID_HEADER_NEW_STICKY_ADJACENT_SIDE: readonly HeaderNewStickyAdjacentSide[] = ['left', 'right'];
 
 function normalizeNoteListColorFilters(value: unknown): StickyColorId[] {
 	if (!Array.isArray(value)) return [];
@@ -331,6 +334,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			this.settings.defaultNewStickyBackground = DEFAULT_SETTINGS.defaultNewStickyBackground;
 		} else {
 			this.settings.defaultNewStickyBackground = dbg as StickyColorId;
+		}
+
+		const hns = this.settings.headerNewStickyAdjacentSide;
+		if (
+			typeof hns !== 'string' ||
+			!VALID_HEADER_NEW_STICKY_ADJACENT_SIDE.includes(hns as HeaderNewStickyAdjacentSide)
+		) {
+			this.settings.headerNewStickyAdjacentSide = DEFAULT_SETTINGS.headerNewStickyAdjacentSide;
 		}
 	}
 

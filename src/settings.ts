@@ -3,7 +3,13 @@ import { formatStickyNoteRelativePath } from './filename-template';
 import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
 import { SHEET_COLOR_ORDER } from './sticky/sticky-color-order';
-import type { NoteListFloatOpenFilter, NoteListOpenLocation, NoteListSort, StickyColorId } from './types';
+import type {
+	HeaderNewStickyAdjacentSide,
+	NoteListFloatOpenFilter,
+	NoteListOpenLocation,
+	NoteListSort,
+	StickyColorId
+} from './types';
 
 /** 便笺窗口与列表预览正文的 zoom 范围（与设置项一致）。 */
 export const VIEW_CONTENT_ZOOM_MIN = 0.3;
@@ -66,6 +72,8 @@ export interface ColorfulStickyNotesSettings {
 	defaultNewStickyHeight: number;
 	/** 新建便笺默认背景（写入 frontmatter；与色条顺序第一项一致时为「亮黄」）。 */
 	defaultNewStickyBackground: StickyColorId;
+	/** 便笺头部「+」新建时相对当前窗口的优先侧（相邻左侧 / 相邻右侧）。 */
+	headerNewStickyAdjacentSide: HeaderNewStickyAdjacentSide;
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -95,7 +103,8 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	confirmBlankStickyTrashOnClose: true,
 	defaultNewStickyWidth: 420,
 	defaultNewStickyHeight: 360,
-	defaultNewStickyBackground: 'yellow'
+	defaultNewStickyBackground: 'yellow',
+	headerNewStickyAdjacentSide: 'left'
 };
 
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
@@ -351,6 +360,20 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			);
 
 		containerEl.createEl('h3', { text: '新建便笺' });
+		new Setting(containerEl)
+			.setName('头部 + 号旁新建位置')
+			.setDesc('点击便笺头部「+」时，新窗口优先出现在当前便笺的相邻左侧或相邻右侧；若该侧超出屏幕，会自动改到另一侧。')
+			.addDropdown(dd =>
+				dd
+					.addOption('left', '相邻左侧')
+					.addOption('right', '相邻右侧')
+					.setValue(this.plugin.settings.headerNewStickyAdjacentSide)
+					.onChange(async v => {
+						this.plugin.settings.headerNewStickyAdjacentSide = v as HeaderNewStickyAdjacentSide;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		new Setting(containerEl)
 			.setName('默认宽度')
 			.setDesc('新建便笺浮动窗口的初始宽度（像素）。从已有便笺旁新建时仍沿用当前窗口尺寸。')

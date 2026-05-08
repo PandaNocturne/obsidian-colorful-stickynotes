@@ -441,11 +441,14 @@ export class StickyNoteManager {
 		this.scheduleSaveWorkspaces();
 	}
 
-	/** 新建便笺落在当前便笺左侧，间隔 10px；左侧溢出则尝试贴到右侧 */
+	/** 新建便笺落在当前便笺相邻侧（间隔 gap）；首选侧放不下则换另一侧。 */
 	private static readonly NEW_STICKY_GAP_PX = 5;
 	private static readonly VIEW_MARGIN = 12;
 
-	private offsetBoundsFromSource(source: FloatingBounds): FloatingBounds {
+	private offsetBoundsFromSource(
+		source: FloatingBounds,
+		prefer: 'left' | 'right'
+	): FloatingBounds {
 		const gap = StickyNoteManager.NEW_STICKY_GAP_PX;
 		const m = StickyNoteManager.VIEW_MARGIN;
 		const w = source.width;
@@ -453,17 +456,27 @@ export class StickyNoteManager {
 		const maxLeft = Math.max(0, window.innerWidth - w);
 		const maxTop = Math.max(0, window.innerHeight - h);
 
-		let left = source.left - w - gap;
-		let top = source.top;
+		let left: number;
+		const top = source.top;
 
-		if (left < m) {
-			const rightOf = source.left + source.width + gap;
-			if (rightOf <= maxLeft) left = rightOf;
-			else left = Math.min(maxLeft, Math.max(m, left));
+		if (prefer === 'left') {
+			left = source.left - w - gap;
+			if (left < m) {
+				const rightOf = source.left + source.width + gap;
+				if (rightOf <= maxLeft) left = rightOf;
+				else left = Math.min(maxLeft, Math.max(m, left));
+			}
+		} else {
+			left = source.left + source.width + gap;
+			if (left > maxLeft) {
+				const leftOf = source.left - w - gap;
+				if (leftOf >= m) left = leftOf;
+				else left = Math.min(maxLeft, Math.max(m, left));
+			}
 		}
-		left = Math.min(maxLeft, Math.max(m, left));
-		top = Math.min(maxTop, Math.max(m, top));
-		return { left, top, width: w, height: h };
+		const clampedLeft = Math.min(maxLeft, Math.max(m, left));
+		const clampedTop = Math.min(maxTop, Math.max(m, top));
+		return { left: clampedLeft, top: clampedTop, width: w, height: h };
 	}
 
 	private getDefaultBounds(): FloatingBounds {
@@ -587,7 +600,10 @@ export class StickyNoteManager {
 		if (initial?.bounds) {
 			bounds = initial.bounds;
 		} else if (sourcePopover) {
-			bounds = this.offsetBoundsFromSource(sourcePopover.getBounds());
+			bounds = this.offsetBoundsFromSource(
+				sourcePopover.getBounds(),
+				this.plugin.settings.headerNewStickyAdjacentSide
+			);
 		} else {
 			bounds = this.getDefaultBounds();
 		}

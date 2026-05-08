@@ -61,6 +61,9 @@ export type NoteListSort =
 /** 便笺列表首次打开时的挂载位置。 */
 export type NoteListOpenLocation = 'left-sidebar' | 'right-sidebar' | 'new-tab';
 
+/** 便笺头部「+」从当前窗口旁新建时，优先出现在源窗口的哪一侧（空间不足时自动换到另一侧）。 */
+export type HeaderNewStickyAdjacentSide = 'left' | 'right';
+
 /** 便笺列表：按当前是否已打开浮动便笺窗口筛选。 */
 export type NoteListFloatOpenFilter = 'all' | 'open' | 'closed';
 
