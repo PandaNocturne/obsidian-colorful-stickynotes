@@ -45,23 +45,23 @@ const NOTE_LIST_SORT_SPECS: readonly {
 	toolbarIcon?: string;
 	titleKey: MessageKey;
 }[] = [
-	{ mode: 'ctime-desc', menuIcon: 'calendar-arrow-down', titleKey: 'SORT_CTIME_DESC_NEW' },
-	{ mode: 'ctime-asc', menuIcon: 'calendar-arrow-up', titleKey: 'SORT_CTIME_ASC_OLD' },
-	{ mode: 'mtime-desc', menuIcon: 'clock-arrow-down', titleKey: 'SORT_MTIME_DESC_NEW' },
-	{ mode: 'mtime-asc', menuIcon: 'clock-arrow-up', titleKey: 'SORT_MTIME_ASC_OLD' },
-	{
-		mode: 'basename-asc',
-		menuIcon: 'arrow-up-narrow-wide',
-		toolbarIcon: 'arrow-up-narrow-wide',
-		titleKey: 'SORT_BASENAME_AZ'
-	},
-	{
-		mode: 'basename-desc',
-		menuIcon: 'arrow-down-narrow-wide',
-		toolbarIcon: 'arrow-down-narrow-wide',
-		titleKey: 'SORT_BASENAME_ZA'
-	}
-];
+		{ mode: 'ctime-desc', menuIcon: 'calendar-arrow-down', titleKey: 'SORT_CTIME_DESC_NEW' },
+		{ mode: 'ctime-asc', menuIcon: 'calendar-arrow-up', titleKey: 'SORT_CTIME_ASC_OLD' },
+		{ mode: 'mtime-desc', menuIcon: 'clock-arrow-down', titleKey: 'SORT_MTIME_DESC_NEW' },
+		{ mode: 'mtime-asc', menuIcon: 'clock-arrow-up', titleKey: 'SORT_MTIME_ASC_OLD' },
+		{
+			mode: 'basename-asc',
+			menuIcon: 'arrow-up-narrow-wide',
+			toolbarIcon: 'arrow-up-narrow-wide',
+			titleKey: 'SORT_BASENAME_AZ'
+		},
+		{
+			mode: 'basename-desc',
+			menuIcon: 'arrow-down-narrow-wide',
+			toolbarIcon: 'arrow-down-narrow-wide',
+			titleKey: 'SORT_BASENAME_ZA'
+		}
+	];
 
 /** 工具栏「浮动窗口」筛选：与 `settings.noteListFloatOpenFilter` 一一对应。 */
 const NOTE_LIST_FLOAT_OPEN_SPECS: readonly {
@@ -69,10 +69,10 @@ const NOTE_LIST_FLOAT_OPEN_SPECS: readonly {
 	icon: string;
 	titleKey: MessageKey;
 }[] = [
-	{ mode: 'all', icon: 'layout-grid', titleKey: 'FLOAT_ALL_STICKIES' },
-	{ mode: 'open', icon: 'square-pen', titleKey: 'FLOAT_OPEN_ONLY' },
-	{ mode: 'closed', icon: 'file', titleKey: 'FLOAT_CLOSED_ONLY' }
-];
+		{ mode: 'all', icon: 'layout-grid', titleKey: 'FLOAT_ALL_STICKIES' },
+		{ mode: 'open', icon: 'square-pen', titleKey: 'FLOAT_OPEN_ONLY' },
+		{ mode: 'closed', icon: 'file', titleKey: 'FLOAT_CLOSED_ONLY' }
+	];
 
 /** 工具栏「归档」筛选：与 `settings.noteListArchiveFilter` 一一对应。 */
 const NOTE_LIST_ARCHIVE_SPECS: readonly {
@@ -80,10 +80,10 @@ const NOTE_LIST_ARCHIVE_SPECS: readonly {
 	icon: string;
 	titleKey: MessageKey;
 }[] = [
-	{ mode: 'all', icon: 'list', titleKey: 'ARCHIVE_FILTER_ALL' },
-	{ mode: 'unarchived', icon: 'inbox', titleKey: 'ARCHIVE_FILTER_UNARCHIVED' },
-	{ mode: 'archived', icon: 'archive', titleKey: 'ARCHIVE_FILTER_ARCHIVED' }
-];
+		{ mode: 'all', icon: 'list', titleKey: 'ARCHIVE_FILTER_ALL' },
+		{ mode: 'unarchived', icon: 'inbox', titleKey: 'ARCHIVE_FILTER_UNARCHIVED' },
+		{ mode: 'archived', icon: 'archive', titleKey: 'ARCHIVE_FILTER_ARCHIVED' }
+	];
 
 /** `pinnedNorm` 为已 normalize 的路径数组，顺序即置顶顺序；不在数组中为未置顶。 */
 function pinnedSortRank(notePath: string, pinnedNorm: readonly string[]): number {
