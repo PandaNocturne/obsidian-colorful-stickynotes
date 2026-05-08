@@ -27,7 +27,6 @@ const FM_ID_KEY = 'colorful-sticky-id';
 const FM_ARCHIVED_KEY = 'colorful-sticky-archived';
 const STICKY_EDGE_GAP_PX = 5;
 const STICKY_TOP_ALIGN_SNAP_PX = 10;
-const STICKY_LEFT_ALIGN_SNAP_PX = 10;
 
 /** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
 function executeCommandById(app: App, commandId: string): boolean {
@@ -49,13 +48,15 @@ export class StickyNoteManager {
 				groupIds: string[];
 				lastPrimary: FloatingBounds;
 				ctrlDetach: boolean;
+				/** 同行吸附时的高度参照（被吸附侧），非发起拖动便笺的高度。 */
+				snapHeightSourceId: string | null;
 		  }
 		| null = null;
 	private resizeSession:
 		| {
-				id: string;
-				groupIds: string[];
-		  }
+			id: string;
+			groupIds: string[];
+		}
 		| null = null;
 	private readonly mount = document.body;
 	/** 便笺间 z-index 微调，单调递增即可。 */
@@ -83,7 +84,7 @@ export class StickyNoteManager {
 	constructor(
 		private readonly plugin: ColorfulStickyNotesPlugin,
 		private readonly app: App
-	) {}
+	) { }
 
 	/** 当前已打开浮动便笺对应的笔记路径（用于便笺列表「已打开 / 未打开」筛选）。 */
 	getOpenStickyNotePaths(): ReadonlySet<string> {
@@ -448,14 +449,14 @@ export class StickyNoteManager {
 
 		const pDefaultTemplateBody = defaultTplPath
 			? (async (): Promise<string> => {
-					const tf = this.app.vault.getAbstractFileByPath(normalizePath(defaultTplPath));
-					if (!(tf instanceof TFile)) return '';
-					try {
-						return await this.app.vault.read(tf);
-					} catch {
-						return '';
-					}
-				})()
+				const tf = this.app.vault.getAbstractFileByPath(normalizePath(defaultTplPath));
+				if (!(tf instanceof TFile)) return '';
+				try {
+					return await this.app.vault.read(tf);
+				} catch {
+					return '';
+				}
+			})()
 			: Promise.resolve('');
 
 		const [, body] = await Promise.all([pEnsureStickyRoot, pDefaultTemplateBody]);
@@ -655,7 +656,8 @@ export class StickyNoteManager {
 			onBoundsChange: () => this.persistOpenWindows(),
 			onRequestNewSticky: () => void this.addStickyWindow(undefined, this.popovers.get(id)),
 			onColorChange: c => void this.applyColorToFile(id, c),
-			onCollapseChange: () => this.persistOpenWindows(),
+			onCollapseChange: () => this.syncBindingPeersChrome(id),
+			onStretchChange: () => this.syncBindingPeersChrome(id),
 			onYamlVisibilityChange: () => this.persistOpenWindows(),
 			onMarkdownModeChange: () => this.persistOpenWindows(),
 			onOpenNoteList: () => void this.plugin.openNoteListView(),
@@ -848,7 +850,7 @@ export class StickyNoteManager {
 			savedColor ?? (await resolveStickyBgColorForFile(this.app, file)) ?? 'default';
 		const restoredMdMode: 'preview' | 'source' | undefined =
 			file.extension === 'md' &&
-			(serial.markdownMode === 'preview' || serial.markdownMode === 'source')
+				(serial.markdownMode === 'preview' || serial.markdownMode === 'source')
 				? serial.markdownMode
 				: undefined;
 		const pop = this.createPopoverShell(id, {
@@ -885,7 +887,8 @@ export class StickyNoteManager {
 		const { pop, file, bounds: b, savedColor, hidden, stretched } = prepared;
 		await pop.openFile(file, { workspaceActive: opts.workspaceActive });
 		pop.setBounds(b);
-		pop.setStretched(stretched);
+		/* 恢复会话态全高时勿按视口左右贴边，否则破坏工作区里保存的横向位置与绑定关系 */
+		pop.setStretched(stretched, { snapHorizontalToViewport: false });
 		pop.setHidden(hidden);
 		if (savedColor !== undefined) {
 			/* 工作区里记录了便笺颜色，但笔记 frontmatter 无 `colorful-sticky-bg` 时写回，避免仅会话态有颜色。 */
@@ -930,6 +933,7 @@ export class StickyNoteManager {
 		await Promise.all(
 			preparedList.map(p => this.finalizeExistingStickyOpen(p, { workspaceActive: false }))
 		);
+		this.syncAllBindingGroupsChromeAfterRestore();
 	}
 
 	updateBottomBarsFromSettings(): void {
@@ -959,10 +963,102 @@ export class StickyNoteManager {
 		}
 	}
 
+	/** 仅同行（横向）绑定参与联动；纵向历史边不入链。 */
 	private getBindingsForId(id: string): string[] {
 		const set = this.bindings.get(id);
 		if (!set || set.size === 0) return [];
-		return [...set];
+		return [...set].filter(other => this.inferBindingAxis(id, other) === 'x');
+	}
+
+	/** 仅同步折叠/拉伸状态，不排版、不落盘。返回是否有多窗绑定需要后续 repair。 */
+	private applyBindingPeersChromeStateOnly(sourceId: string): boolean {
+		const src = this.popovers.get(sourceId);
+		if (!src) return false;
+		const group = this.resolveBindingGroupIds(sourceId);
+		if (group.length <= 1) return false;
+		const collapsed = src.getCollapsed();
+		const stretched = src.isStretched();
+		for (const gid of group) {
+			if (gid === sourceId) continue;
+			const p = this.popovers.get(gid);
+			if (!p) continue;
+			if (p.getCollapsed() !== collapsed) {
+				p.setCollapsed(collapsed, { silent: true });
+			}
+			if (p.isStretched() !== stretched) {
+				p.setStretched(stretched, { snapHorizontalToViewport: false });
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * 将 source 便笺的折叠/全高拉伸状态同步到同行绑定组内其它便笺，并可选写入工作区（含 bindings）。
+	 * 拉伸同步后不贴视口左右缘（保持同行 left），并在末尾按绑定链重整位置。
+	 */
+	private syncBindingPeersChrome(sourceId: string, opts?: { persist?: boolean }): void {
+		if (!this.applyBindingPeersChromeStateOnly(sourceId)) return;
+		/* 与便笺内双 rAF 折叠布局对齐后再修绑定位置，否则物理占位仍是旧边界 */
+		window.requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
+				this.repairBindingGroupRowAfterChromeSync(sourceId);
+				if (opts?.persist !== false) {
+					this.persistOpenWindows();
+				}
+			});
+		});
+	}
+
+	/** 同行绑定在折叠/拉伸同步后：以最左便笺为锚做一次间距与顶/高对齐（含发起者贴边后链上错位的情况）。 */
+	private repairBindingGroupRowAfterChromeSync(sourceId: string): void {
+		const group = this.resolveBindingGroupIds(sourceId);
+		if (group.length <= 1) return;
+		let leftmostId = group[0]!;
+		let bestL = Number.POSITIVE_INFINITY;
+		for (const gid of group) {
+			const pop = this.popovers.get(gid);
+			if (!pop) continue;
+			const l = pop.getBounds().left;
+			if (l < bestL) {
+				bestL = l;
+				leftmostId = gid;
+			}
+		}
+		this.repairBindingAlignmentNear(leftmostId, sourceId);
+	}
+
+	/** 恢复工作区后统一各绑定组的折叠/拉伸，并以靠左便笺为准，最后落盘。 */
+	private syncAllBindingGroupsChromeAfterRestore(): void {
+		const seen = new Set<string>();
+		const repairAnchors: string[] = [];
+		for (const id of this.popovers.keys()) {
+			if (seen.has(id)) continue;
+			const group = this.resolveBindingGroupIds(id);
+			for (const g of group) seen.add(g);
+			if (group.length <= 1) continue;
+			let anchorId = group[0]!;
+			let bestLeft = Number.POSITIVE_INFINITY;
+			for (const gid of group) {
+				const pop = this.popovers.get(gid);
+				if (!pop) continue;
+				const l = pop.getBounds().left;
+				if (l < bestLeft) {
+					bestLeft = l;
+					anchorId = gid;
+				}
+			}
+			if (this.applyBindingPeersChromeStateOnly(anchorId)) {
+				repairAnchors.push(anchorId);
+			}
+		}
+		window.requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
+				for (const a of repairAnchors) {
+					this.repairBindingGroupRowAfterChromeSync(a);
+				}
+				this.persistOpenWindows();
+			});
+		});
 	}
 
 	private ensureBindingSet(id: string): Set<string> {
@@ -1031,8 +1127,8 @@ export class StickyNoteManager {
 		if (!wants || wants.length === 0) return;
 		for (const other of wants) {
 			if (!this.popovers.has(other)) continue;
-			const axis = this.inferBindingAxis(id, other);
-			this.bindPairWithAxis(id, other, axis);
+			if (this.inferBindingAxis(id, other) !== 'x') continue;
+			this.bindPairWithAxis(id, other, 'x');
 		}
 	}
 
@@ -1044,9 +1140,7 @@ export class StickyNoteManager {
 		while (q.length) {
 			const cur = q.shift()!;
 			out.push(cur);
-			const nb = this.bindings.get(cur);
-			if (!nb) continue;
-			for (const x of nb) {
+			for (const x of this.getBindingsForId(cur)) {
 				if (seen.has(x)) continue;
 				if (!this.popovers.has(x)) continue;
 				seen.add(x);
@@ -1067,7 +1161,8 @@ export class StickyNoteManager {
 			id,
 			groupIds,
 			lastPrimary: primary,
-			ctrlDetach: ctrl
+			ctrlDetach: ctrl,
+			snapHeightSourceId: null
 		};
 	}
 
@@ -1081,6 +1176,7 @@ export class StickyNoteManager {
 				this.unbindAll(id);
 				session.groupIds = [id];
 			}
+			session.snapHeightSourceId = null;
 			session.lastPrimary = next;
 			return next;
 		}
@@ -1102,36 +1198,28 @@ export class StickyNoteManager {
 			snappedAxis = res.snappedAxis;
 		}
 
-		if (bindEnabled && snappedToId) {
-			this.bindPairWithAxis(id, snappedToId, snappedAxis ?? 'x');
+		if (bindEnabled && snappedToId && snappedAxis === 'x') {
+			this.bindPairWithAxis(id, snappedToId, 'x');
 			/* 吸附过程中若产生新绑定，立刻扩展为整链，下一步位移按整组联动。 */
 			session.groupIds = this.resolveBindingGroupIds(id);
 			const anchor = this.popovers.get(snappedToId);
 			if (anchor) {
 				const anchorB = anchor.getBounds();
-				if (snappedAxis === 'y') {
-					/* 顶部/底部触发：上下对齐（纵向排），左边对齐并同宽。 */
-					const aboveTop = anchorB.top - STICKY_EDGE_GAP_PX - adjusted.height;
-					const belowTop = anchorB.top + anchorB.height + STICKY_EDGE_GAP_PX;
-					const useAbove = Math.abs(adjusted.top - aboveTop) <= Math.abs(adjusted.top - belowTop);
-					adjusted = {
-						...adjusted,
-						top: useAbove ? aboveTop : belowTop,
-						left: anchorB.left,
-						width: anchorB.width
-					};
-				} else {
-					/* 左右触发：左右对齐（横向排），顶部对齐并同高。 */
-					const leftCandidate = anchorB.left - STICKY_EDGE_GAP_PX - adjusted.width;
-					const rightCandidate = anchorB.left + anchorB.width + STICKY_EDGE_GAP_PX;
-					const useLeft =
-						Math.abs(adjusted.left - leftCandidate) <= Math.abs(adjusted.left - rightCandidate);
-					adjusted = {
-						...adjusted,
-						left: useLeft ? leftCandidate : rightCandidate,
-						top: anchorB.top
-					};
-				}
+				/* 同行：左右贴靠，顶对齐。 */
+				const leftCandidate = anchorB.left - STICKY_EDGE_GAP_PX - adjusted.width;
+				const rightCandidate = anchorB.left + anchorB.width + STICKY_EDGE_GAP_PX;
+				const useLeft =
+					Math.abs(adjusted.left - leftCandidate) <= Math.abs(adjusted.left - rightCandidate);
+				adjusted = {
+					...adjusted,
+					left: useLeft ? leftCandidate : rightCandidate,
+					top: anchorB.top,
+					/* 高度跟随被吸附侧（绑定参照端），而非发起吸附的便笺 */
+					height: anchorB.height
+				};
+				session.snapHeightSourceId = snappedToId;
+				/* 参照端（被吸附便笺）的折叠/拉伸状态同步到本组，落盘在拖动结束统一写。 */
+				this.syncBindingPeersChrome(snappedToId, { persist: false });
 			}
 		}
 
@@ -1146,10 +1234,23 @@ export class StickyNoteManager {
 			let minTop = Number.POSITIVE_INFINITY;
 			let maxRight = Number.NEGATIVE_INFINITY;
 			let maxBottom = Number.NEGATIVE_INFINITY;
+			const primaryPop = this.popovers.get(id);
+			const primaryPhy = primaryPop?.getPhysicalBounds();
 			for (const gid of session.groupIds) {
 				const pop = this.popovers.get(gid);
 				if (!pop) continue;
-				const b = gid === id ? session.lastPrimary : pop.getBounds();
+				/* 折叠态 getBounds() 仍为逻辑展开高，夹紧外接框须用 DOM 实际占位，否则底部 maxDy 错误 */
+				const b: FloatingBounds =
+					gid === id
+						? primaryPhy
+							? {
+									left: session.lastPrimary.left,
+									top: session.lastPrimary.top,
+									width: primaryPhy.width,
+									height: primaryPhy.height
+								}
+							: session.lastPrimary
+						: pop.getPhysicalBounds();
 				minLeft = Math.min(minLeft, b.left);
 				minTop = Math.min(minTop, b.top);
 				maxRight = Math.max(maxRight, b.left + b.width);
@@ -1175,8 +1276,7 @@ export class StickyNoteManager {
 				if (gid === id) continue;
 				const pop = this.popovers.get(gid);
 				if (!pop) continue;
-				const b = pop.getBounds();
-				pop.setBounds({ ...b, left: b.left + dx, top: b.top + dy });
+				pop.translatePositionBy(dx, dy);
 			}
 		}
 
@@ -1185,7 +1285,8 @@ export class StickyNoteManager {
 
 	private handleDragEnd(id: string, _e: PointerEvent): void {
 		if (this.dragSession?.id === id) {
-			this.repairBindingAlignmentNear(id);
+			const heightSrc = this.dragSession.snapHeightSourceId;
+			this.repairBindingAlignmentNear(id, heightSrc);
 			this.dragSession = null;
 			this.persistOpenWindows();
 		}
@@ -1201,9 +1302,7 @@ export class StickyNoteManager {
 		if (!session || session.id !== id) return next;
 		if (session.groupIds.length <= 1) return next;
 		/**
-		 * 仅按绑定图中的「直接边」推断轴向，并从发起窗口 BFS 传播。
-		 * 若对远端非相邻节点用「发起者 vs 远端」的几何中心猜测轴向，链式纵向排列且宽度不一致时
-		 * 易误判为横向绑定，从而错误改写 top/height，导致不相邻便笺错位。
+		 * 仅同行绑定：沿绑定边 BFS；顶对齐 + 同高，改宽时推挤邻窗 left（不同步宽度）。
 		 */
 		const visited = new Set<string>([id]);
 		const q: string[] = [id];
@@ -1216,20 +1315,13 @@ export class StickyNoteManager {
 				const pop = this.popovers.get(nbId);
 				if (!pop) continue;
 				const b = pop.getBounds();
-				const axis = this.inferBindingAxis(anchorId, nbId);
-				if (axis === 'y') {
-					/* 上下绑定：左对齐 + 同宽（宽度变化联动）。 */
-					pop.setBounds({ ...b, left: anchorBounds.left, width: anchorBounds.width });
-				} else {
-					/* 左右绑定：顶对齐 + 同高；锚点改宽时按外沿+间距推挤邻窗 left（与 repairBindingAlignmentNear 一致）。 */
-					const anchorCx = anchorBounds.left + anchorBounds.width / 2;
-					const nbCx = b.left + b.width / 2;
-					const placeLeft = nbCx <= anchorCx;
-					const left = placeLeft
-						? anchorBounds.left - STICKY_EDGE_GAP_PX - b.width
-						: anchorBounds.left + anchorBounds.width + STICKY_EDGE_GAP_PX;
-					pop.setBounds({ ...b, left, top: anchorBounds.top, height: anchorBounds.height });
-				}
+				const anchorCx = anchorBounds.left + anchorBounds.width / 2;
+				const nbCx = b.left + b.width / 2;
+				const placeLeft = nbCx <= anchorCx;
+				const left = placeLeft
+					? anchorBounds.left - STICKY_EDGE_GAP_PX - b.width
+					: anchorBounds.left + anchorBounds.width + STICKY_EDGE_GAP_PX;
+				pop.setBounds({ ...b, left, top: anchorBounds.top, height: anchorBounds.height });
 				visited.add(nbId);
 				q.push(nbId);
 			}
@@ -1250,7 +1342,7 @@ export class StickyNoteManager {
 		if (!root) return;
 		const group = this.resolveBindingGroupIds(rootId);
 		if (group.length <= 1) return;
-		/* 仅修尺寸：横向绑定统一高度，纵向绑定统一宽度；不改 left/top。 */
+		/* 仅同行：统一高度；不改宽度与 left/top。 */
 		const visited = new Set<string>();
 		const q: string[] = [rootId];
 		visited.add(rootId);
@@ -1264,11 +1356,7 @@ export class StickyNoteManager {
 				const nb = this.popovers.get(nbId);
 				if (!nb) continue;
 				const bb = nb.getBounds();
-				if (this.isAxisBinding(anchorId, nbId, 'y')) {
-					nb.setBounds({ ...bb, width: ab.width });
-				} else {
-					nb.setBounds({ ...bb, height: ab.height });
-				}
+				nb.setBounds({ ...bb, height: ab.height });
 				visited.add(nbId);
 				q.push(nbId);
 			}
@@ -1314,11 +1402,8 @@ export class StickyNoteManager {
 			const oBottom = ob.top + ob.height;
 
 			const yOverlap = overlapLen(top, bottom, oTop, oBottom);
-			const xOverlap = overlapLen(left, right, oLeft, oRight);
 			const sameRow = hasEnoughOverlap(yOverlap, b.height, ob.height);
-			const sameCol = hasEnoughOverlap(xOverlap, b.width, ob.width);
 			const topNear = Math.abs(top - oTop) <= STICKY_TOP_ALIGN_SNAP_PX;
-			const leftNear = Math.abs(left - oLeft) <= STICKY_LEFT_ALIGN_SNAP_PX;
 
 			/* 规则：当两窗接近共左/共右且高度接近时，优先吸附“顶部对齐”。 */
 			const heightClose = Math.abs(b.height - ob.height) <= Math.max(8, Math.round(threshold * 1.2));
@@ -1354,25 +1439,6 @@ export class StickyNoteManager {
 					}
 				}
 			}
-
-			const candidatesY = [
-				{ dy: oTop - top, target: id },
-				{ dy: oBottom - top, target: id },
-				{ dy: oTop - STICKY_EDGE_GAP_PX - bottom, target: id },
-				{ dy: oBottom + STICKY_EDGE_GAP_PX - top, target: id }
-			];
-			/* 上下吸附限制：除了上下距离接近外，还要求左边接近。 */
-			if (sameCol && leftNear) {
-				for (const c of candidatesY) {
-					const a = Math.abs(c.dy);
-					if (a <= threshold && a < bestDyAbs) {
-						bestDyAbs = a;
-						bestDy = c.dy;
-						snappedToId = c.target;
-						snappedAxis = 'y';
-					}
-				}
-			}
 		}
 
 		return {
@@ -1382,12 +1448,27 @@ export class StickyNoteManager {
 		};
 	}
 
-	private repairBindingAlignmentNear(rootId: string): void {
+	private repairBindingAlignmentNear(rootId: string, heightSourceId?: string | null): void {
 		const root = this.popovers.get(rootId);
 		if (!root) return;
 		const group = this.resolveBindingGroupIds(rootId);
 		if (group.length <= 1) return;
-		/* 以被拖动窗口为主坐标：从 root 出发逐层修复，避免互相拉扯。 */
+		const refPop =
+			heightSourceId && this.popovers.has(heightSourceId) ? this.popovers.get(heightSourceId) : null;
+		const refLogical = refPop?.getBounds();
+		const rowHeight = refLogical?.height;
+		/* 折叠态 getBounds() 为逻辑展开高；仅双方均为展开态时才同步高度，避免误写折叠占位 */
+		if (
+			refLogical &&
+			refPop &&
+			heightSourceId &&
+			rootId !== heightSourceId &&
+			!refPop.getCollapsed() &&
+			!root.getCollapsed()
+		) {
+			const rb = root.getBounds();
+			root.setBounds({ ...rb, height: refLogical.height });
+		}
 		const visited = new Set<string>();
 		const q: string[] = [rootId];
 		visited.add(rootId);
@@ -1395,29 +1476,23 @@ export class StickyNoteManager {
 			const anchorId = q.shift()!;
 			const anchor = this.popovers.get(anchorId);
 			if (!anchor) continue;
-			const ab = anchor.getBounds();
+			const abPhy = anchor.getPhysicalBounds();
+			const abLogic = anchor.getBounds();
+			const syncH = rowHeight ?? abLogic.height;
 			for (const nbId of this.getBindingsForId(anchorId)) {
 				if (visited.has(nbId)) continue;
 				const nb = this.popovers.get(nbId);
 				if (!nb) continue;
-				const bb = nb.getBounds();
-				/* 使用真实绑定轴，而不是通过当前位置猜测，避免改宽/改高后误判导致位置漂移。 */
-				const verticalStack = this.isAxisBinding(anchorId, nbId, 'y');
-				let next = bb;
-				if (verticalStack) {
-					/* 顶/底触发簇：左对齐 + 同宽 + 5px 间距。 */
-					const placeAbove = bb.top + bb.height / 2 <= ab.top + ab.height / 2;
-					const top = placeAbove
-						? ab.top - STICKY_EDGE_GAP_PX - bb.height
-						: ab.top + ab.height + STICKY_EDGE_GAP_PX;
-					next = { ...bb, top, left: ab.left, width: ab.width };
-				} else {
-					/* 左/右触发簇：顶对齐 + 同高 + 5px 间距。 */
-					const placeLeft = bb.left + bb.width / 2 <= ab.left + ab.width / 2;
-					const left = placeLeft
-						? ab.left - STICKY_EDGE_GAP_PX - bb.width
-						: ab.left + ab.width + STICKY_EDGE_GAP_PX;
-					next = { ...bb, left, top: ab.top, height: ab.height };
+				const bbPhy = nb.getPhysicalBounds();
+				const bbLogic = nb.getBounds();
+				/* 左右判定与间距用 DOM 实际占位；落盘仍用逻辑宽高（折叠时保留 expanded） */
+				const placeLeft = bbPhy.left + bbPhy.width / 2 <= abPhy.left + abPhy.width / 2;
+				const left = placeLeft
+					? abPhy.left - STICKY_EDGE_GAP_PX - bbPhy.width
+					: abPhy.left + abPhy.width + STICKY_EDGE_GAP_PX;
+				const next: FloatingBounds = { ...bbLogic, left, top: abPhy.top };
+				if (!nb.getCollapsed() && !anchor.getCollapsed()) {
+					next.height = syncH;
 				}
 				nb.setBounds(next);
 				visited.add(nbId);

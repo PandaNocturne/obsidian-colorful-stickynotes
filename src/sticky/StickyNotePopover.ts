@@ -70,6 +70,8 @@ export interface StickyNotePopoverOptions {
 	onResizeStart?: (e: PointerEvent, dir: ResizeDirection) => void;
 	onResizeMove?: (next: FloatingBounds, e: PointerEvent, dir: ResizeDirection) => FloatingBounds;
 	onResizeEnd?: (e: PointerEvent) => void;
+	/** 头部双击拉伸/恢复后通知（用于同行绑定同步）。 */
+	onStretchChange?: () => void;
 }
 
 export class StickyNotePopover {
@@ -302,6 +304,27 @@ export class StickyNotePopover {
 		return this.collapsed;
 	}
 
+	/** @param opts.silent 为 true 时不触发 onCollapseChange（避免管理器同步同行时递归）。 */
+	setCollapsed(collapsed: boolean, opts?: { silent?: boolean }): void {
+		if (this.disposed) return;
+		if (this.collapsed === collapsed) return;
+		this.collapsed = collapsed;
+		this.applyCollapsedClass();
+		if (!opts?.silent) {
+			this.options.onCollapseChange?.(this.collapsed);
+		} else {
+			/* 静默同步折叠后补一次布局与叶视图测量，否则 offset 尺寸未更新，绑定组排版仍按旧边界 */
+			window.requestAnimationFrame(() => {
+				window.requestAnimationFrame(() => {
+					if (this.disposed) return;
+					this.syncBottomBarHeightCss();
+					this.requestLeafMeasure();
+					this.scheduleResizeReflow();
+				});
+			});
+		}
+	}
+
 	getYamlVisible(): boolean {
 		return this.yamlVisible;
 	}
@@ -352,7 +375,11 @@ export class StickyNotePopover {
 		return this.edgeStretchRestoreState !== null;
 	}
 
-	setStretched(stretched: boolean): void {
+	/**
+	 * @param opts.snapHorizontalToViewport 为 true（默认）时，全高拉伸同时把 left 贴到视口左或右缘（单窗交互）。
+	 * 为 false 时保持当前 left，仅 top/高度变化，供同行绑定组内同步，避免整行被各自贴边打乱。
+	 */
+	setStretched(stretched: boolean, opts?: { snapHorizontalToViewport?: boolean }): void {
 		if (stretched) {
 			if (this.collapsed || this.disposed) return;
 			const b = this.getBounds();
@@ -360,9 +387,10 @@ export class StickyNotePopover {
 				this.edgeStretchRestoreState = { top: b.top, height: b.height };
 			}
 			this.manualHeaderStretchActive = true;
-			const snappedLeft = this.resolveSnappedLeft(b);
+			const snapX = opts?.snapHorizontalToViewport !== false;
+			const left = snapX ? this.resolveSnappedLeft(b) : b.left;
 			this.applyBounds(
-				{ left: snappedLeft, top: 0, width: b.width, height: window.innerHeight },
+				{ left, top: 0, width: b.width, height: window.innerHeight },
 				false,
 				{ clampToViewportMargin: false }
 			);
@@ -495,9 +523,7 @@ export class StickyNotePopover {
 		this.plugin.registerDomEvent(this.foldBtn, 'click', evt => {
 			evt.preventDefault();
 			evt.stopPropagation();
-			this.collapsed = !this.collapsed;
-			this.applyCollapsedClass();
-			this.options.onCollapseChange?.(this.collapsed);
+			this.setCollapsed(!this.collapsed);
 		});
 
 		const closeBtn = right.createEl('button', {
@@ -704,6 +730,7 @@ export class StickyNotePopover {
 			this.restoreFromEdgeStretchIfNeeded();
 			this.syncEdgeAutoStretchFromCurrentBounds();
 			this.onBoundsChange(this.getBounds());
+			this.options.onStretchChange?.();
 			return;
 		}
 		if (!this.edgeStretchRestoreState) {
@@ -716,6 +743,7 @@ export class StickyNotePopover {
 			{ clampToViewportMargin: false }
 		);
 		this.onBoundsChange(this.getBounds());
+		this.options.onStretchChange?.();
 	}
 
 	focus(): void {
@@ -761,8 +789,34 @@ export class StickyNotePopover {
 		};
 	}
 
+	/**
+	 * 当前 DOM 实际占位（折叠时为标题条高度），用于绑定组排版与吸附几何。
+	 * 勿替代 getBounds 做会话持久化。
+	 */
+	getPhysicalBounds(): FloatingBounds {
+		const left = this.rootEl.offsetLeft;
+		const top = this.rootEl.offsetTop;
+		return {
+			left,
+			top,
+			width: this.rootEl.offsetWidth,
+			height: this.rootEl.offsetHeight
+		};
+	}
+
 	setBounds(bounds: FloatingBounds): void {
 		this.applyBounds(bounds, false);
+	}
+
+	/**
+	 * 仅平移 left/top，不改写入 expanded 的逻辑宽高。
+	 * 绑定组连动拖动时使用，避免折叠态下 setBounds 仍带 expandedH 导致占位与视口夹紧失真。
+	 */
+	translatePositionBy(dx: number, dy: number): void {
+		if (this.disposed) return;
+		const phy = this.getPhysicalBounds();
+		this.rootEl.style.left = `${phy.left + dx}px`;
+		this.rootEl.style.top = `${phy.top + dy}px`;
 	}
 
 	/**
