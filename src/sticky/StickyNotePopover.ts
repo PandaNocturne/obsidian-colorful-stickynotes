@@ -26,6 +26,7 @@ type WorkspaceSplitWithDom = WorkspaceSplit & { containerEl: HTMLElement };
 const MIN_WIDTH = 280;
 const MIN_HEIGHT = 200;
 const VIEWPORT_MARGIN = 12;
+const EDGE_SNAP_THRESHOLD_PX = 14;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 type ResizeDirection = (typeof RESIZE_DIRECTIONS)[number];
 
@@ -38,6 +39,8 @@ export interface StickyNotePopoverOptions {
 	initialCollapsed: boolean;
 	initialYamlVisible: boolean;
 	bottomBarAutoHide: boolean;
+	/** 左右贴边时自动拉伸高度；移开后恢复。 */
+	edgeAutoStretchHeight: boolean;
 	/** 将要打开 Markdown 便笺时，外壳阶段即显示阅读/编辑切换（占位为阅读），叶视图就绪后再同步真实模式。 */
 	expectMarkdownOpen?: boolean;
 	/** 正文区域 zoom（0.3–1），作用于 `.view-content`。 */
@@ -105,6 +108,8 @@ export class StickyNotePopover {
 	private cachedLayerPopover: string | null = null;
 	private modeToggleLayoutRaf: number | null = null;
 	private disposed = false;
+	private edgeAutoStretchHeight = false;
+	private edgeStretchRestoreState: { top: number; height: number } | null = null;
 	private collapsed: boolean;
 	private yamlVisible: boolean;
 	private modeToggleWrap!: HTMLElement;
@@ -117,6 +122,7 @@ export class StickyNotePopover {
 		this.onBoundsChange = options.onBoundsChange;
 		this.collapsed = options.initialCollapsed;
 		this.yamlVisible = options.initialYamlVisible;
+		this.edgeAutoStretchHeight = options.edgeAutoStretchHeight;
 		this.markdownModeTogglePending = options.expectMarkdownOpen === true;
 
 		const mount = options.mountEl;
@@ -237,6 +243,9 @@ export class StickyNotePopover {
 			e.stopPropagation();
 			this.closeSettingsSheet();
 		});
+		this.plugin.registerDomEvent(window, 'resize', () => {
+			this.syncEdgeAutoStretchFromCurrentBounds();
+		});
 
 		this.headerEl.addEventListener('pointerdown', this.onTitlePointerDown);
 		for (const dir of RESIZE_DIRECTIONS) {
@@ -261,6 +270,7 @@ export class StickyNotePopover {
 		this.applyCollapsedClass();
 		this.applyYamlClass();
 		this.applyBottomBarAutoHideClass();
+		this.syncEdgeAutoStretchFromCurrentBounds();
 	}
 
 	setColor(c: StickyColorId): void {
@@ -294,6 +304,15 @@ export class StickyNotePopover {
 		this.bottomBarAutoHide = autoHide;
 		this.applyBottomBarAutoHideClass();
 		window.requestAnimationFrame(() => this.syncBottomBarHeightCss());
+	}
+
+	setEdgeAutoStretch(enabled: boolean): void {
+		this.edgeAutoStretchHeight = enabled;
+		if (!enabled) {
+			this.restoreFromEdgeStretchIfNeeded();
+			return;
+		}
+		this.syncEdgeAutoStretchFromCurrentBounds();
 	}
 
 	setHidden(hidden: boolean): void {
@@ -996,6 +1015,7 @@ export class StickyNotePopover {
 				/* noop */
 			}
 			if (endedDrag) {
+				this.syncEdgeAutoStretchFromCurrentBounds();
 				this.flushResizeReflow();
 				this.onBoundsChange(this.getBounds());
 			}
@@ -1012,11 +1032,46 @@ export class StickyNotePopover {
 				/* noop */
 			}
 			if (endedResize) {
+				this.syncEdgeAutoStretchFromCurrentBounds();
 				this.flushResizeReflow();
 				this.onBoundsChange(this.getBounds());
 			}
 		}
 	};
+
+	private isNearHorizontalEdge(bounds: FloatingBounds): boolean {
+		const nearLeft = bounds.left <= EDGE_SNAP_THRESHOLD_PX;
+		const right = bounds.left + bounds.width;
+		const nearRight = right >= window.innerWidth - EDGE_SNAP_THRESHOLD_PX;
+		return nearLeft || nearRight;
+	}
+
+	private restoreFromEdgeStretchIfNeeded(): void {
+		const restore = this.edgeStretchRestoreState;
+		if (!restore) return;
+		const b = this.getBounds();
+		const top = Math.min(Math.max(0, restore.top), Math.max(0, window.innerHeight - restore.height));
+		this.edgeStretchRestoreState = null;
+		this.applyBounds({ left: b.left, top, width: b.width, height: restore.height }, false);
+	}
+
+	private syncEdgeAutoStretchFromCurrentBounds(): void {
+		if (this.disposed || this.collapsed || this.isDragging || this.isResizing) return;
+		if (!this.edgeAutoStretchHeight) {
+			this.restoreFromEdgeStretchIfNeeded();
+			return;
+		}
+		const b = this.getBounds();
+		const nearEdge = this.isNearHorizontalEdge(b);
+		if (!nearEdge) {
+			this.restoreFromEdgeStretchIfNeeded();
+			return;
+		}
+		if (!this.edgeStretchRestoreState) {
+			this.edgeStretchRestoreState = { top: b.top, height: b.height };
+		}
+		this.applyBounds({ left: b.left, top: 0, width: b.width, height: window.innerHeight }, false);
+	}
 
 	private getResizedBounds(event: PointerEvent): FloatingBounds | null {
 		if (!this.resizeDirection || !this.resizeStartBounds) return null;

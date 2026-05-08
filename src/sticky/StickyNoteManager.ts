@@ -622,6 +622,7 @@ export class StickyNoteManager {
 			initialYamlVisible: extra.initialYamlVisible,
 			expectMarkdownOpen: extra.expectMarkdownOpen,
 			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
+			edgeAutoStretchHeight: this.plugin.settings.stickyEdgeAutoStretchHeight,
 			viewContentZoom: this.plugin.settings.stickyViewContentZoom,
 			onClose: () => void this.handleStickyCloseRequest(id),
 			onBoundsChange: () => this.persistOpenWindows(),
@@ -892,6 +893,13 @@ export class StickyNoteManager {
 		const z = this.plugin.settings.stickyViewContentZoom;
 		for (const p of this.popovers.values()) {
 			p.setViewContentZoom(z);
+		}
+	}
+
+	updateEdgeAutoStretchFromSettings(): void {
+		const enabled = this.plugin.settings.stickyEdgeAutoStretchHeight;
+		for (const p of this.popovers.values()) {
+			p.setEdgeAutoStretch(enabled);
 		}
 	}
 

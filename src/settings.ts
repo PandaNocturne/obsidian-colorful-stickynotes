@@ -26,6 +26,8 @@ export interface ColorfulStickyNotesSettings {
 	/** 便笺列表预览卡片正文的 `zoom`。 */
 	noteListViewContentZoom: number;
 	bottomBarAutoHide: boolean;
+	/** 左右贴边时自动拉伸窗口高度；移开贴边后恢复原高度。 */
+	stickyEdgeAutoStretchHeight: boolean;
 	/** 启动 Obsidian 后自动恢复上次便笺浮动窗口（与「打开便笺窗口（恢复上次会话）」一致）。 */
 	restoreStickySessionOnStartup: boolean;
 	/** 启动恢复便笺前的等待秒数（0–10），仅在开启「启动时打开上次便笺」时生效。 */
@@ -66,6 +68,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	stickyViewContentZoom: VIEW_CONTENT_ZOOM_DEFAULT,
 	noteListViewContentZoom: VIEW_CONTENT_ZOOM_DEFAULT,
 	bottomBarAutoHide: true,
+	stickyEdgeAutoStretchHeight: true,
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
 	noteListCardOverflowHidden: true,
@@ -234,6 +237,17 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				t.setValue(this.plugin.settings.confirmBlankStickyTrashOnClose).onChange(async v => {
 					this.plugin.settings.confirmBlankStickyTrashOnClose = v;
 					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('贴边自动拉伸')
+			.setDesc('便笺左右贴边时自动拉伸高度；移开贴边后恢复原高度。')
+			.addToggle(t =>
+				t.setValue(this.plugin.settings.stickyEdgeAutoStretchHeight).onChange(async v => {
+					this.plugin.settings.stickyEdgeAutoStretchHeight = v;
+					await this.plugin.saveSettings();
+					this.plugin.syncStickyEdgeAutoStretchToOpenViews();
 				})
 			);
 
