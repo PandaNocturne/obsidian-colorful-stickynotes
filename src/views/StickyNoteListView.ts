@@ -497,7 +497,8 @@ export class StickyNoteListView extends ItemView {
 		root.empty();
 		root.addClass('csn-list-view');
 
-		const searchWrap = root.createDiv({ cls: 'csn-list-search' });
+		const chrome = root.createDiv({ cls: 'csn-list-chrome' });
+		const searchWrap = chrome.createDiv({ cls: 'csn-list-search' });
 		const searchInner = searchWrap.createDiv({ cls: 'csn-list-search-inner' });
 		this.searchInnerEl = searchInner;
 		this.searchInput = searchInner.createEl('input', {
@@ -529,7 +530,7 @@ export class StickyNoteListView extends ItemView {
 			void this.renderList();
 		});
 
-		const toolbar = root.createDiv({ cls: 'csn-list-toolbar' });
+		const toolbar = chrome.createDiv({ cls: 'csn-list-toolbar' });
 		const toolbarMain = toolbar.createDiv({ cls: 'csn-list-toolbar-main' });
 
 		const expanded = toolbarMain.createDiv({ cls: 'csn-list-toolbar-expanded' });
