@@ -264,6 +264,8 @@ export class StickyNoteListView extends ItemView {
 	private listPageIndex = 0;
 	private debouncedListStructureRefresh: Debouncer<[], void> | null = null;
 	private debouncedListContentRefresh: Debouncer<[], void> | null = null;
+	/** 串行执行列表渲染，避免并发清空/填充 DOM 或误清 `listPrioritizeStickyPath` 导致置顶与预览错乱。 */
+	private listRenderChain: Promise<void> = Promise.resolve();
 	/** 开启后卡片头部显示归档复选框，便于勾选修改。 */
 	private listArchiveCheckboxEditMode = false;
 	private listBulkEditBtn: HTMLButtonElement | null = null;
@@ -1252,7 +1254,15 @@ export class StickyNoteListView extends ItemView {
 		}
 	}
 
-	private async renderList(): Promise<void> {
+	async renderList(): Promise<void> {
+		const run = this.listRenderChain
+			.catch(() => undefined)
+			.then(() => this.renderListImpl());
+		this.listRenderChain = run;
+		await run;
+	}
+
+	private async renderListImpl(): Promise<void> {
 		const container = this.listItemsEl;
 		if (!container || !this.paginationEl || !this.paginationMetaEl) return;
 

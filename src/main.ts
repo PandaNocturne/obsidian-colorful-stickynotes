@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, normalizePath } from 'obsidian';
+import { Notice, Plugin, TAbstractFile, TFile, normalizePath } from 'obsidian';
 import { t } from './lang/helpers';
 import {
 	clampViewContentZoom,
@@ -179,6 +179,24 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new ColorfulStickyNotesSettingTab(this.app, this));
+
+		this.registerEvent(
+			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
+				const oldN = normalizePath(oldPath);
+				const newN = normalizePath(file.path);
+				let changed = false;
+				const next = this.settings.noteListPinnedPaths.map(p => {
+					if (normalizePath(p) === oldN) {
+						changed = true;
+						return newN;
+					}
+					return p;
+				});
+				if (!changed) return;
+				this.settings.noteListPinnedPaths = normalizeNoteListPinnedPathsStorage(next);
+				void this.saveSettings();
+			})
+		);
 
 		if (this.settings.restoreStickySessionOnStartup) {
 			this.app.workspace.onLayoutReady(() => {
