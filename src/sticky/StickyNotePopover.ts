@@ -342,6 +342,30 @@ export class StickyNotePopover {
 		return this.rootEl.hasClass('csn-sticky--hidden');
 	}
 
+	isStretched(): boolean {
+		return this.edgeStretchRestoreState !== null;
+	}
+
+	setStretched(stretched: boolean): void {
+		if (stretched) {
+			if (this.collapsed || this.disposed) return;
+			const b = this.getBounds();
+			if (!this.edgeStretchRestoreState) {
+				this.edgeStretchRestoreState = { top: b.top, height: b.height };
+			}
+			this.manualHeaderStretchActive = true;
+			const snappedLeft = this.resolveSnappedLeft(b);
+			this.applyBounds(
+				{ left: snappedLeft, top: 0, width: b.width, height: window.innerHeight },
+				false,
+				{ clampToViewportMargin: false }
+			);
+			return;
+		}
+		this.manualHeaderStretchActive = false;
+		this.restoreFromEdgeStretchIfNeeded();
+	}
+
 	// 其它“隐藏相关”按钮已迁移到便笺头部右键菜单中。
 
 	private openHeaderContextMenu(evt: MouseEvent): void {

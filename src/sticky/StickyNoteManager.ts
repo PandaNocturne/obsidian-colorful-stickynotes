@@ -18,6 +18,8 @@ type PreparedExistingStickyOpen = {
 	file: TFile;
 	bounds: FloatingBounds;
 	savedColor: StickyColorId | undefined;
+	hidden: boolean;
+	stretched: boolean;
 };
 
 const FM_COLOR_KEY = 'colorful-sticky-bg';
@@ -342,6 +344,8 @@ export class StickyNoteManager {
 				stickyId: this.readStickyIdFromCache(file) ?? id,
 				bounds,
 				collapsed: pop.getCollapsed(),
+				hidden: pop.isHidden(),
+				stretched: pop.isStretched(),
 				color: pop.getColor(),
 				yamlVisible: pop.getYamlVisible()
 			};
@@ -829,16 +833,25 @@ export class StickyNoteManager {
 		});
 		this.popovers.set(id, pop);
 		await this.ensureStickyFrontmatterDefaults(file, { preferredId: serial.stickyId ?? id }).catch(() => undefined);
-		return { pop, file, bounds: b, savedColor };
+		return {
+			pop,
+			file,
+			bounds: b,
+			savedColor,
+			hidden: !!serial.hidden,
+			stretched: !!serial.stretched
+		};
 	}
 
 	private async finalizeExistingStickyOpen(
 		prepared: PreparedExistingStickyOpen,
 		opts: { workspaceActive: boolean }
 	): Promise<void> {
-		const { pop, file, bounds: b, savedColor } = prepared;
+		const { pop, file, bounds: b, savedColor, hidden, stretched } = prepared;
 		await pop.openFile(file, { workspaceActive: opts.workspaceActive });
 		pop.setBounds(b);
+		pop.setStretched(stretched);
+		pop.setHidden(hidden);
 		if (savedColor !== undefined) {
 			/* 工作区里记录了便笺颜色，但笔记 frontmatter 无 `colorful-sticky-bg` 时写回，避免仅会话态有颜色。 */
 			const yamlColor =

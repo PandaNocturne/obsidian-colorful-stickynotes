@@ -21,6 +21,10 @@ export interface SerializedStickyWindow {
 	stickyId?: string;
 	bounds?: FloatingBounds;
 	collapsed?: boolean;
+	/** 窗口是否处于隐藏状态。 */
+	hidden?: boolean;
+	/** 窗口是否处于拉伸状态（全高）。 */
+	stretched?: boolean;
 	color?: StickyColorId;
 	yamlVisible?: boolean;
 	/** Markdown 便笺的阅读 / 编辑视图（`preview` | `source`）。 */
