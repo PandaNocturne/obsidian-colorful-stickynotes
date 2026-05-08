@@ -30,6 +30,12 @@ export interface ColorfulStickyNotesSettings {
 	stickyEdgeAutoStretchHeight: boolean;
 	/** 双击便笺头部切换拉伸/恢复。 */
 	stickyHeaderDoubleClickStretch: boolean;
+	/** 辅助对齐吸附：拖动时与相邻便笺对齐吸附。 */
+	stickyAssistAlignSnap: boolean;
+	/** 吸附阈值（px）。 */
+	stickyAssistAlignSnapThresholdPx: number;
+	/** 吸附后自动绑定；绑定窗口可连带移动。 */
+	stickyAssistAlignBind: boolean;
 	/** 启动 Obsidian 后自动恢复上次便笺浮动窗口（与「打开便笺窗口（恢复上次会话）」一致）。 */
 	restoreStickySessionOnStartup: boolean;
 	/** 启动恢复便笺前的等待秒数（0–10），仅在开启「启动时打开上次便笺」时生效。 */
@@ -72,6 +78,9 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	bottomBarAutoHide: true,
 	stickyEdgeAutoStretchHeight: true,
 	stickyHeaderDoubleClickStretch: true,
+	stickyAssistAlignSnap: true,
+	stickyAssistAlignSnapThresholdPx: 10,
+	stickyAssistAlignBind: true,
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
 	noteListCardOverflowHidden: true,
@@ -262,6 +271,40 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					this.plugin.settings.stickyHeaderDoubleClickStretch = v;
 					await this.plugin.saveSettings();
 					this.plugin.syncStickyHeaderDoubleClickStretchToOpenViews();
+				})
+			);
+
+		containerEl.createEl('h3', { text: '辅助对齐' });
+		new Setting(containerEl)
+			.setName('相邻便笺对齐吸附')
+			.setDesc('拖动便笺时，可对齐吸附到相邻便笺的左右/上下边缘。按住 Ctrl 拖动可临时忽略吸附并解绑。')
+			.addToggle(t =>
+				t.setValue(this.plugin.settings.stickyAssistAlignSnap).onChange(async v => {
+					this.plugin.settings.stickyAssistAlignSnap = v;
+					await this.plugin.saveSettings();
+				})
+			);
+		new Setting(containerEl)
+			.setName('吸附阈值')
+			.setDesc('距离小于该像素值时触发吸附。')
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.stickyAssistAlignSnapThresholdPx))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.stickyAssistAlignSnapThresholdPx = Number.isFinite(n)
+							? Math.max(1, Math.min(50, n))
+							: DEFAULT_SETTINGS.stickyAssistAlignSnapThresholdPx;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName('吸附后绑定窗口')
+			.setDesc('吸附对齐后建立绑定；移动其中一个窗口会连带移动绑定的窗口。按住 Ctrl 拖动可移开并解绑。')
+			.addToggle(t =>
+				t.setValue(this.plugin.settings.stickyAssistAlignBind).onChange(async v => {
+					this.plugin.settings.stickyAssistAlignBind = v;
+					await this.plugin.saveSettings();
 				})
 			);
 

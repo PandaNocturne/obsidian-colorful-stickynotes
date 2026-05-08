@@ -64,6 +64,12 @@ export interface StickyNotePopoverOptions {
 	onShowAllStickies: () => void;
 	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
 	onActivate: () => void;
+	onDragStart?: (e: PointerEvent) => void;
+	onDragMove?: (next: FloatingBounds, e: PointerEvent) => FloatingBounds;
+	onDragEnd?: (e: PointerEvent) => void;
+	onResizeStart?: (e: PointerEvent, dir: ResizeDirection) => void;
+	onResizeMove?: (next: FloatingBounds, e: PointerEvent, dir: ResizeDirection) => FloatingBounds;
+	onResizeEnd?: (e: PointerEvent) => void;
 }
 
 export class StickyNotePopover {
@@ -1040,6 +1046,7 @@ export class StickyNotePopover {
 			width: Math.max(MIN_WIDTH, Number.isFinite(pw) ? pw : this.expandedW),
 			height: Math.max(MIN_HEIGHT, Number.isFinite(ph) ? ph : this.expandedH)
 		};
+		this.options.onDragStart?.(e);
 		this.headerEl.setPointerCapture(e.pointerId);
 		e.preventDefault();
 		e.stopPropagation();
@@ -1057,6 +1064,7 @@ export class StickyNotePopover {
 		this.resizeStartX = e.clientX;
 		this.resizeStartY = e.clientY;
 		this.resizeStartBounds = this.getBounds();
+		this.options.onResizeStart?.(e, dir);
 		handle.setPointerCapture(e.pointerId);
 		e.preventDefault();
 		e.stopPropagation();
@@ -1078,9 +1086,16 @@ export class StickyNotePopover {
 				Math.max(0, e.clientY - this.dragOffsetY),
 				window.innerHeight - vis.height
 			);
-			this.applyBounds({ left, top, width: persist.width, height: persist.height }, false);
+			let next: FloatingBounds = { left, top, width: persist.width, height: persist.height };
+			if (this.options.onDragMove) {
+				next = this.options.onDragMove(next, e);
+			}
+			this.applyBounds(next, false);
 		} else if (this.isResizing && e.pointerId === this.resizePointerId && this.resizeDirection && this.resizeStartBounds) {
-			const b = this.getResizedBounds(e);
+			let b = this.getResizedBounds(e);
+			if (b && this.options.onResizeMove) {
+				b = this.options.onResizeMove(b, e, this.resizeDirection);
+			}
 			if (b) this.applyBounds(b, false);
 		}
 	};
@@ -1098,6 +1113,7 @@ export class StickyNotePopover {
 				/* noop */
 			}
 			if (endedDrag) {
+				this.options.onDragEnd?.(e);
 				this.syncEdgeAutoStretchFromCurrentBounds();
 				this.flushResizeReflow();
 				this.onBoundsChange(this.getBounds());
@@ -1115,6 +1131,7 @@ export class StickyNotePopover {
 				/* noop */
 			}
 			if (endedResize) {
+				this.options.onResizeEnd?.(e);
 				this.syncEdgeAutoStretchFromCurrentBounds();
 				this.flushResizeReflow();
 				this.onBoundsChange(this.getBounds());

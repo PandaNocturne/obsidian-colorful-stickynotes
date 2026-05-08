@@ -222,6 +222,18 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.stickyHeaderDoubleClickStretch !== 'boolean') {
 			this.settings.stickyHeaderDoubleClickStretch = DEFAULT_SETTINGS.stickyHeaderDoubleClickStretch;
 		}
+		if (typeof this.settings.stickyAssistAlignSnap !== 'boolean') {
+			this.settings.stickyAssistAlignSnap = DEFAULT_SETTINGS.stickyAssistAlignSnap;
+		}
+		const snapPx = this.settings.stickyAssistAlignSnapThresholdPx;
+		if (typeof snapPx !== 'number' || !Number.isFinite(snapPx)) {
+			this.settings.stickyAssistAlignSnapThresholdPx = DEFAULT_SETTINGS.stickyAssistAlignSnapThresholdPx;
+		} else {
+			this.settings.stickyAssistAlignSnapThresholdPx = Math.max(1, Math.min(50, Math.round(snapPx)));
+		}
+		if (typeof this.settings.stickyAssistAlignBind !== 'boolean') {
+			this.settings.stickyAssistAlignBind = DEFAULT_SETTINGS.stickyAssistAlignBind;
+		}
 
 		this.settings.noteListPinnedPaths = normalizeNoteListPinnedPathsStorage(
 			'noteListPinnedPaths' in raw ? raw.noteListPinnedPaths : this.settings.noteListPinnedPaths

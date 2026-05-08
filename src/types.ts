@@ -25,6 +25,8 @@ export interface SerializedStickyWindow {
 	hidden?: boolean;
 	/** 窗口是否处于拉伸状态（全高）。 */
 	stretched?: boolean;
+	/** 吸附绑定的其它窗口 id（无向关系，序列化为邻接表）。 */
+	bindings?: string[];
 	color?: StickyColorId;
 	yamlVisible?: boolean;
 	/** Markdown 便笺的阅读 / 编辑视图（`preview` | `source`）。 */

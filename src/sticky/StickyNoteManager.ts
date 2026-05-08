@@ -25,6 +25,9 @@ type PreparedExistingStickyOpen = {
 const FM_COLOR_KEY = 'colorful-sticky-bg';
 const FM_ID_KEY = 'colorful-sticky-id';
 const FM_ARCHIVED_KEY = 'colorful-sticky-archived';
+const STICKY_EDGE_GAP_PX = 5;
+const STICKY_TOP_ALIGN_SNAP_PX = 10;
+const STICKY_LEFT_ALIGN_SNAP_PX = 10;
 
 /** 内置命令面板命令；部分 obsidian 包版本未在 `App` 上声明 `commands`。 */
 function executeCommandById(app: App, commandId: string): boolean {
@@ -36,6 +39,24 @@ function executeCommandById(app: App, commandId: string): boolean {
 
 export class StickyNoteManager {
 	private readonly popovers = new Map<string, StickyNotePopover>();
+	/** 绑定图：无向边（吸附后建立），用于连带移动。 */
+	private readonly bindings = new Map<string, Set<string>>();
+	/** 恢复工作区时暂存的序列化绑定（等目标窗口创建后再连线）。 */
+	private readonly pendingBindings = new Map<string, string[]>();
+	private dragSession:
+		| {
+				id: string;
+				groupIds: string[];
+				lastPrimary: FloatingBounds;
+				ctrlDetach: boolean;
+		  }
+		| null = null;
+	private resizeSession:
+		| {
+				id: string;
+				groupIds: string[];
+		  }
+		| null = null;
 	private readonly mount = document.body;
 	/** 便笺间 z-index 微调，单调递增即可。 */
 	private stickyZStackSeq = 0;
@@ -346,6 +367,7 @@ export class StickyNoteManager {
 				collapsed: pop.getCollapsed(),
 				hidden: pop.isHidden(),
 				stretched: pop.isStretched(),
+				bindings: this.getBindingsForId(id),
 				color: pop.getColor(),
 				yamlVisible: pop.getYamlVisible()
 			};
@@ -643,7 +665,13 @@ export class StickyNoteManager {
 			onShowOthersSticky: () => void this.showOthersSticky(),
 			onHideAllStickies: () => void this.hideAllStickies(),
 			onShowAllStickies: () => void this.showAllStickies(),
-			onActivate: () => this.bringStickyToFrontById(id)
+			onActivate: () => this.bringStickyToFrontById(id),
+			onDragStart: e => this.handleDragStart(id, e),
+			onDragMove: (next, e) => this.handleDragMove(id, next, e),
+			onDragEnd: e => this.handleDragEnd(id, e),
+			onResizeStart: (e, dir) => this.handleResizeStart(id, e, dir),
+			onResizeMove: (next, e, dir) => this.handleResizeMove(id, next, e, dir),
+			onResizeEnd: e => this.handleResizeEnd(id, e)
 		});
 	}
 
@@ -832,6 +860,13 @@ export class StickyNoteManager {
 			defaultMarkdownMode: restoredMdMode
 		});
 		this.popovers.set(id, pop);
+		if (Array.isArray(serial.bindings) && serial.bindings.length > 0) {
+			this.pendingBindings.set(
+				id,
+				serial.bindings.filter(x => typeof x === 'string' && x.trim().length > 0)
+			);
+		}
+		this.applyPendingBindingsForId(id);
 		await this.ensureStickyFrontmatterDefaults(file, { preferredId: serial.stickyId ?? id }).catch(() => undefined);
 		return {
 			pop,
@@ -921,6 +956,423 @@ export class StickyNoteManager {
 		const enabled = this.plugin.settings.stickyHeaderDoubleClickStretch;
 		for (const p of this.popovers.values()) {
 			p.setHeaderDoubleClickStretch(enabled);
+		}
+	}
+
+	private getBindingsForId(id: string): string[] {
+		const set = this.bindings.get(id);
+		if (!set || set.size === 0) return [];
+		return [...set];
+	}
+
+	private ensureBindingSet(id: string): Set<string> {
+		let s = this.bindings.get(id);
+		if (!s) {
+			s = new Set<string>();
+			this.bindings.set(id, s);
+		}
+		return s;
+	}
+
+	private bindPair(a: string, b: string): void {
+		if (a === b) return;
+		if (!this.popovers.has(a) || !this.popovers.has(b)) return;
+		this.ensureBindingSet(a).add(b);
+		this.ensureBindingSet(b).add(a);
+	}
+
+	private inferBindingAxis(a: string, b: string): 'x' | 'y' {
+		const pa = this.popovers.get(a);
+		const pb = this.popovers.get(b);
+		if (!pa || !pb) return 'x';
+		const ab = pa.getBounds();
+		const bb = pb.getBounds();
+		const dx = Math.abs((ab.left + ab.width / 2) - (bb.left + bb.width / 2));
+		const dy = Math.abs((ab.top + ab.height / 2) - (bb.top + bb.height / 2));
+		return dx >= dy ? 'x' : 'y';
+	}
+
+	private isAxisBinding(a: string, b: string, axis: 'x' | 'y'): boolean {
+		return this.inferBindingAxis(a, b) === axis;
+	}
+
+	/**
+	 * 单轴限额（发起侧）：仅限制发起吸附的一侧在同轴只保留一个绑定，
+	 * 目标侧保留原有邻接，确保可形成相邻链式联动（A->B->C）。
+	 */
+	private bindPairWithAxis(a: string, b: string, axis: 'x' | 'y'): void {
+		if (a === b) return;
+		if (!this.popovers.has(a) || !this.popovers.has(b)) return;
+		const set = this.bindings.get(a);
+		if (set) {
+			for (const other of [...set]) {
+				if (!this.isAxisBinding(a, other, axis)) continue;
+				set.delete(other);
+				this.bindings.get(other)?.delete(a);
+				if (this.bindings.get(other)?.size === 0) this.bindings.delete(other);
+			}
+			if (set.size === 0) this.bindings.delete(a);
+		}
+		this.bindPair(a, b);
+	}
+
+	private unbindAll(id: string): void {
+		const s = this.bindings.get(id);
+		if (!s) return;
+		for (const other of s) {
+			this.bindings.get(other)?.delete(id);
+			if (this.bindings.get(other)?.size === 0) this.bindings.delete(other);
+		}
+		this.bindings.delete(id);
+	}
+
+	private applyPendingBindingsForId(id: string): void {
+		const wants = this.pendingBindings.get(id);
+		if (!wants || wants.length === 0) return;
+		for (const other of wants) {
+			if (!this.popovers.has(other)) continue;
+			const axis = this.inferBindingAxis(id, other);
+			this.bindPairWithAxis(id, other, axis);
+		}
+	}
+
+	private resolveBindingGroupIds(rootId: string): string[] {
+		const out: string[] = [];
+		const seen = new Set<string>();
+		const q: string[] = [rootId];
+		seen.add(rootId);
+		while (q.length) {
+			const cur = q.shift()!;
+			out.push(cur);
+			const nb = this.bindings.get(cur);
+			if (!nb) continue;
+			for (const x of nb) {
+				if (seen.has(x)) continue;
+				if (!this.popovers.has(x)) continue;
+				seen.add(x);
+				q.push(x);
+			}
+		}
+		return out;
+	}
+
+	private handleDragStart(id: string, e: PointerEvent): void {
+		if (!this.popovers.has(id)) return;
+		const ctrl = !!e.ctrlKey;
+		if (ctrl) this.unbindAll(id);
+		const groupIds = ctrl ? [id] : this.resolveBindingGroupIds(id);
+		const primary = this.popovers.get(id)?.getBounds();
+		if (!primary) return;
+		this.dragSession = {
+			id,
+			groupIds,
+			lastPrimary: primary,
+			ctrlDetach: ctrl
+		};
+	}
+
+	private handleDragMove(id: string, next: FloatingBounds, e: PointerEvent): FloatingBounds {
+		const session = this.dragSession;
+		if (!session || session.id !== id) return next;
+		const ctrl = !!e.ctrlKey;
+		if (ctrl) {
+			if (!session.ctrlDetach) {
+				session.ctrlDetach = true;
+				this.unbindAll(id);
+				session.groupIds = [id];
+			}
+			session.lastPrimary = next;
+			return next;
+		}
+
+		const snapEnabled = this.plugin.settings.stickyAssistAlignSnap;
+		const bindEnabled = this.plugin.settings.stickyAssistAlignBind;
+		const threshold = Math.max(
+			1,
+			Math.min(50, Math.round(this.plugin.settings.stickyAssistAlignSnapThresholdPx))
+		);
+
+		let adjusted = next;
+		let snappedToId: string | null = null;
+		let snappedAxis: 'x' | 'y' | null = null;
+		if (snapEnabled) {
+			const res = this.computeSnapForBounds(id, next, threshold, session.groupIds);
+			adjusted = res.bounds;
+			snappedToId = res.snappedToId;
+			snappedAxis = res.snappedAxis;
+		}
+
+		if (bindEnabled && snappedToId) {
+			this.bindPairWithAxis(id, snappedToId, snappedAxis ?? 'x');
+			/* 吸附过程中若产生新绑定，立刻扩展为整链，下一步位移按整组联动。 */
+			session.groupIds = this.resolveBindingGroupIds(id);
+			const anchor = this.popovers.get(snappedToId);
+			if (anchor) {
+				const anchorB = anchor.getBounds();
+				if (snappedAxis === 'y') {
+					/* 顶部/底部触发：上下对齐（纵向排），左边对齐并同宽。 */
+					const aboveTop = anchorB.top - STICKY_EDGE_GAP_PX - adjusted.height;
+					const belowTop = anchorB.top + anchorB.height + STICKY_EDGE_GAP_PX;
+					const useAbove = Math.abs(adjusted.top - aboveTop) <= Math.abs(adjusted.top - belowTop);
+					adjusted = {
+						...adjusted,
+						top: useAbove ? aboveTop : belowTop,
+						left: anchorB.left,
+						width: anchorB.width
+					};
+				} else {
+					/* 左右触发：左右对齐（横向排），顶部对齐并同高。 */
+					const leftCandidate = anchorB.left - STICKY_EDGE_GAP_PX - adjusted.width;
+					const rightCandidate = anchorB.left + anchorB.width + STICKY_EDGE_GAP_PX;
+					const useLeft =
+						Math.abs(adjusted.left - leftCandidate) <= Math.abs(adjusted.left - rightCandidate);
+					adjusted = {
+						...adjusted,
+						left: useLeft ? leftCandidate : rightCandidate,
+						top: anchorB.top
+					};
+				}
+			}
+		}
+
+		const desiredDx = adjusted.left - session.lastPrimary.left;
+		const desiredDy = adjusted.top - session.lastPrimary.top;
+		let dx = desiredDx;
+		let dy = desiredDy;
+
+		/* 吸附后作为整体移动：边界按“整组外接框”夹紧，避免单窗撞边挤压队形。 */
+		if (session.groupIds.length > 1 && (dx !== 0 || dy !== 0)) {
+			let minLeft = Number.POSITIVE_INFINITY;
+			let minTop = Number.POSITIVE_INFINITY;
+			let maxRight = Number.NEGATIVE_INFINITY;
+			let maxBottom = Number.NEGATIVE_INFINITY;
+			for (const gid of session.groupIds) {
+				const pop = this.popovers.get(gid);
+				if (!pop) continue;
+				const b = gid === id ? session.lastPrimary : pop.getBounds();
+				minLeft = Math.min(minLeft, b.left);
+				minTop = Math.min(minTop, b.top);
+				maxRight = Math.max(maxRight, b.left + b.width);
+				maxBottom = Math.max(maxBottom, b.top + b.height);
+			}
+			const minDx = -minLeft;
+			const maxDx = window.innerWidth - maxRight;
+			const minDy = -minTop;
+			const maxDy = window.innerHeight - maxBottom;
+			dx = Math.min(maxDx, Math.max(minDx, dx));
+			dy = Math.min(maxDy, Math.max(minDy, dy));
+		}
+
+		const finalPrimary: FloatingBounds = {
+			...adjusted,
+			left: session.lastPrimary.left + dx,
+			top: session.lastPrimary.top + dy
+		};
+		session.lastPrimary = finalPrimary;
+
+		if (dx !== 0 || dy !== 0) {
+			for (const gid of session.groupIds) {
+				if (gid === id) continue;
+				const pop = this.popovers.get(gid);
+				if (!pop) continue;
+				const b = pop.getBounds();
+				pop.setBounds({ ...b, left: b.left + dx, top: b.top + dy });
+			}
+		}
+
+		return finalPrimary;
+	}
+
+	private handleDragEnd(id: string, _e: PointerEvent): void {
+		if (this.dragSession?.id === id) {
+			this.repairBindingAlignmentNear(id);
+			this.dragSession = null;
+			this.persistOpenWindows();
+		}
+	}
+
+	private handleResizeStart(id: string, _e: PointerEvent, _dir: unknown): void {
+		const groupIds = this.resolveBindingGroupIds(id);
+		this.resizeSession = { id, groupIds };
+	}
+
+	private handleResizeMove(id: string, next: FloatingBounds, _e: PointerEvent, _dir: unknown): FloatingBounds {
+		const session = this.resizeSession;
+		if (!session || session.id !== id) return next;
+		if (session.groupIds.length <= 1) return next;
+		for (const gid of session.groupIds) {
+			if (gid === id) continue;
+			const pop = this.popovers.get(gid);
+			if (!pop) continue;
+			const b = pop.getBounds();
+			const axis = this.isAxisBinding(id, gid, 'y') ? 'y' : 'x';
+			if (axis === 'y') {
+				/* 上下绑定：左对齐 + 同宽（宽度变化联动）。 */
+				pop.setBounds({ ...b, left: next.left, width: next.width });
+			} else {
+				/* 左右绑定：顶对齐 + 同高（高度变化联动）。 */
+				pop.setBounds({ ...b, top: next.top, height: next.height });
+			}
+		}
+		return next;
+	}
+
+	private handleResizeEnd(id: string, _e: PointerEvent): void {
+		if (this.resizeSession?.id === id) {
+			this.repairBindingAlignmentNear(id);
+			this.resizeSession = null;
+			this.persistOpenWindows();
+		}
+	}
+
+	private computeSnapForBounds(
+		movingId: string,
+		b: FloatingBounds,
+		threshold: number,
+		ignoreIds: readonly string[]
+	): { bounds: FloatingBounds; snappedToId: string | null; snappedAxis: 'x' | 'y' | null } {
+		const ignore = new Set(ignoreIds);
+		ignore.add(movingId);
+		const left = b.left;
+		const top = b.top;
+		const right = b.left + b.width;
+		const bottom = b.top + b.height;
+
+		let bestDx = 0;
+		let bestDy = 0;
+		let bestDxAbs = threshold + 1;
+		let bestDyAbs = threshold + 1;
+		let snappedToId: string | null = null;
+		let snappedAxis: 'x' | 'y' | null = null;
+
+		const overlapLen = (a0: number, a1: number, b0: number, b1: number): number =>
+			Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+		const hasEnoughOverlap = (overlapPx: number, aLen: number, bLen: number): boolean => {
+			const minLen = Math.max(1, Math.min(aLen, bLen));
+			/* “同一行/列”判定：要有明显重叠，避免仅擦边就吸附。 */
+			const OVERLAP_MIN_PX = 24;
+			const OVERLAP_MIN_RATIO = 0.3;
+			return overlapPx >= Math.min(OVERLAP_MIN_PX, minLen) || overlapPx / minLen >= OVERLAP_MIN_RATIO;
+		};
+
+		for (const [id, pop] of this.popovers) {
+			if (ignore.has(id)) continue;
+			const ob = pop.getBounds();
+			const oLeft = ob.left;
+			const oTop = ob.top;
+			const oRight = ob.left + ob.width;
+			const oBottom = ob.top + ob.height;
+
+			const yOverlap = overlapLen(top, bottom, oTop, oBottom);
+			const xOverlap = overlapLen(left, right, oLeft, oRight);
+			const sameRow = hasEnoughOverlap(yOverlap, b.height, ob.height);
+			const sameCol = hasEnoughOverlap(xOverlap, b.width, ob.width);
+			const topNear = Math.abs(top - oTop) <= STICKY_TOP_ALIGN_SNAP_PX;
+			const leftNear = Math.abs(left - oLeft) <= STICKY_LEFT_ALIGN_SNAP_PX;
+
+			/* 规则：当两窗接近共左/共右且高度接近时，优先吸附“顶部对齐”。 */
+			const heightClose = Math.abs(b.height - ob.height) <= Math.max(8, Math.round(threshold * 1.2));
+			if (heightClose) {
+				const leftEdgeClose = Math.abs(left - oLeft) <= threshold;
+				const rightEdgeClose = Math.abs(right - oRight) <= threshold;
+				if (leftEdgeClose || rightEdgeClose) {
+					const topDelta = oTop - top;
+					const topAbs = Math.abs(topDelta);
+					if (topAbs <= STICKY_TOP_ALIGN_SNAP_PX && topAbs < bestDyAbs) {
+						bestDyAbs = topAbs;
+						bestDy = topDelta;
+						snappedToId = id;
+						snappedAxis = 'x';
+					}
+				}
+			}
+
+			const candidatesX = [
+				{ dx: oLeft - left, target: id },
+				{ dx: oRight - left, target: id },
+				{ dx: oLeft - STICKY_EDGE_GAP_PX - right, target: id },
+				{ dx: oRight + STICKY_EDGE_GAP_PX - left, target: id }
+			];
+			if (sameRow && topNear) {
+				for (const c of candidatesX) {
+					const a = Math.abs(c.dx);
+					if (a <= threshold && a < bestDxAbs) {
+						bestDxAbs = a;
+						bestDx = c.dx;
+						snappedToId = c.target;
+						snappedAxis = 'x';
+					}
+				}
+			}
+
+			const candidatesY = [
+				{ dy: oTop - top, target: id },
+				{ dy: oBottom - top, target: id },
+				{ dy: oTop - STICKY_EDGE_GAP_PX - bottom, target: id },
+				{ dy: oBottom + STICKY_EDGE_GAP_PX - top, target: id }
+			];
+			/* 上下吸附限制：除了上下距离接近外，还要求左边接近。 */
+			if (sameCol && leftNear) {
+				for (const c of candidatesY) {
+					const a = Math.abs(c.dy);
+					if (a <= threshold && a < bestDyAbs) {
+						bestDyAbs = a;
+						bestDy = c.dy;
+						snappedToId = c.target;
+						snappedAxis = 'y';
+					}
+				}
+			}
+		}
+
+		return {
+			bounds: { ...b, left: b.left + bestDx, top: b.top + bestDy },
+			snappedToId,
+			snappedAxis
+		};
+	}
+
+	private repairBindingAlignmentNear(rootId: string): void {
+		const root = this.popovers.get(rootId);
+		if (!root) return;
+		const group = this.resolveBindingGroupIds(rootId);
+		if (group.length <= 1) return;
+		/* 以被拖动窗口为主坐标：从 root 出发逐层修复，避免互相拉扯。 */
+		const visited = new Set<string>();
+		const q: string[] = [rootId];
+		visited.add(rootId);
+		while (q.length > 0) {
+			const anchorId = q.shift()!;
+			const anchor = this.popovers.get(anchorId);
+			if (!anchor) continue;
+			const ab = anchor.getBounds();
+			for (const nbId of this.getBindingsForId(anchorId)) {
+				if (visited.has(nbId)) continue;
+				const nb = this.popovers.get(nbId);
+				if (!nb) continue;
+				const bb = nb.getBounds();
+				/* 使用真实绑定轴，而不是通过当前位置猜测，避免改宽/改高后误判导致位置漂移。 */
+				const verticalStack = this.isAxisBinding(anchorId, nbId, 'y');
+				let next = bb;
+				if (verticalStack) {
+					/* 顶/底触发簇：左对齐 + 同宽 + 5px 间距。 */
+					const placeAbove = bb.top + bb.height / 2 <= ab.top + ab.height / 2;
+					const top = placeAbove
+						? ab.top - STICKY_EDGE_GAP_PX - bb.height
+						: ab.top + ab.height + STICKY_EDGE_GAP_PX;
+					next = { ...bb, top, left: ab.left, width: ab.width };
+				} else {
+					/* 左/右触发簇：顶对齐 + 同高 + 5px 间距。 */
+					const placeLeft = bb.left + bb.width / 2 <= ab.left + ab.width / 2;
+					const left = placeLeft
+						? ab.left - STICKY_EDGE_GAP_PX - bb.width
+						: ab.left + ab.width + STICKY_EDGE_GAP_PX;
+					next = { ...bb, left, top: ab.top, height: ab.height };
+				}
+				nb.setBounds(next);
+				visited.add(nbId);
+				q.push(nbId);
+			}
 		}
 	}
 
