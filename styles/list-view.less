@@ -1,4 +1,4 @@
-@import "./list-view-tokens.less";
+﻿@import "./list-view-tokens.less";
 
 /* 渚跨鍒楄〃 */
 .workspace-leaf-content .view-content.csn-list-view {
@@ -105,7 +105,7 @@
 	opacity: 0;
 }
 
-/* 便笺列表工具栏：左（浮动 / 归档下拉 + 色块）右（新建 / 编辑 / 筛选 / 刷新） */
+/* 便笺列表工具栏：左（浮动 / 归档 / 调色板展开色条）右（新建 / 编辑 / 筛选 / 刷新） */
 .csn-list-toolbar {
 	display: flex;
 	align-items: flex-start;
@@ -118,7 +118,7 @@
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 8px 12px;
+	gap: 4px;
 	flex: 1 1 auto;
 	min-width: 0;
 }
@@ -127,7 +127,7 @@
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 6px;
+	gap: 4px;
 	flex-shrink: 0;
 	margin-left: auto;
 }
@@ -140,20 +140,60 @@
 
 /* 工具栏图标按钮：与 Obsidian clickable-icon 一致，新建/编辑/刷新/下拉共用 */
 .csn-list-toolbar-icon-btn {
-	flex-shrink: 0;
+	flex: 0 0 auto;
+	border: 1px solid var(--background-modifier-border);
 }
 
-.csn-list-toolbar-color-row {
+.csn-list-toolbar-color-wrap {
 	display: inline-flex;
 	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
+	flex-wrap: nowrap;
+	gap: 4px;
+	max-width: 100%;
 }
 
-.csn-list-bulk-edit-btn.is-active {
-	background-color: var(--background-modifier-hover);
-	border-radius: var(--radius-s);
+/* 调色板：展开或已选颜色筛选时高亮为交互强调色 */
+.csn-list-toolbar-color-wrap.is-expanded .csn-list-color-palette-btn{
+	color: var(--interactive-accent);
 }
+
+.csn-list-color-filter-strip {
+	display: none;
+	align-items: center;
+	flex: 0 1 auto;
+	min-width: 0;
+	// padding: 1px 5px;
+	// border-radius: var(--radius-s);
+	// border: 1px solid var(--background-modifier-border);
+	// background-color: var(--background-primary);
+	// box-shadow: var(--shadow-s);
+}
+
+.csn-list-toolbar-color-wrap.is-expanded .csn-list-color-filter-strip {
+	display: flex;
+}
+
+.csn-list-color-filter-btns--compact {
+	gap: 2px;
+}
+
+/* 展开色条内色块：比原工具栏行更紧凑 */
+.csn-list-color-filter-strip .csn-list-color-filter-btn.csn-list-color-filter-swatch {
+	--csn-list-color-filter-swatch-size: 24px;
+	width: var(--csn-list-color-filter-swatch-size);
+	height: var(--csn-list-color-filter-swatch-size);
+	min-width:var(--csn-list-color-filter-swatch-size);
+	border-radius: 4px;
+}
+
+// .csn-list-color-filter-strip .csn-list-color-filter-btn.is-active {
+// 	box-shadow: inset 0 0 0 1.5px var(--text-accent);
+// }
+
+// .csn-list-bulk-edit-btn.is-active {
+// 	background-color: var(--background-modifier-hover);
+// 	border-radius: var(--radius-s);
+// }
 
 /* 工具栏颜色块（与卡片色条一致） */
 .csn-list-color-filter-btns {

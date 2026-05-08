@@ -243,6 +243,9 @@ export class StickyNoteListView extends ItemView {
 	private floatFilterDropdownBtn: HTMLButtonElement | null = null;
 	private archiveFilterDropdownBtn: HTMLButtonElement | null = null;
 	private sortDropdownBtn: HTMLButtonElement | null = null;
+	/** 颜色筛选：调色板按钮 + 右侧展开的色条 */
+	private colorFilterWrapEl: HTMLElement | null = null;
+	private colorFilterPaletteBtn: HTMLButtonElement | null = null;
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
 	private searchClearBtn: HTMLButtonElement | null = null;
@@ -264,6 +267,8 @@ export class StickyNoteListView extends ItemView {
 	/** 开启后卡片头部显示归档复选框，便于勾选修改。 */
 	private listArchiveCheckboxEditMode = false;
 	private listBulkEditBtn: HTMLButtonElement | null = null;
+	/** 颜色条 `aria-controls` / `id`，避免多开列表视图时 DOM id 冲突 */
+	private readonly colorFilterStripDomId = `csn-list-cf-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now())}`;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -707,8 +712,31 @@ export class StickyNoteListView extends ItemView {
 			this.openArchiveFilterMenu(evt);
 		});
 
-		const colorRow = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-color-row' });
-		const colorBtns = colorRow.createDiv({ cls: 'csn-list-color-filter-btns' });
+		this.colorFilterWrapEl = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-color-wrap' });
+		this.colorFilterPaletteBtn = this.colorFilterWrapEl.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-list-color-palette-btn',
+			attr: {
+				'aria-haspopup': 'true',
+				'aria-expanded': 'false',
+				'aria-controls': this.colorFilterStripDomId
+			}
+		});
+		setIcon(this.colorFilterPaletteBtn, 'palette');
+		this.registerDomEvent(this.colorFilterPaletteBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleColorFilterStrip();
+		});
+
+		const colorStrip = this.colorFilterWrapEl.createDiv({
+			cls: 'csn-list-color-filter-strip',
+			attr: { id: this.colorFilterStripDomId, role: 'group' }
+		});
+		colorStrip.setAttr('aria-label', t('LIST_COLOR_FILTER_POPOVER_GROUP_ARIA'));
+		const colorBtns = colorStrip.createDiv({
+			cls: 'csn-list-color-filter-btns csn-list-color-filter-btns--compact'
+		});
 		this.colorFilterBtnById.clear();
 
 		for (const c of SHEET_COLOR_ORDER) {
@@ -722,7 +750,8 @@ export class StickyNoteListView extends ItemView {
 				}
 			});
 			this.colorFilterBtnById.set(c.id, sw);
-			this.registerDomEvent(sw, 'click', () => {
+			this.registerDomEvent(sw, 'click', (e: MouseEvent) => {
+				e.stopPropagation();
 				void this.toggleListColorFilter(c.id);
 			});
 		}
@@ -831,6 +860,7 @@ export class StickyNoteListView extends ItemView {
 		});
 		this.registerVaultListRefresh();
 		this.syncToolbarDropdownHints();
+		this.syncColorFilterPaletteAria();
 		this.syncColorFilterToolbarActive();
 		this.syncListArchiveCheckboxEditUI();
 		this.syncSearchClearVisibility();
@@ -975,11 +1005,38 @@ export class StickyNoteListView extends ItemView {
 		menu.showAtMouseEvent(evt);
 	}
 
+	private syncColorFilterPaletteAria(): void {
+		if (!this.colorFilterPaletteBtn) return;
+		const n = this.plugin.settings.noteListColorFilters.length;
+		const title =
+			n === 0 ? t('LIST_COLOR_FILTER_SUMMARY_ALL') : t('LIST_COLOR_FILTER_SUMMARY_SOME', { n });
+		this.colorFilterPaletteBtn.setAttr('aria-label', title);
+		this.colorFilterWrapEl?.toggleClass('has-color-filter', n > 0);
+	}
+
+	/** 展开后常驻，仅再次点击调色板按钮或关闭视图时收起（不响应点击外部）。 */
+	private openColorFilterStrip(): void {
+		if (!this.colorFilterWrapEl || !this.colorFilterPaletteBtn) return;
+		this.colorFilterWrapEl.addClass('is-expanded');
+		this.colorFilterPaletteBtn.setAttr('aria-expanded', 'true');
+	}
+
+	private closeColorFilterStrip(): void {
+		this.colorFilterWrapEl?.removeClass('is-expanded');
+		this.colorFilterPaletteBtn?.setAttr('aria-expanded', 'false');
+	}
+
+	private toggleColorFilterStrip(): void {
+		if (this.colorFilterWrapEl?.hasClass('is-expanded')) this.closeColorFilterStrip();
+		else this.openColorFilterStrip();
+	}
+
 	private syncColorFilterToolbarActive(): void {
 		const sel = new Set(this.plugin.settings.noteListColorFilters);
 		for (const [id, btn] of this.colorFilterBtnById) {
 			btn.toggleClass('is-active', sel.has(id));
 		}
+		this.syncColorFilterPaletteAria();
 	}
 
 	/** 切换某色是否参与筛选；均未选中时显示全部便笺。 */
@@ -1382,10 +1439,13 @@ export class StickyNoteListView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closeColorFilterStrip();
 		this.toolbarEl = null;
 		this.floatFilterDropdownBtn = null;
 		this.archiveFilterDropdownBtn = null;
 		this.sortDropdownBtn = null;
+		this.colorFilterWrapEl = null;
+		this.colorFilterPaletteBtn = null;
 		this.listBulkEditBtn = null;
 		this.cancelListRefreshDebouncers();
 		this.debouncedListStructureRefresh = null;
