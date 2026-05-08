@@ -60,7 +60,6 @@ export interface StickyNotePopoverOptions {
 	onHideCurrentSticky: () => void;
 	onHideOthersSticky: () => void;
 	onShowOthersSticky: () => void;
-	onHideAllStickies: () => void;
 	onShowAllStickies: () => void;
 	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
 	onActivate: () => void;
@@ -441,16 +440,6 @@ export class StickyNotePopover {
 				.setIcon('eye')
 				.onClick(() => {
 					this.options.onShowOthersSticky();
-				});
-		});
-
-		menu.addSeparator();
-		menu.addItem(item => {
-			item
-				.setTitle('全部隐藏便笺')
-				.setIcon('eye-off')
-				.onClick(() => {
-					this.options.onHideAllStickies();
 				});
 		});
 

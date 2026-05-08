@@ -665,7 +665,6 @@ export class StickyNoteManager {
 			onHideCurrentSticky: () => void this.hideCurrentStickyById(id),
 			onHideOthersSticky: () => void this.hideOthersRelativeToId(id),
 			onShowOthersSticky: () => void this.showOthersSticky(),
-			onHideAllStickies: () => void this.hideAllStickies(),
 			onShowAllStickies: () => void this.showAllStickies(),
 			onActivate: () => this.bringStickyToFrontById(id),
 			onDragStart: e => this.handleDragStart(id, e),
