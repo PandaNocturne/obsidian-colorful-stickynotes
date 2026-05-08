@@ -9,6 +9,7 @@ import {
 import { WorkspacePanelModal } from './modals/WorkspacePanelModal';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
+import { registerSendToStickyMenus } from './register-send-to-sticky-menus';
 import {
 	VIEW_STICKY_NOTE_LIST,
 	type HeaderNewStickyAdjacentSide,
@@ -204,6 +205,32 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				this.openWorkspacePanel();
 			}
 		});
+
+		this.addCommand({
+			id: 'send-to-sticky-window',
+			name: t('CMD_SEND_TO_STICKY_WINDOW'),
+			checkCallback: (checking: boolean) => {
+				const f = this.app.workspace.getActiveFile();
+				if (!f) return false;
+				if (checking) return true;
+				void this.openStickyForFile(f, { markdownMode: 'preview' });
+				return true;
+			}
+		});
+
+		this.addCommand({
+			id: 'move-to-sticky-window',
+			name: t('CMD_MOVE_TO_STICKY_WINDOW'),
+			checkCallback: (checking: boolean) => {
+				const f = this.app.workspace.getActiveFile();
+				if (!f) return false;
+				if (checking) return true;
+				void this.moveFileToStickyWindow(f, { markdownMode: 'preview' });
+				return true;
+			}
+		});
+
+		registerSendToStickyMenus(this);
 
 		this.addSettingTab(new ColorfulStickyNotesSettingTab(this.app, this));
 
@@ -581,8 +608,19 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	}
 
 	/** 打开或聚焦指定文件的便笺窗口 */
-	async openStickyForFile(file: TFile): Promise<void> {
-		await this.stickies.openStickyForFile(file);
+	async openStickyForFile(
+		file: TFile,
+		opts?: { markdownMode?: 'preview' | 'source' }
+	): Promise<void> {
+		await this.stickies.openStickyForFile(file, opts);
+	}
+
+	/** 在便笺中打开并关闭主工作区中该文件的标签（不含便笺浮动叶）。 */
+	async moveFileToStickyWindow(
+		file: TFile,
+		opts?: { markdownMode?: 'preview' | 'source' }
+	): Promise<void> {
+		await this.stickies.moveFileToStickyWindow(file, opts);
 	}
 
 	/**

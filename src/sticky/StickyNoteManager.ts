@@ -1,4 +1,4 @@
-import { normalizePath, Notice, TFile, type App, type EventRef } from 'obsidian';
+import { normalizePath, Notice, TFile, WorkspaceLeaf, type App, type EventRef } from 'obsidian';
 import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
@@ -512,12 +512,18 @@ export class StickyNoteManager {
 		};
 	}
 
-	async openStickyForFile(file: TFile): Promise<void> {
+	async openStickyForFile(
+		file: TFile,
+		opts?: { markdownMode?: 'preview' | 'source' }
+	): Promise<void> {
 		for (const pop of this.popovers.values()) {
 			const vf =
 				pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
 			if (vf?.path === file.path) {
 				pop.focus();
+				if (file.extension === 'md' && opts?.markdownMode) {
+					await pop.setMarkdownViewMode(opts.markdownMode);
+				}
 				return;
 			}
 		}
@@ -526,8 +532,36 @@ export class StickyNoteManager {
 			id: this.newId(),
 			path: file.path,
 			stickyId: this.readStickyIdFromCache(file) ?? undefined,
-			bounds: this.getDefaultBounds()
+			bounds: this.getDefaultBounds(),
+			...(opts?.markdownMode ? { markdownMode: opts.markdownMode } : {})
 		});
+	}
+
+	/**
+	 * 在便笺中打开该文件（行为同 openStickyForFile），并关闭主工作区中仍打开该文件的叶标签（不含便笺浮动叶）。
+	 */
+	async moveFileToStickyWindow(
+		file: TFile,
+		opts?: { markdownMode?: 'preview' | 'source' }
+	): Promise<void> {
+		await this.openStickyForFile(file, opts);
+		const stickyLeaves = new Set<WorkspaceLeaf>();
+		for (const p of this.popovers.values()) {
+			if (p.leaf) stickyLeaves.add(p.leaf);
+		}
+		const norm = normalizePath(file.path);
+		const toDetach: WorkspaceLeaf[] = [];
+		this.app.workspace.iterateAllLeaves(leaf => {
+			if (stickyLeaves.has(leaf)) return;
+			const v = leaf.view;
+			const vf = v && 'file' in v ? (v as { file?: TFile }).file : undefined;
+			if (vf && normalizePath(vf.path) === norm) {
+				toDetach.push(leaf);
+			}
+		});
+		for (const leaf of toDetach) {
+			leaf.detach();
+		}
 	}
 
 	async addStickyWindow(initial?: Partial<SerializedStickyWindow>, sourcePopover?: StickyNotePopover): Promise<void> {

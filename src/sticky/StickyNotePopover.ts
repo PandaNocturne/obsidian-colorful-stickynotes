@@ -768,6 +768,11 @@ export class StickyNotePopover {
 		}
 	}
 
+	/** 将当前 Markdown 便笺切换为阅读/编辑模式；非 md 或无叶视图时安全忽略。 */
+	async setMarkdownViewMode(mode: 'preview' | 'source'): Promise<void> {
+		await this.setMarkdownMode(mode);
+	}
+
 	/** 由管理器设置：仅一个便笺显示「活动」标题样式。 */
 	setActiveHighlight(on: boolean): void {
 		this.rootEl.toggleClass('csn-sticky--active', on);

@@ -19,6 +19,8 @@ export const zhCn: Record<MessageKey, string> = {
 	CMD_TOGGLE_HIDE_OTHERS: '隐藏其他便笺/取消',
 	CMD_TOGGLE_HIDE_ALL: '显示/隐藏所有便笺',
 	CMD_OPEN_WORKSPACE_PANEL: '打开便笺工作区',
+	CMD_SEND_TO_STICKY_WINDOW: '发送到便笺窗口',
+	CMD_MOVE_TO_STICKY_WINDOW: '移动到便笺窗口',
 	NOTICE_SAVE_SETTINGS_FAILED: '多彩便笺：设置保存失败，请查看控制台。',
 	NOTICE_CANNOT_CREATE_LEFT_SIDEBAR: '无法创建左侧侧边栏视图',
 	NOTICE_CANNOT_CREATE_RIGHT_SIDEBAR: '无法创建右侧侧边栏视图',

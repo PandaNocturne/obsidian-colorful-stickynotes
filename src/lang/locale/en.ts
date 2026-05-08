@@ -17,6 +17,8 @@ export const en = {
 	CMD_TOGGLE_HIDE_OTHERS: 'Hide other stickies / show others',
 	CMD_TOGGLE_HIDE_ALL: 'Show/hide all stickies',
 	CMD_OPEN_WORKSPACE_PANEL: 'Open sticky workspaces',
+	CMD_SEND_TO_STICKY_WINDOW: 'Send to sticky window',
+	CMD_MOVE_TO_STICKY_WINDOW: 'Move to sticky window',
 	NOTICE_SAVE_SETTINGS_FAILED:
 		'Colorful sticky notes: could not save settings. Check the console.',
 	NOTICE_CANNOT_CREATE_LEFT_SIDEBAR: 'Cannot create left sidebar view',
