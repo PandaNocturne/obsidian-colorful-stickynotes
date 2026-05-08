@@ -14,6 +14,9 @@ export type StickyColorId =
 	| 'lavender'
 	| 'gray';
 
+/** 拖动时对齐吸附的触发方式（与「吸附后绑定」共用阈值与邻窗检测）。 */
+export type StickyAssistAlignSnapMode = 'none' | 'auto' | 'ctrl';
+
 /** 绑定组内归一化网格索引下的多格占位（含边界）。单格时勿存。 */
 export interface StickyGridSpan {
 	colMin: number;

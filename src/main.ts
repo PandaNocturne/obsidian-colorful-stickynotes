@@ -297,14 +297,36 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.stickyHeaderDoubleClickStretch !== 'boolean') {
 			this.settings.stickyHeaderDoubleClickStretch = DEFAULT_SETTINGS.stickyHeaderDoubleClickStretch;
 		}
-		if (typeof this.settings.stickyAssistAlignSnap !== 'boolean') {
-			this.settings.stickyAssistAlignSnap = DEFAULT_SETTINGS.stickyAssistAlignSnap;
+		const VALID_SNAP_MODES = new Set(['none', 'auto', 'ctrl']);
+		const rawSnapMode = raw.stickyAssistAlignSnapMode;
+		const legacySnapBool = raw.stickyAssistAlignSnap;
+		if (typeof rawSnapMode === 'string' && VALID_SNAP_MODES.has(rawSnapMode)) {
+			this.settings.stickyAssistAlignSnapMode =
+				rawSnapMode as ColorfulStickyNotesSettings['stickyAssistAlignSnapMode'];
+		} else if (typeof legacySnapBool === 'boolean') {
+			this.settings.stickyAssistAlignSnapMode = legacySnapBool ? 'auto' : 'none';
+		} else if (
+			typeof this.settings.stickyAssistAlignSnapMode !== 'string' ||
+			!VALID_SNAP_MODES.has(this.settings.stickyAssistAlignSnapMode)
+		) {
+			this.settings.stickyAssistAlignSnapMode = DEFAULT_SETTINGS.stickyAssistAlignSnapMode;
 		}
+		delete st.stickyAssistAlignSnap;
 		const snapPx = this.settings.stickyAssistAlignSnapThresholdPx;
 		if (typeof snapPx !== 'number' || !Number.isFinite(snapPx)) {
 			this.settings.stickyAssistAlignSnapThresholdPx = DEFAULT_SETTINGS.stickyAssistAlignSnapThresholdPx;
 		} else {
 			this.settings.stickyAssistAlignSnapThresholdPx = Math.max(1, Math.min(50, Math.round(snapPx)));
+		}
+		const snapUnbindMult = this.settings.stickyAssistAlignSnapUnbindRangeMultiplier;
+		if (typeof snapUnbindMult !== 'number' || !Number.isFinite(snapUnbindMult)) {
+			this.settings.stickyAssistAlignSnapUnbindRangeMultiplier =
+				DEFAULT_SETTINGS.stickyAssistAlignSnapUnbindRangeMultiplier;
+		} else {
+			this.settings.stickyAssistAlignSnapUnbindRangeMultiplier = Math.max(
+				1,
+				Math.min(8, Math.round(snapUnbindMult * 10) / 10)
+			);
 		}
 		if (typeof this.settings.stickyAssistAlignBind !== 'boolean') {
 			this.settings.stickyAssistAlignBind = DEFAULT_SETTINGS.stickyAssistAlignBind;

@@ -10,6 +10,7 @@ import type {
 	NoteListFloatOpenFilter,
 	NoteListOpenLocation,
 	NoteListSort,
+	StickyAssistAlignSnapMode,
 	StickyColorId
 } from './types';
 
@@ -38,10 +39,15 @@ export interface ColorfulStickyNotesSettings {
 	stickyEdgeAutoStretchHeight: boolean;
 	/** 双击便笺头部切换拉伸/恢复。 */
 	stickyHeaderDoubleClickStretch: boolean;
-	/** 辅助对齐吸附：拖动时与相邻便笺对齐吸附。 */
-	stickyAssistAlignSnap: boolean;
+	/** 辅助对齐吸附的触发方式：`none` 关闭；`auto` 拖动即吸附；`ctrl` 未绑定时按住 Ctrl 吸附，已在绑定组时按住 Ctrl 解绑。 */
+	stickyAssistAlignSnapMode: StickyAssistAlignSnapMode;
 	/** 吸附阈值（px）。 */
 	stickyAssistAlignSnapThresholdPx: number;
+	/**
+	 * 解除绑定时的「仍算在吸附带内」判定：相对吸附阈值的倍数（默认 2）。
+	 * 实际使用 `round(吸附阈值 px × 本值)` 与绑定邻窗比对；仅影响 Ctrl 模式下解绑/保留绑定逻辑。
+	 */
+	stickyAssistAlignSnapUnbindRangeMultiplier: number;
 	/** 吸附后自动绑定；绑定窗口可连带移动。 */
 	stickyAssistAlignBind: boolean;
 	/** 启动 Obsidian 后自动恢复上次便笺浮动窗口（与「打开便笺窗口（恢复上次会话）」一致）。 */
@@ -90,8 +96,9 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	bottomBarAutoHide: true,
 	stickyEdgeAutoStretchHeight: true,
 	stickyHeaderDoubleClickStretch: true,
-	stickyAssistAlignSnap: true,
+	stickyAssistAlignSnapMode: 'ctrl',
 	stickyAssistAlignSnapThresholdPx: 10,
+	stickyAssistAlignSnapUnbindRangeMultiplier: 2,
 	stickyAssistAlignBind: true,
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
@@ -266,13 +273,18 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 
 		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_ASSIST') });
 		new Setting(containerEl)
-			.setName(t('SETTINGS_ALIGN_SNAP_NAME'))
-			.setDesc(t('SETTINGS_ALIGN_SNAP_DESC'))
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.stickyAssistAlignSnap).onChange(async v => {
-					this.plugin.settings.stickyAssistAlignSnap = v;
-					await this.plugin.saveSettings();
-				})
+			.setName(t('SETTINGS_SNAP_TRIGGER_NAME'))
+			.setDesc(t('SETTINGS_SNAP_TRIGGER_DESC'))
+			.addDropdown(dd =>
+				dd
+					.addOption('none', t('SETTINGS_SNAP_TRIGGER_NONE'))
+					.addOption('auto', t('SETTINGS_SNAP_TRIGGER_AUTO'))
+					.addOption('ctrl', t('SETTINGS_SNAP_TRIGGER_CTRL'))
+					.setValue(this.plugin.settings.stickyAssistAlignSnapMode)
+					.onChange(async v => {
+						this.plugin.settings.stickyAssistAlignSnapMode = v as StickyAssistAlignSnapMode;
+						await this.plugin.saveSettings();
+					})
 			);
 		new Setting(containerEl)
 			.setName(t('SETTINGS_SNAP_THRESHOLD_NAME'))
@@ -285,6 +297,20 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						this.plugin.settings.stickyAssistAlignSnapThresholdPx = Number.isFinite(n)
 							? Math.max(1, Math.min(50, n))
 							: DEFAULT_SETTINGS.stickyAssistAlignSnapThresholdPx;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME'))
+			.setDesc(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC'))
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier))
+					.onChange(async v => {
+						const n = parseFloat(v.replace(/,/g, '.'));
+						this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier = Number.isFinite(n)
+							? Math.max(1, Math.min(8, Math.round(n * 10) / 10))
+							: DEFAULT_SETTINGS.stickyAssistAlignSnapUnbindRangeMultiplier;
 						await this.plugin.saveSettings();
 					})
 			);

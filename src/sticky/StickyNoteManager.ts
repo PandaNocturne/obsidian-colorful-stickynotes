@@ -63,6 +63,11 @@ export class StickyNoteManager {
 			groupIds: string[];
 			lastPrimary: FloatingBounds;
 			ctrlDetach: boolean;
+			/**
+			 * Ctrl-trigger + grouped + detach at drag start: keep binding graph until drag end;
+			 * unbind only if released outside snap reach of bound peers.
+			 */
+			deferBindingClear?: boolean;
 			/** ???????????????????????????????????????????????????????? */
 			snapHeightSourceId: string | null;
 			/** ??????????????????????????????????? */
@@ -1273,18 +1278,43 @@ export class StickyNoteManager {
 		return out;
 	}
 
+	/**
+	 * Auto: Ctrl = detach/solo drag.
+	 * None: Alt = detach.
+	 * Ctrl-trigger: ungrouped ? Alt only (detach); grouped ? Ctrl or Alt removes binding so Ctrl can mean snap when alone.
+	 */
+	private isDragDetachModifier(e: PointerEvent, dragId: string): boolean {
+		const mode = this.plugin.settings.stickyAssistAlignSnapMode;
+		if (mode === 'auto') return e.ctrlKey;
+		if (mode === 'none') return e.altKey;
+		const grouped = this.resolveBindingGroupIds(dragId).length > 1;
+		if (grouped) return e.ctrlKey || e.altKey;
+		return e.altKey;
+	}
+
+	private isAssistSnapEnabledThisMove(e: PointerEvent): boolean {
+		const mode = this.plugin.settings.stickyAssistAlignSnapMode;
+		if (mode === 'none') return false;
+		if (mode === 'auto') return true;
+		return e.ctrlKey;
+	}
+
 	private handleDragStart(id: string, e: PointerEvent): void {
 		if (!this.popovers.has(id)) return;
-		const ctrl = !!e.ctrlKey;
-		if (ctrl) this.unbindAll(id);
-		const groupIds = ctrl ? [id] : this.resolveBindingGroupIds(id);
+		const detach = this.isDragDetachModifier(e, id);
+		const grouped = this.resolveBindingGroupIds(id).length > 1;
+		const deferBindingClear =
+			this.plugin.settings.stickyAssistAlignSnapMode === 'ctrl' && grouped && detach;
+		if (detach && !deferBindingClear) this.unbindAll(id);
+		const groupIds = detach ? [id] : this.resolveBindingGroupIds(id);
 		const primary = this.popovers.get(id)?.getBounds();
 		if (!primary) return;
 		this.dragSession = {
 			id,
 			groupIds,
 			lastPrimary: primary,
-			ctrlDetach: ctrl,
+			ctrlDetach: detach,
+			deferBindingClear,
 			snapHeightSourceId: null,
 			snapWidthSourceId: null
 		};
@@ -1293,11 +1323,11 @@ export class StickyNoteManager {
 	private handleDragMove(id: string, next: FloatingBounds, e: PointerEvent): FloatingBounds {
 		const session = this.dragSession;
 		if (!session || session.id !== id) return next;
-		const ctrl = !!e.ctrlKey;
-		if (ctrl) {
+		const detach = this.isDragDetachModifier(e, id);
+		if (detach) {
 			if (!session.ctrlDetach) {
 				session.ctrlDetach = true;
-				this.unbindAll(id);
+				if (!session.deferBindingClear) this.unbindAll(id);
 				session.groupIds = [id];
 			}
 			session.snapHeightSourceId = null;
@@ -1306,7 +1336,7 @@ export class StickyNoteManager {
 			return next;
 		}
 
-		const snapEnabled = this.plugin.settings.stickyAssistAlignSnap;
+		const snapEnabled = this.isAssistSnapEnabledThisMove(e);
 		const bindEnabled = this.plugin.settings.stickyAssistAlignBind;
 		const threshold = Math.max(
 			1,
@@ -1437,13 +1467,28 @@ export class StickyNoteManager {
 	}
 
 	private handleDragEnd(id: string, _e: PointerEvent): void {
-		if (this.dragSession?.id === id) {
-			const heightSrc = this.dragSession.snapHeightSourceId;
-			const widthSrc = this.dragSession.snapWidthSourceId;
-			this.layoutBindingGroupAsGrid(id, { heightSourceId: heightSrc, widthSourceId: widthSrc });
-			this.dragSession = null;
-			this.persistOpenWindows();
+		const session = this.dragSession;
+		if (session?.id !== id) return;
+		const heightSrc = session.snapHeightSourceId;
+		const widthSrc = session.snapWidthSourceId;
+		const threshold = Math.max(
+			1,
+			Math.min(50, Math.round(this.plugin.settings.stickyAssistAlignSnapThresholdPx))
+		);
+		const mult = Math.max(
+			1,
+			Math.min(8, Math.round(this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier * 10) / 10)
+		);
+		const unbindSnapThreshold = Math.max(1, Math.min(200, Math.round(threshold * mult)));
+		if (this.plugin.settings.stickyAssistAlignSnapMode === 'ctrl' && session.ctrlDetach) {
+			const hasPeers = (this.bindings.get(id)?.size ?? 0) > 0;
+			if (hasPeers && !this.isWithinSnapReachOfAnyBindingPeer(id, unbindSnapThreshold)) {
+				this.unbindAll(id);
+			}
 		}
+		this.layoutBindingGroupAsGrid(id, { heightSourceId: heightSrc, widthSourceId: widthSrc });
+		this.dragSession = null;
+		this.persistOpenWindows();
 	}
 
 	private handleResizeStart(id: string, _e: PointerEvent, _dir: unknown): void {
@@ -1513,6 +1558,27 @@ export class StickyNoteManager {
 			this.resizeSession = null;
 			this.persistOpenWindows();
 		}
+	}
+
+	/**
+	 * Whether `movingId` is still within `threshold` px (snap logic) to at least one directly bound peer.
+	 * Only peers are considered as targets; other windows are ignored. For drag-end unbind, pass
+	 * `snapThresholdPx * stickyAssistAlignSnapUnbindRangeMultiplier` (capped) instead of the raw snap threshold.
+	 */
+	private isWithinSnapReachOfAnyBindingPeer(movingId: string, threshold: number): boolean {
+		const peers = this.bindings.get(movingId);
+		if (!peers || peers.size === 0) return true;
+		const pop = this.popovers.get(movingId);
+		if (!pop) return true;
+		const b = pop.getBounds();
+		const ignoreIds: string[] = [];
+		for (const wid of this.popovers.keys()) {
+			if (wid === movingId) continue;
+			if (peers.has(wid)) continue;
+			ignoreIds.push(wid);
+		}
+		const res = this.computeSnapForBounds(movingId, b, threshold, ignoreIds);
+		return res.snappedToId != null && peers.has(res.snappedToId);
 	}
 
 	private computeSnapForBounds(

@@ -66,14 +66,20 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC: '双击便笺头部可拉伸到全高；再次双击恢复原高度。',
 
 	SETTINGS_HEADING_ASSIST: '辅助对齐',
-	SETTINGS_ALIGN_SNAP_NAME: '相邻便笺对齐吸附',
-	SETTINGS_ALIGN_SNAP_DESC:
-		'拖动便笺时，可对齐吸附到相邻便笺的左右/上下边缘（含同列上下叠放与同行底边对齐）。按住 Ctrl 拖动可临时忽略吸附并解绑。',
+	SETTINGS_SNAP_TRIGGER_NAME: '吸附触发方式',
+	SETTINGS_SNAP_TRIGGER_DESC:
+		'无：不吸附。自动：拖动即吸附；按住 Ctrl 拖动可临时解绑并关闭吸附。Ctrl：未绑定时按住 Ctrl 才吸附；已处于绑定组时按住 Ctrl 或 Alt 可先单独拖动当前便笺，松手时若相对所有绑定邻窗均已超出「吸附阈值×解除绑定倍数」则解绑，否则保持绑定并由网格整理；普通拖动不吸附。',
+	SETTINGS_SNAP_TRIGGER_NONE: '无',
+	SETTINGS_SNAP_TRIGGER_AUTO: '自动触发',
+	SETTINGS_SNAP_TRIGGER_CTRL: 'Ctrl 触发',
 	SETTINGS_SNAP_THRESHOLD_NAME: '吸附阈值',
 	SETTINGS_SNAP_THRESHOLD_DESC: '距离小于该像素值时触发吸附。',
+	SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME: '解除绑定范围倍数（Ctrl 模式）',
+	SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC:
+		'在 Ctrl 模式下，用 Ctrl/Alt 单独拖动后松手时，是否保留绑定取决于与绑定邻窗的距离是否仍在「吸附阈值 × 本倍数」内；默认 2 即解除判定范围约为吸附范围的 2 倍。数值越大需拖得越远才会解绑。可调范围 1–8，步进 0.1。',
 	SETTINGS_BIND_AFTER_SNAP_NAME: '吸附后绑定窗口',
 	SETTINGS_BIND_AFTER_SNAP_DESC:
-		'吸附对齐后建立绑定；成组窗口会按网格整理（同列等宽、同行等高，尺寸由该行/列最大便笺决定）。移动其中一个窗口会连带移动整组。按住 Ctrl 拖动可移开并解绑。缩放时按住 Ctrl 可单独改尺寸而不推挤邻窗，松手后按与网格相交范围铺满多格。',
+		'吸附对齐后建立绑定；成组窗口会按网格整理（同列等宽、同行等高，尺寸由该行/列最大便笺决定）。移动其中一个窗口会连带移动整组。解绑拖动：在「自动触发」下按住 Ctrl；在「无」下按住 Alt；在「Ctrl 触发」下，成组时按住 Ctrl 或 Alt，未成组时按住 Alt。缩放时按住 Ctrl 可单独改尺寸而不推挤邻窗，松手后按与网格相交范围铺满多格。',
 
 	SETTINGS_DEFAULT_VIEW_NAME: '默认视图',
 	SETTINGS_MODE_SOURCE: '编辑',
