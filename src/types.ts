@@ -14,6 +14,14 @@ export type StickyColorId =
 	| 'lavender'
 	| 'gray';
 
+/** 绑定组内归一化网格索引下的多格占位（含边界）。单格时勿存。 */
+export interface StickyGridSpan {
+	colMin: number;
+	colMax: number;
+	rowMin: number;
+	rowMax: number;
+}
+
 export interface SerializedStickyWindow {
 	id: string;
 	path: string;
@@ -27,6 +35,8 @@ export interface SerializedStickyWindow {
 	stretched?: boolean;
 	/** 吸附绑定的其它窗口 id（无向关系，序列化为邻接表）。 */
 	bindings?: string[];
+	/** 跨多格便笺：归一化网格列/行范围；与拓扑变化不符时布局会丢弃。 */
+	gridSpan?: StickyGridSpan;
 	color?: StickyColorId;
 	yamlVisible?: boolean;
 	/** Markdown 便笺的阅读 / 编辑视图（`preview` | `source`）。 */
