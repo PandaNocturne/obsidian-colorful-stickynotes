@@ -607,15 +607,28 @@
 	min-width: 0;
 }
 
+/* 标题：拖入编辑器插入链接（与 fileManager 生成的 Markdown 一致） */
 .csn-list-card-title {
 	font-weight: 600;
 	font-size: var(--font-ui-small);
-	line-height: var(--line-height-tight);
+	// line-height: var(--line-height-tight);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	flex: 1 1 auto;
 	min-width: 0;
+	max-width: fit-content;
+	cursor: grab;
+	user-select: none;
+}
+
+.csn-list-card-title:hover {
+	background-color: var(--background-modifier-hover);
+	border-radius: var(--radius-s);
+}
+
+.csn-list-card-title:active {
+	cursor: grabbing;
 }
 
 .csn-list-card-head-right {

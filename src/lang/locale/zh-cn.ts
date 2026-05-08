@@ -145,6 +145,8 @@ export const zhCn: Record<MessageKey, string> = {
 	UNPIN_ARIA: '取消置顶',
 	PIN_ARIA: '置顶',
 	MORE_ACTIONS_ARIA: '更多操作',
+	LIST_CARD_TITLE_DRAG_ARIA: '拖入笔记可插入指向该便笺的链接',
+	LIST_CARD_TITLE_DRAG_TITLE: '拖入笔记可插入链接（双击卡片打开浮动便笺）',
 	DOUBLE_CLICK_OPEN_TITLE: '双击打开便笺',
 	LIST_COLOR_FILTER_POPOVER_GROUP_ARIA: '颜色筛选，可多选',
 	LIST_TOOLBAR_SORT_PREFIX: '排序：{title}',

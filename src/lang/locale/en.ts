@@ -158,6 +158,8 @@ export const en = {
 	UNPIN_ARIA: 'Unpin',
 	PIN_ARIA: 'Pin',
 	MORE_ACTIONS_ARIA: 'More actions',
+	LIST_CARD_TITLE_DRAG_ARIA: 'Drag into a note to insert link to this sticky',
+	LIST_CARD_TITLE_DRAG_TITLE: 'Drag into a note to insert link (double-click the card to open floating sticky)',
 	DOUBLE_CLICK_OPEN_TITLE: 'Double-click to open sticky',
 	LIST_COLOR_FILTER_POPOVER_GROUP_ARIA: 'Color filter, multi-select',
 	LIST_TOOLBAR_SORT_PREFIX: 'Sort: {title}',

@@ -378,6 +378,25 @@ export class StickyNoteListView extends ItemView {
 		if (this.listItemsDelegatedEvents || !this.listItemsEl) return;
 		this.listItemsDelegatedEvents = true;
 
+		this.registerDomEvent(this.listItemsEl, 'dragstart', (evt: DragEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const titleEl = hit.closest('.csn-list-card-title');
+			if (!titleEl || !this.listItemsEl?.contains(titleEl)) return;
+			const card = titleEl.closest('.csn-list-card');
+			if (!card) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
+			const md = this.app.fileManager.generateMarkdownLink(f, sourcePath);
+			const dt = evt.dataTransfer;
+			if (!dt) return;
+			dt.setData('text/plain', md);
+			dt.effectAllowed = 'copy';
+		});
+
 		this.registerDomEvent(this.listItemsEl, 'click', (evt: MouseEvent) => {
 			const hit = evt.target;
 			if (!(hit instanceof Element)) return;
@@ -444,7 +463,9 @@ export class StickyNoteListView extends ItemView {
 		this.registerDomEvent(this.listItemsEl, 'dblclick', (evt: MouseEvent) => {
 			const hit = evt.target;
 			if (!(hit instanceof Element)) return;
-			if (hit.closest('.csn-list-card-pin-btn') || hit.closest('.csn-list-card-menu-btn')) return;
+			if (hit.closest('.csn-list-card-pin-btn') || hit.closest('.csn-list-card-menu-btn')) {
+				return;
+			}
 			const card = hit.closest('.csn-list-card');
 			if (!card || !this.listItemsEl?.contains(card)) return;
 			const path = (card as HTMLElement).dataset.csnNotePath;
@@ -1064,7 +1085,15 @@ export class StickyNoteListView extends ItemView {
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 		const head = card.createDiv({ cls: 'csn-list-card-head' });
-		head.createDiv({ cls: 'csn-list-card-title', text: f.basename });
+		head.createDiv({
+			cls: 'csn-list-card-title',
+			text: f.basename,
+			attr: {
+				draggable: 'true',
+				'aria-label': t('LIST_CARD_TITLE_DRAG_ARIA'),
+				title: t('LIST_CARD_TITLE_DRAG_TITLE')
+			}
+		});
 		const headRight = head.createDiv({ cls: 'csn-list-card-head-right' });
 		const isPinned = pinnedSet.has(normalizePath(f.path));
 		headRight.createEl(
