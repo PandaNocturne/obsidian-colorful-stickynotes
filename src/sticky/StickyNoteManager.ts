@@ -50,13 +50,13 @@ export class StickyNoteManager {
 	private readonly pendingBindings = new Map<string, string[]>();
 	private dragSession:
 		| {
-				id: string;
-				groupIds: string[];
-				lastPrimary: FloatingBounds;
-				ctrlDetach: boolean;
-				/** 同行吸附时的高度参照（被吸附侧），非发起拖动便笺的高度。 */
-				snapHeightSourceId: string | null;
-		  }
+			id: string;
+			groupIds: string[];
+			lastPrimary: FloatingBounds;
+			ctrlDetach: boolean;
+			/** 同行吸附时的高度参照（被吸附侧），非发起拖动便笺的高度。 */
+			snapHeightSourceId: string | null;
+		}
 		| null = null;
 	private resizeSession:
 		| {
@@ -84,7 +84,7 @@ export class StickyNoteManager {
 	workspaces: WorkspacesFile = {
 		version: 1,
 		activeWorkspaceId: 'default',
-		workspaces: [{ id: 'default', name: '默认工作区', windows: [], updatedAt: Date.now() }]
+		workspaces: [{ id: 'default', name: '默认便笺工作区', windows: [], updatedAt: Date.now() }]
 	};
 
 	constructor(
@@ -114,7 +114,7 @@ export class StickyNoteManager {
 
 	/**
 	 * 关闭当前已打开的所有便笺窗口。
-	 * @param keepWorkspaceSession true 时仅关闭窗口，不覆盖工作区已保存的 windows（用于“下次恢复上次工作区”）。
+	 * @param keepWorkspaceSession true 时仅关闭窗口，不覆盖便笺工作区已保存的 windows（用于下次恢复该便笺工作区布局）。
 	 */
 	closeAllOpenStickyWindows(keepWorkspaceSession = false): void {
 		if (!keepWorkspaceSession) {
@@ -402,7 +402,7 @@ export class StickyNoteManager {
 	/** 以当前窗口布局新建一条命名工作区（便笺窗口 ID 重新分配，避免与运行中会话冲突）。 */
 	async createWorkspaceFromCurrentLayout(name: string): Promise<void> {
 		const trimmed = name.trim();
-		const finalName = trimmed || `工作区 ${this.workspaces.workspaces.length + 1}`;
+		const finalName = trimmed || `便笺工作区 ${this.workspaces.workspaces.length + 1}`;
 		const snapshot = this.remapStickyWindowIds(this.serializeOpenWindowsSnapshot());
 		const id = `ws_${Date.now().toString(36)}`;
 		const nw: StickyWorkspace = {
@@ -438,7 +438,7 @@ export class StickyNoteManager {
 		ws.name = next;
 		ws.updatedAt = Date.now();
 		await saveWorkspacesFile(this.plugin, this.workspaces);
-		new Notice('已更新名称');
+		new Notice('已更新便笺工作区名称');
 	}
 
 	private persistOpenWindows(): void {
@@ -1311,11 +1311,11 @@ export class StickyNoteManager {
 					gid === id
 						? primaryPhy
 							? {
-									left: session.lastPrimary.left,
-									top: session.lastPrimary.top,
-									width: primaryPhy.width,
-									height: primaryPhy.height
-								}
+								left: session.lastPrimary.left,
+								top: session.lastPrimary.top,
+								width: primaryPhy.width,
+								height: primaryPhy.height
+							}
 							: session.lastPrimary
 						: pop.getPhysicalBounds();
 				minLeft = Math.min(minLeft, b.left);

@@ -99,17 +99,17 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			void this.toggleStickyWindowsForCurrentWorkspace();
 		});
 
-		this.addRibbonIcon('layout-grid', '便笺列表', () => {
+		this.addRibbonIcon('layout-list', '便笺列表', () => {
 			void this.openNoteListView();
 		});
 
-		this.addRibbonIcon('layout', '便笺工作区', () => {
+		this.addRibbonIcon('layers', '便笺工作区', () => {
 			this.openWorkspacePanel();
 		});
 
 		this.addCommand({
 			id: 'open-sticky-note-windows',
-			name: '打开/关闭当前工作区便笺',
+			name: '打开/关闭当前便笺工作区的便笺',
 			callback: () => {
 				void this.toggleStickyWindowsForCurrentWorkspace();
 			}
@@ -474,13 +474,13 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 	/**
 	 * 命令行为：
-	 * 1) 当前工作区没有便笺 -> 新建并打开一张便笺
-	 * 2) 当前工作区存在便笺 -> 关闭当前工作区所有已打开便笺
-	 * 3) 若当前无打开便笺，但工作区存在已保存便笺 -> 恢复上次工作区
+	 * 1) 当前便笺工作区没有便笺 → 新建并打开一张便笺
+	 * 2) 当前便笺工作区存在便笺 → 关闭该便笺工作区内所有已打开便笺
+	 * 3) 若当前无打开便笺，但该便笺工作区已有保存布局 → 恢复该便笺工作区
 	 */
 	private async toggleStickyWindowsForCurrentWorkspace(): Promise<void> {
 		if (this.stickies.hasOpenStickyWindows()) {
-			/* 关闭窗口但保留工作区会话，便于下次“一键恢复上次工作区”。 */
+			/* 关闭窗口但保留便笺工作区会话，便于下次一键恢复。 */
 			this.stickies.closeAllOpenStickyWindows(true);
 			return;
 		}

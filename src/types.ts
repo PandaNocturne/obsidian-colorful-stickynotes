@@ -37,7 +37,7 @@ export interface StickyWorkspace {
 	id: string;
 	name: string;
 	windows: SerializedStickyWindow[];
-	/** 最近一次写入该工作区快照的时间（毫秒时间戳）。 */
+	/** 最近一次写入该便笺工作区快照的时间（毫秒时间戳）。 */
 	updatedAt?: number;
 }
 

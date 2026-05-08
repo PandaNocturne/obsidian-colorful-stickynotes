@@ -10,7 +10,7 @@ export function defaultWorkspacesFile(): WorkspacesFile {
 	return {
 		version: 1,
 		activeWorkspaceId: id,
-		workspaces: [{ id, name: '默认工作区', windows: [], updatedAt: now }]
+		workspaces: [{ id, name: '默认便笺工作区', windows: [], updatedAt: now }]
 	};
 }
 

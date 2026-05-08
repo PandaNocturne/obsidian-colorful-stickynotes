@@ -1199,7 +1199,7 @@
   width: 14px;
   height: 14px;
 }
-/* 工作区面板 */
+/* 便笺工作区面板 */
 .csn-ws-row {
   display: flex;
   align-items: center;
@@ -1218,7 +1218,7 @@
 .csn-cmd-label {
   font-size: var(--font-ui-small);
 }
-/* —— 管理工作区布局弹窗 —— */
+/* —— 管理便笺工作区弹窗 —— */
 .modal.csn-workspace-panel-modal {
   max-width: 520px;
   width: min(92vw, 520px);
@@ -1228,6 +1228,9 @@
   flex-direction: column;
   gap: 0;
   padding: 2px 2px 8px;
+}
+.csn-workspace-panel .csn-ws-panel-list .csn-ws-panel-item {
+  box-shadow: none;
 }
 .csn-ws-panel-save-row {
   display: flex;

@@ -1,4 +1,4 @@
-import { App, Modal, Notice, setIcon } from 'obsidian';
+import { App, Modal, Notice, Setting, setIcon } from 'obsidian';
 import type ColorfulStickyNotesPlugin from '../main';
 import { saveWorkspacesFile } from '../workspace-store';
 import type { StickyWorkspace } from '../types';
@@ -29,7 +29,7 @@ class RenameStickyWorkspaceModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText('重命名工作区');
+		this.titleEl.setText('重命名便笺工作区');
 		this.contentEl.addClass('csn-ws-rename-modal');
 		const input = this.contentEl.createEl('input', {
 			type: 'text',
@@ -68,6 +68,46 @@ class RenameStickyWorkspaceModal extends Modal {
 	}
 }
 
+class DeleteStickyWorkspaceConfirmModal extends Modal {
+	constructor(
+		app: App,
+		private readonly workspaceName: string,
+		private readonly onConfirm: () => void | Promise<void>
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.titleEl.setText('删除便笺工作区');
+		contentEl.createEl('p', {
+			text: `确定删除便笺工作区「${this.workspaceName}」？此操作不可撤销。`
+		});
+		new Setting(contentEl)
+			.setName('')
+			.addButton(btn => btn.setButtonText('取消').onClick(() => this.close()))
+			.addButton(btn =>
+				btn
+					.setButtonText('删除')
+					.setWarning()
+					.onClick(async () => {
+						btn.setDisabled(true);
+						try {
+							await Promise.resolve(this.onConfirm());
+							this.close();
+						} finally {
+							btn.setDisabled(false);
+						}
+					})
+			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 export class WorkspacePanelModal extends Modal {
 	constructor(
 		app: App,
@@ -77,7 +117,7 @@ export class WorkspacePanelModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText('管理工作区布局');
+		this.titleEl.setText('便笺工作区');
 		this.modalEl.addClass('csn-workspace-panel-modal');
 		this.contentEl.empty();
 		this.contentEl.addClass('csn-workspace-panel');
@@ -95,24 +135,24 @@ export class WorkspacePanelModal extends Modal {
 		const nameInput = saveRow.createEl('input', {
 			type: 'text',
 			cls: 'csn-ws-panel-input',
-			attr: { placeholder: '输入名称以保存当前工作区布局...' }
+			attr: { placeholder: '输入名称以保存当前便笺工作区布局…' }
 		});
 		const saveBtn = saveRow.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn csn-ws-panel-icon-btn--bordered',
-			attr: { 'aria-label': '保存为新的工作区布局', title: '保存为新的工作区布局' }
+			attr: { 'aria-label': '保存为新的便笺工作区', title: '保存为新的便笺工作区' }
 		});
 		setIcon(saveBtn, 'save');
 		saveBtn.addEventListener('click', async () => {
 			const v = nameInput.value;
 			if (!v.trim()) {
-				new Notice('请输入工作区名称');
+				new Notice('请输入便笺工作区名称');
 				return;
 			}
 			saveBtn.disabled = true;
 			try {
 				await mgr.createWorkspaceFromCurrentLayout(v);
 				nameInput.value = '';
-				new Notice('已保存为新的工作区布局');
+				new Notice('已保存为新的便笺工作区');
 				this.render();
 			} finally {
 				saveBtn.disabled = false;
@@ -151,9 +191,9 @@ export class WorkspacePanelModal extends Modal {
 		const actions = row.createDiv({ cls: 'csn-ws-panel-item-actions' });
 		const btnEdit = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': '编辑名称', title: '编辑名称' }
+			attr: { 'aria-label': '编辑便笺工作区名称', title: '编辑便笺工作区名称' }
 		});
-		setIcon(btnEdit, 'pencil');
+		setIcon(btnEdit, 'pen-line');
 		btnEdit.addEventListener('click', () => {
 			new RenameStickyWorkspaceModal(this.app, ws.name, async name => {
 				await mgr.renameWorkspace(ws.id, name);
@@ -161,44 +201,45 @@ export class WorkspacePanelModal extends Modal {
 			}).open();
 		});
 
-		const btnLoad = actions.createEl('button', {
-			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': '加载此工作区布局', title: '加载此工作区布局' }
-		});
-		setIcon(btnLoad, 'layout');
-		btnLoad.addEventListener('click', async () => {
-			btnLoad.disabled = true;
-			try {
-				await mgr.switchWorkspaceAndRestore(ws.id);
-				new Notice('已加载工作区布局');
-				this.close();
-			} finally {
-				btnLoad.disabled = false;
-			}
-		});
-
 		const btnDel = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': '删除工作区', title: '删除工作区' }
+			attr: { 'aria-label': '删除便笺工作区', title: '删除便笺工作区' }
 		});
 		setIcon(btnDel, 'trash-2');
 		const isDefault = ws.id === 'default';
 		if (isDefault) {
-			btnDel.setAttribute('aria-label', '删除工作区（默认工作区不可删除）');
-			btnDel.title = '默认工作区不可删除';
+			btnDel.setAttribute('aria-label', '删除便笺工作区（默认便笺工作区不可删除）');
+			btnDel.title = '默认便笺工作区不可删除';
 		}
-		btnDel.addEventListener('click', async () => {
+		btnDel.addEventListener('click', () => {
 			if (isDefault) {
-				new Notice('默认工作区不可删除');
+				new Notice('默认便笺工作区不可删除');
 				return;
 			}
-			if (!confirm(`删除工作区「${ws.name}」？`)) return;
-			mgr.workspaces.workspaces = mgr.workspaces.workspaces.filter(x => x.id !== ws.id);
-			if (mgr.workspaces.activeWorkspaceId === ws.id) {
-				mgr.workspaces.activeWorkspaceId = mgr.workspaces.workspaces[0]?.id ?? 'default';
+			new DeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
+				mgr.workspaces.workspaces = mgr.workspaces.workspaces.filter(x => x.id !== ws.id);
+				if (mgr.workspaces.activeWorkspaceId === ws.id) {
+					mgr.workspaces.activeWorkspaceId = mgr.workspaces.workspaces[0]?.id ?? 'default';
+				}
+				await saveWorkspacesFile(this.plugin, mgr.workspaces);
+				refresh();
+			}).open();
+		});
+
+		const btnSwitch = actions.createEl('button', {
+			cls: 'csn-ws-panel-icon-btn',
+			attr: { 'aria-label': '切换到该便笺工作区', title: '切换到该便笺工作区' }
+		});
+		setIcon(btnSwitch, 'download');
+		btnSwitch.addEventListener('click', async () => {
+			btnSwitch.disabled = true;
+			try {
+				await mgr.switchWorkspaceAndRestore(ws.id);
+				new Notice('已切换到该便笺工作区');
+				refresh();
+			} finally {
+				btnSwitch.disabled = false;
 			}
-			await saveWorkspacesFile(this.plugin, mgr.workspaces);
-			refresh();
 		});
 	}
 
