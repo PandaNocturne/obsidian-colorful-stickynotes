@@ -37,9 +37,9 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_STICKY_FOLDER_NAME: '便笺文件夹',
 	SETTINGS_STICKY_FOLDER_DESC: '新便笺将创建于此路径下。',
 	SETTINGS_CHOOSE_FOLDER: '选择…',
-	SETTINGS_FILENAME_DESC:
-		'与「核心插件 → 日记」一致：整段模板为 Moment 格式（说明见 https://momentjs.com/docs/#/displaying/format/），无需再包一层 {{date}}。格式中的 / 会在「便笺文件夹」下创建子目录（例如 YYYY/YYYY-MM-DD）。旧版含 {{date:…}} 的模板仍可使用。',
-	SETTINGS_FILENAME_SAMPLE_INTRO: '这是当前所用格式的样例：',
+	SETTINGS_FILENAME_MOMENT_LINK: 'Moment语法格式',
+	SETTINGS_FILENAME_DESC_TAIL: '，支持嵌套文件夹',
+	SETTINGS_FILENAME_PREVIEW_LABEL: '效果预览：',
 	SETTINGS_FILENAME_INVALID: '（格式无效）',
 	SETTINGS_FILENAME_FORMAT_NAME: '文件名格式',
 
@@ -69,7 +69,7 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_HEADING_ASSIST: '辅助对齐',
 	SETTINGS_SNAP_TRIGGER_NAME: '触发吸附方式',
 	SETTINGS_SNAP_TRIGGER_DESC:
-		'无：不吸附。自动：拖动即吸附；按住 Ctrl 拖动可临时解绑并关闭吸附。Ctrl：未绑定时按住 Ctrl 才吸附；已处于绑定组时按住 Ctrl 或 Alt 可先单独拖动当前便笺，松手时若相对所有绑定邻窗均已超出「吸附效果阈值 × 移除吸附范围倍数」则解绑，否则保持绑定并由网格整理；普通拖动不吸附。',
+		'无：关闭对齐。自动：拖动即吸附，按住 Ctrl 可临时单独拖动。Ctrl：未绑定时需按住 Ctrl 才吸附；已绑定时用 Ctrl/Alt 单独拖动，松手是否解绑由下方阈值与范围决定。',
 	SETTINGS_SNAP_TRIGGER_NONE: '无',
 	SETTINGS_SNAP_TRIGGER_AUTO: '自动触发',
 	SETTINGS_SNAP_TRIGGER_CTRL: 'Ctrl 触发',
@@ -77,10 +77,11 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_SNAP_THRESHOLD_DESC: '距离小于该像素值时触发吸附。',
 	SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME: '移除吸附范围',
 	SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC:
-		'用于「移除吸附范围」：在 Ctrl 模式下单独拖动后松手时，是否保留绑定取决于与绑定邻窗的距离是否仍在「吸附效果阈值 × 本倍数」内；默认 2 表示约为吸附范围的 2 倍。数值越大需拖得越远才会解绑。可调范围 1–8，步进 0.1。',
+		'相对「吸附效果阈值」的倍数，用于判定单独拖动松手后是否仍算在吸附带内；越大需拖得越远才解除绑定。范围 1–8。',
+	SETTINGS_SNAP_UNBIND_RANGE_RESET_TOOLTIP: '重置为默认 {value}',
 	SETTINGS_BIND_AFTER_SNAP_NAME: '吸附后绑定窗口',
 	SETTINGS_BIND_AFTER_SNAP_DESC:
-		'吸附对齐后建立绑定；成组窗口会按网格整理（同列等宽、同行等高，尺寸由该行/列最大便笺决定）。移动其中一个窗口会连带移动整组。解绑拖动：在「自动触发」下按住 Ctrl；在「无」下按住 Alt；在「Ctrl 触发」下，成组时按住 Ctrl 或 Alt，未成组时按住 Alt。缩放时按住 Ctrl 可单独改尺寸而不推挤邻窗，松手后按与网格相交范围铺满多格。',
+		'开启后吸附的窗口会成组，可一起移动并按网格整理；关闭则只对齐、不建立绑定。',
 
 	SETTINGS_DEFAULT_VIEW_NAME: '便笺默认视图',
 	SETTINGS_MODE_SOURCE: '编辑',

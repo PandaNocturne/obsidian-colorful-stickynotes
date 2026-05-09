@@ -208,37 +208,44 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					});
 			});
 
-		const refreshFilenamePreview = (box: HTMLElement): void => {
-			box.empty();
-			const raw = (this.plugin.settings.filenameTemplate || '').trim() || 'YYYY/YYYY-MM-DD';
+		const refreshFilenamePreview = (lineEl: HTMLElement, templateRaw?: string): void => {
+			lineEl.empty();
+			lineEl.createSpan({ cls: 'csn-filename-preview-label', text: t('SETTINGS_FILENAME_PREVIEW_LABEL') });
+			const src = templateRaw !== undefined ? templateRaw : this.plugin.settings.filenameTemplate;
+			const raw = (src || '').trim() || 'YYYY/YYYY-MM-DD';
 			const sample = formatStickyNoteRelativePath(raw);
-			const line = box.createDiv({ cls: 'csn-filename-sample-line' });
-			line.appendText(t('SETTINGS_FILENAME_SAMPLE_INTRO'));
-			line.createEl('strong', {
-				cls: 'csn-filename-sample-value',
+			lineEl.createSpan({
+				cls: 'csn-filename-preview-path',
 				text: sample === 'invalid-format' ? t('SETTINGS_FILENAME_INVALID') : `${sample}.md`
 			});
 		};
 
-		const filenameSetting = new Setting(containerEl)
-			.setName(t('SETTINGS_FILENAME_FORMAT_NAME'))
-			.setDesc(t('SETTINGS_FILENAME_DESC'))
-			.addText(text =>
-				text
-					.setValue(this.plugin.settings.filenameTemplate)
-					.onChange(async v => {
-						this.plugin.settings.filenameTemplate = v;
-						await this.plugin.saveSettings();
-						refreshFilenamePreview(previewBox);
-					})
-			);
+		const filenameSetting = new Setting(containerEl).setName(t('SETTINGS_FILENAME_FORMAT_NAME'));
 
-		const infoParent =
-			filenameSetting.settingEl.querySelector('.setting-item-info') ?? filenameSetting.settingEl;
-		const previewBox = infoParent
-			.createDiv({ cls: 'csn-setting-filename-preview-wrap' })
-			.createDiv({ cls: 'csn-setting-filename-preview-box' });
-		refreshFilenamePreview(previewBox);
+		filenameSetting.descEl.empty();
+		const descP = filenameSetting.descEl.createEl('p', { cls: 'csn-setting-filename-desc' });
+		const momentA = descP.createEl('a', {
+			href: 'https://momentjs.com/docs/#/displaying/format/',
+			text: t('SETTINGS_FILENAME_MOMENT_LINK'),
+			cls: 'external-link'
+		});
+		momentA.setAttr('target', '_blank');
+		momentA.setAttr('rel', 'noopener noreferrer');
+		descP.appendText(t('SETTINGS_FILENAME_DESC_TAIL'));
+
+		const previewLine = filenameSetting.descEl.createDiv({ cls: 'csn-filename-preview-line' });
+		refreshFilenamePreview(previewLine);
+
+		filenameSetting.addText(text => {
+			text.setValue(this.plugin.settings.filenameTemplate).onChange(async v => {
+				this.plugin.settings.filenameTemplate = v;
+				await this.plugin.saveSettings();
+				refreshFilenamePreview(previewLine, text.getValue());
+			});
+			text.inputEl.addEventListener('input', () => {
+				refreshFilenamePreview(previewLine, text.getValue());
+			});
+		});
 
 		new Setting(containerEl)
 			.setName(t('SETTINGS_DEFAULT_TEMPLATE_NAME'))
@@ -591,15 +598,31 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME'))
 			.setDesc(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC'))
-			.addText(text =>
-				text
-					.setValue(String(this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier))
+			.addSlider(slider =>
+				slider
+					.setLimits(1, 8, 0.1)
+					.setValue(this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier)
+					.setInstant(true)
+					.setDynamicTooltip()
 					.onChange(async v => {
-						const n = parseFloat(v.replace(/,/g, '.'));
-						this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier = Number.isFinite(n)
-							? Math.max(1, Math.min(8, Math.round(n * 10) / 10))
-							: DEFAULT_SETTINGS.stickyAssistAlignSnapUnbindRangeMultiplier;
+						const n = Math.max(1, Math.min(8, Math.round(v * 10) / 10));
+						this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier = n;
 						await this.plugin.saveSettings();
+					})
+			)
+			.addExtraButton(btn =>
+				btn
+					.setIcon('rotate-ccw')
+					.setTooltip(
+						t('SETTINGS_SNAP_UNBIND_RANGE_RESET_TOOLTIP', {
+							value: String(DEFAULT_SETTINGS.stickyAssistAlignSnapUnbindRangeMultiplier)
+						})
+					)
+					.onClick(async () => {
+						this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier =
+							DEFAULT_SETTINGS.stickyAssistAlignSnapUnbindRangeMultiplier;
+						await this.plugin.saveSettings();
+						this.display();
 					})
 			);
 	}

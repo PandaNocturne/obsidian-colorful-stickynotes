@@ -1645,20 +1645,27 @@
   justify-content: flex-end;
   gap: 8px;
 }
-/* 文件名格式预览：外层占位 + 内层可视容器 */
-.csn-setting-filename-preview-wrap {
-  margin-top: 6px;
-  margin-bottom: 10px;
+/* 插件设置页：文件名格式说明与预览（均在 .setting-item-description 内） */
+.csn-setting-filename-desc {
+  margin: 0.35em 0 0;
+  line-height: var(--line-height-normal);
 }
-.csn-setting-filename-preview-box {
+.csn-filename-preview-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15em 0.35em;
+  margin-top: 0.45em;
   font-size: var(--font-ui-small);
+  line-height: var(--line-height-normal);
+  word-break: break-all;
 }
-.csn-filename-sample-line {
+.csn-filename-preview-label {
+  flex: 0 0 auto;
   color: var(--text-muted);
-  line-height: 1.5;
-  word-break: break-word;
 }
-.csn-filename-sample-value {
-  color: var(--text-normal);
-  margin-left: 4px;
+.csn-filename-preview-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-accent);
 }

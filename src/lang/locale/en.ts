@@ -38,9 +38,9 @@ export const en = {
 	SETTINGS_STICKY_FOLDER_NAME: 'Sticky notes folder',
 	SETTINGS_STICKY_FOLDER_DESC: 'New stickies are created under this path.',
 	SETTINGS_CHOOSE_FOLDER: 'Choose…',
-	SETTINGS_FILENAME_DESC:
-		'Same as the Core Daily notes plugin: the whole template is a Moment format string (https://momentjs.com/docs/#/displaying/format/)—no {{date}} wrapper. Slashes (/) create subfolders under the sticky folder (e.g. YYYY/YYYY-MM-DD). Legacy templates using {{date:…}} still work.',
-	SETTINGS_FILENAME_SAMPLE_INTRO: 'Sample path using the current format:',
+	SETTINGS_FILENAME_MOMENT_LINK: 'Moment syntax',
+	SETTINGS_FILENAME_DESC_TAIL: ', supports nested folders (use `/` in the template).',
+	SETTINGS_FILENAME_PREVIEW_LABEL: 'Preview:',
 	SETTINGS_FILENAME_INVALID: '(invalid format)',
 	SETTINGS_FILENAME_FORMAT_NAME: 'Filename format',
 
@@ -74,7 +74,7 @@ export const en = {
 	SETTINGS_HEADING_ASSIST: 'Snap alignment',
 	SETTINGS_SNAP_TRIGGER_NAME: 'Snap trigger mode',
 	SETTINGS_SNAP_TRIGGER_DESC:
-		'None: no snap. Auto: snap while dragging; hold Ctrl to detach from the group and move without snap. Ctrl: snap only while holding Ctrl when not bound; if bound, hold Ctrl or Alt to drag this sticky alone—on release, bindings clear only if it is outside (snap threshold × unbind range multiplier) of every bound peer; otherwise bindings stay and the grid layout runs; normal drag has no snap.',
+		'None: off. Auto: snap while dragging; hold Ctrl to detach temporarily. Ctrl: hold Ctrl to snap when ungrouped; when grouped, Ctrl/Alt solo-drag uses the threshold and range below to decide unbind.',
 	SETTINGS_SNAP_TRIGGER_NONE: 'None',
 	SETTINGS_SNAP_TRIGGER_AUTO: 'Automatic',
 	SETTINGS_SNAP_TRIGGER_CTRL: 'Ctrl (hold to snap)',
@@ -82,10 +82,11 @@ export const en = {
 	SETTINGS_SNAP_THRESHOLD_DESC: 'Snaps when distance is below this many pixels.',
 	SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME: 'Snap release range',
 	SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC:
-		'When deciding whether to keep or clear bindings after a Ctrl/Alt solo drag, the “still snapped” band uses snap threshold × this value (default 2). Larger = you must move farther away before bindings clear. Range 1–8, step 0.1.',
+		'Multiplier on the snap threshold for “still in snap range” after a solo drag (Ctrl mode). Higher = drag farther to clear bindings. Range 1–8.',
+	SETTINGS_SNAP_UNBIND_RANGE_RESET_TOOLTIP: 'Reset to default {value}',
 	SETTINGS_BIND_AFTER_SNAP_NAME: 'Bind windows after snap',
 	SETTINGS_BIND_AFTER_SNAP_DESC:
-		'After snapping, linked windows move together and tidy into a grid (equal width per column, equal height per row, driven by the largest sticky in that track). Detach while dragging: hold Ctrl in Automatic mode; hold Alt when snap is None; when snap is Ctrl-triggered, hold Ctrl or Alt if already bound, otherwise hold Alt. Hold Ctrl while resizing to resize alone without pushing neighbors; on release, the sticky expands to cover the grid cells it overlaps.',
+		'After snap, grouped windows move together and snap into a simple grid. Turn off to only align without grouping.',
 
 	SETTINGS_DEFAULT_VIEW_NAME: 'Default sticky view',
 	SETTINGS_MODE_SOURCE: 'Edit',
