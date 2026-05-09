@@ -156,7 +156,9 @@
 	border: 1px solid var(--background-modifier-border);
 }
 
+/* 调色板+色条容器：色条绝对定位，展开时不参与工具栏 flex 宽度，避免挤压窗口 */
 .csn-list-toolbar-color-wrap {
+	position: relative;
 	display: inline-flex;
 	align-items: center;
 	flex-wrap: nowrap;
@@ -169,11 +171,13 @@
 	color: var(--interactive-accent);
 }
 
+.csn-list-toolbar-color-wrap.is-expanded {
+	z-index: 45;
+}
+
 .csn-list-color-filter-strip {
 	display: none;
 	align-items: center;
-	flex: 0 1 auto;
-	min-width: 0;
 	// padding: 1px 5px;
 	// border-radius: var(--radius-s);
 	// border: 1px solid var(--background-modifier-border);
@@ -183,6 +187,19 @@
 
 .csn-list-toolbar-color-wrap.is-expanded .csn-list-color-filter-strip {
 	display: flex;
+	position: absolute;
+	top: 100%;
+	inset-inline-start: 0;
+	margin-block-start: 6px;
+	padding: 6px 8px;
+	width: max-content;
+	max-inline-size: calc(100vi - 20px);
+	flex-wrap: wrap;
+	box-sizing: border-box;
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-l);
 }
 
 .csn-list-color-filter-btns--compact {

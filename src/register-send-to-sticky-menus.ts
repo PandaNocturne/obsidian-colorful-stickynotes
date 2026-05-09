@@ -20,7 +20,7 @@ function addMoveToStickyMenuItem(menu: Menu, plugin: ColorfulStickyNotesPlugin, 
 	menu.addItem(item => {
 		item
 			.setTitle(t('CMD_MOVE_TO_STICKY_WINDOW'))
-			.setIcon('panel-right-open')
+			.setIcon('picture-in-picture')
 			.onClick(() => {
 				void plugin.moveFileToStickyWindow(file, sendStickyOpts);
 			});
@@ -58,7 +58,7 @@ export function registerSendToStickyMenus(plugin: ColorfulStickyNotesPlugin): vo
 			menu.addItem(item => {
 				item
 					.setTitle(t('CMD_MOVE_TO_STICKY_WINDOW'))
-					.setIcon('panel-right-open')
+					.setIcon('picture-in-picture')
 					.onClick(() => {
 						void (async () => {
 							for (const f of noteFiles) {
