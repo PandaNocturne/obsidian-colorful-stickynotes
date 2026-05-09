@@ -432,6 +432,27 @@ export class StickyNoteManager {
 	}
 
 	/**
+	 * 先持久化当前工作区布局，再新建无窗口快照的空白工作区并切换；
+	 * 关闭当前浮动便笺后走与普通切换相同的恢复逻辑（空布局时会新建一张便笺）。
+	 */
+	async createBlankWorkspace(): Promise<void> {
+		this.persistOpenWindows();
+		const id = `ws_${Date.now().toString(36)}`;
+		const n = this.workspaces.workspaces.length + 1;
+		const nw: StickyWorkspace = {
+			id,
+			name: t('WS_NEW_WORKSPACE_AUTO_NAME', { n }),
+			windows: [],
+			updatedAt: Date.now()
+		};
+		this.workspaces.workspaces.push(nw);
+		this.workspaces.activeWorkspaceId = id;
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+		this.closeAllOpenStickyWindows(true);
+		await this.restoreWorkspaceWindows();
+	}
+
+	/**
 	 * ??????????????????????????????????????????????????????????????????????????????????
 	 */
 	async switchWorkspaceAndRestore(wsId: string): Promise<void> {

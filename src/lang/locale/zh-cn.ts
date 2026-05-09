@@ -186,6 +186,9 @@ export const zhCn: Record<MessageKey, string> = {
 	MODAL_DELETE: '删除',
 	WS_PLACEHOLDER_SAVE_NAME: '输入名称以保存当前便笺工作区布局…',
 	WS_SAVE_ARIA_LABEL: '保存为新的便笺工作区',
+	WS_NEW_BLANK_ARIA: '新建空白便笺工作区',
+	WS_NEW_WORKSPACE_AUTO_NAME: '便笺工作区 {n}',
+	NOTICE_NEW_BLANK_WORKSPACE: '已新建并切换到空白便笺工作区',
 	NOTICE_ENTER_WORKSPACE_NAME: '请输入便笺工作区名称',
 	NOTICE_SAVED_AND_SWITCHED: '已保存并切换到该便笺工作区',
 	WS_BADGE_ACTIVE: '使用中',
@@ -194,6 +197,8 @@ export const zhCn: Record<MessageKey, string> = {
 	WS_DELETE_DEFAULT_ARIA: '删除便笺工作区（默认便笺工作区不可删除）',
 	NOTICE_DEFAULT_WS_CANNOT_DELETE: '默认便笺工作区不可删除',
 	WS_SWITCH_ARIA: '切换到该便笺工作区',
+	WS_CARD_SWITCH_HINT: '双击加载。',
+	WS_CARD_SWITCH_HINT_A11Y: '焦点在卡片上时按 Enter 加载。',
 	NOTICE_SWITCHED_WORKSPACE: '已切换到该便笺工作区',
 
 	WS_TIME_UNKNOWN: '修改时间未知',

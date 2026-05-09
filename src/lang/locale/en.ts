@@ -198,6 +198,9 @@ export const en = {
 	MODAL_DELETE: 'Delete',
 	WS_PLACEHOLDER_SAVE_NAME: 'Enter a name to save the current layout…',
 	WS_SAVE_ARIA_LABEL: 'Save as new sticky workspace',
+	WS_NEW_BLANK_ARIA: 'New blank sticky workspace',
+	WS_NEW_WORKSPACE_AUTO_NAME: 'Sticky workspace {n}',
+	NOTICE_NEW_BLANK_WORKSPACE: 'Created and switched to a new blank workspace',
 	NOTICE_ENTER_WORKSPACE_NAME: 'Enter a sticky workspace name',
 	NOTICE_SAVED_AND_SWITCHED: 'Saved and switched to this workspace',
 	WS_BADGE_ACTIVE: 'Active',
@@ -206,6 +209,8 @@ export const en = {
 	WS_DELETE_DEFAULT_ARIA: 'Delete workspace (default cannot be deleted)',
 	NOTICE_DEFAULT_WS_CANNOT_DELETE: 'The default workspace cannot be deleted',
 	WS_SWITCH_ARIA: 'Switch to this workspace',
+	WS_CARD_SWITCH_HINT: 'Double-click to load.',
+	WS_CARD_SWITCH_HINT_A11Y: 'Press Enter when focused to load.',
 	NOTICE_SWITCHED_WORKSPACE: 'Switched workspace',
 
 	WS_TIME_UNKNOWN: 'Modified time unknown',

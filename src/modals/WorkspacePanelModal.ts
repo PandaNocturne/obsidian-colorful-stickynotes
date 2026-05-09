@@ -132,44 +132,30 @@ export class WorkspacePanelModal extends Modal {
 		const mgr = this.plugin.stickies;
 		const data = mgr.workspaces;
 
-		const saveRow = this.contentEl.createDiv({ cls: 'csn-ws-panel-save-row' });
-		const nameInput = saveRow.createEl('input', {
-			type: 'text',
-			cls: 'csn-ws-panel-input',
-			attr: { placeholder: t('WS_PLACEHOLDER_SAVE_NAME') }
+		const gridEl = this.contentEl.createDiv({ cls: 'csn-ws-panel-grid' });
+		for (const ws of data.workspaces) {
+			this.renderWorkspaceTile(gridEl, ws, data.activeWorkspaceId, () => this.render());
+		}
+
+		const addTile = gridEl.createEl('button', {
+			cls: 'csn-ws-panel-add-tile',
+			attr: { type: 'button', 'aria-label': t('WS_NEW_BLANK_ARIA') }
 		});
-		const saveBtn = saveRow.createEl('button', {
-			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': t('WS_SAVE_ARIA_LABEL') }
-		});
-		setIcon(saveBtn, 'save');
-		saveBtn.addEventListener('click', async () => {
-			const v = nameInput.value;
-			if (!v.trim()) {
-				new Notice(t('NOTICE_ENTER_WORKSPACE_NAME'));
-				return;
-			}
-			saveBtn.disabled = true;
+		setIcon(addTile, 'plus');
+		addTile.addEventListener('click', async () => {
+			addTile.disabled = true;
 			try {
-				await mgr.createWorkspaceFromCurrentLayout(v);
-				nameInput.value = '';
-				new Notice(t('NOTICE_SAVED_AND_SWITCHED'));
+				await mgr.createBlankWorkspace();
+				new Notice(t('NOTICE_NEW_BLANK_WORKSPACE'));
 				this.render();
 			} finally {
-				saveBtn.disabled = false;
+				addTile.disabled = false;
 			}
 		});
-
-		this.contentEl.createDiv({ cls: 'csn-ws-panel-divider' });
-
-		const listEl = this.contentEl.createDiv({ cls: 'csn-ws-panel-list' });
-		for (const ws of data.workspaces) {
-			this.renderWorkspaceRow(listEl, ws, data.activeWorkspaceId, () => this.render());
-		}
 	}
 
-	private renderWorkspaceRow(
-		listEl: HTMLDivElement,
+	private renderWorkspaceTile(
+		gridEl: HTMLDivElement,
 		ws: StickyWorkspace,
 		activeId: string,
 		refresh: () => void
@@ -177,30 +163,34 @@ export class WorkspacePanelModal extends Modal {
 		const mgr = this.plugin.stickies;
 		const isActive = ws.id === activeId;
 
-		const row = listEl.createDiv({ cls: 'csn-ws-panel-item' });
-		const main = row.createDiv({ cls: 'csn-ws-panel-item-main' });
-		const titleRow = main.createDiv({ cls: 'csn-ws-panel-item-title-row' });
-		titleRow.createSpan({ text: ws.name, cls: 'csn-ws-panel-item-name' });
-		if (isActive) {
-			titleRow.createSpan({ text: t('WS_BADGE_ACTIVE'), cls: 'csn-ws-panel-badge' });
-		}
-		main.createDiv({
-			text: formatWorkspaceRelativeTime(ws.updatedAt),
-			cls: 'csn-ws-panel-item-meta'
+		const row = gridEl.createDiv({
+			cls: `csn-ws-panel-item csn-ws-panel-item--clickable${isActive ? ' csn-ws-panel-item--active' : ''}`
 		});
+		row.tabIndex = 0;
+		if (isActive) {
+			row.setAttribute('aria-current', 'true');
+			row.setAttribute('aria-label', `${ws.name}（${t('WS_BADGE_ACTIVE')}）`);
+		} else {
+			row.setAttribute(
+				'aria-label',
+				`${ws.name} — ${t('WS_CARD_SWITCH_HINT')} ${t('WS_CARD_SWITCH_HINT_A11Y')}`
+			);
+		}
 
-		const actions = row.createDiv({ cls: 'csn-ws-panel-item-actions' });
+		const actions = row.createDiv({ cls: 'csn-ws-panel-item-float-actions' });
 		const btnEdit = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
 			attr: { 'aria-label': t('WS_EDIT_NAME_ARIA') }
 		});
 		setIcon(btnEdit, 'pen-line');
-		btnEdit.addEventListener('click', () => {
+		btnEdit.addEventListener('click', e => {
+			e.stopPropagation();
 			new RenameStickyWorkspaceModal(this.app, ws.name, async name => {
 				await mgr.renameWorkspace(ws.id, name);
 				refresh();
 			}).open();
 		});
+		btnEdit.addEventListener('dblclick', e => e.stopPropagation());
 
 		const btnDel = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
@@ -211,7 +201,8 @@ export class WorkspacePanelModal extends Modal {
 		if (isDefault) {
 			btnDel.setAttribute('aria-label', t('WS_DELETE_DEFAULT_ARIA'));
 		}
-		btnDel.addEventListener('click', () => {
+		btnDel.addEventListener('click', e => {
+			e.stopPropagation();
 			if (isDefault) {
 				new Notice(t('NOTICE_DEFAULT_WS_CANNOT_DELETE'));
 				return;
@@ -225,21 +216,37 @@ export class WorkspacePanelModal extends Modal {
 				refresh();
 			}).open();
 		});
+		btnDel.addEventListener('dblclick', e => e.stopPropagation());
 
-		const btnSwitch = actions.createEl('button', {
-			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': t('WS_SWITCH_ARIA') }
+		const main = row.createDiv({ cls: 'csn-ws-panel-item-main' });
+		const titleRow = main.createDiv({ cls: 'csn-ws-panel-item-title-row' });
+		titleRow.createSpan({ text: ws.name, cls: 'csn-ws-panel-item-name' });
+		if (isActive) {
+			titleRow.createSpan({ text: t('WS_BADGE_ACTIVE'), cls: 'csn-ws-panel-badge' });
+		}
+		main.createDiv({
+			text: formatWorkspaceRelativeTime(ws.updatedAt),
+			cls: 'csn-ws-panel-item-meta'
 		});
-		setIcon(btnSwitch, 'download');
-		btnSwitch.addEventListener('click', async () => {
-			btnSwitch.disabled = true;
-			try {
-				await mgr.switchWorkspaceAndRestore(ws.id);
-				new Notice(t('NOTICE_SWITCHED_WORKSPACE'));
-				refresh();
-			} finally {
-				btnSwitch.disabled = false;
-			}
+
+		const activateWorkspace = async (): Promise<void> => {
+			if (isActive) return;
+			await mgr.switchWorkspaceAndRestore(ws.id);
+			new Notice(t('NOTICE_SWITCHED_WORKSPACE'));
+			refresh();
+		};
+
+		row.addEventListener('dblclick', e => {
+			const el = e.target;
+			if (el instanceof HTMLElement && el.closest('.csn-ws-panel-item-float-actions')) return;
+			void activateWorkspace();
+		});
+
+		row.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key !== 'Enter' && e.key !== ' ') return;
+			if (e.target !== row) return;
+			e.preventDefault();
+			void activateWorkspace();
 		});
 	}
 
