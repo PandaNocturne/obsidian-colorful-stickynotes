@@ -91,6 +91,10 @@
   min-height: 0;
   overflow: hidden;
 }
+/* 首次 openFile / loadIfDeferred 完成前隐藏正文，避免空叶视图闪白 */
+.csn-sticky--content-pending .csn-sticky-body {
+  visibility: hidden;
+}
 /* 打补丁 */
 .csn-sticky-body {
   --file-line-width: calc(100% - 16px);

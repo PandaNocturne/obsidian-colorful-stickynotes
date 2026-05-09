@@ -234,6 +234,7 @@ export class StickyNotePopover {
 		const left = b ? b.left : Math.max(VIEWPORT_MARGIN, Math.round((window.innerWidth - w) / 2));
 		const top = b ? b.top : Math.max(VIEWPORT_MARGIN, Math.round((window.innerHeight - h) / 2));
 		this.applyBounds({ left, top, width: w, height: h }, false);
+		this.rootEl.addClass('csn-sticky--content-pending');
 
 		this.plugin.registerEvent(
 			this.plugin.app.workspace.on('layout-change', () => {
@@ -872,6 +873,7 @@ export class StickyNotePopover {
 		await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 		await leaf.loadIfDeferred?.();
 		if (this.disposed) return;
+		this.rootEl.removeClass('csn-sticky--content-pending');
 		this.markdownModeTogglePending = false;
 		this.syncModeToggleUi();
 		this.syncBottomBarHeightCss();
