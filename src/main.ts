@@ -16,7 +16,6 @@ import {
 	normalizeNoteListColorFilters,
 	normalizeNoteListPinnedPathsStorage,
 	pruneNoteListPinnedPathsAfterDelete,
-	pruneNoteListWorkspaceFilterId,
 	resolveNoteListWorkspaceFilterIdAfterMerge,
 	rawPluginDataHasNoteListKeys,
 	saveNoteListPersistedFile,
@@ -447,12 +446,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 	}
 
-	/** 校正便笺列表「工作区」筛选 id；无效或已删除的工作区则清空为不选。 */
+	/** 便笺列表已不再提供工作区筛选：清空遗留的持久化值。 */
 	private async syncNoteListWorkspaceFiltersAfterWorkspacesLoad(): Promise<void> {
-		const valid = new Set(this.stickies.workspaces.workspaces.map(w => w.id));
-		const next = pruneNoteListWorkspaceFilterId(this.settings.noteListWorkspaceFilterId, valid);
-		if (next !== this.settings.noteListWorkspaceFilterId) {
-			this.settings.noteListWorkspaceFilterId = next;
+		if (this.settings.noteListWorkspaceFilterId !== null) {
+			this.settings.noteListWorkspaceFilterId = null;
 			await this.saveSettings();
 		}
 	}
