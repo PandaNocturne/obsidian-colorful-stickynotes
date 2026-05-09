@@ -197,6 +197,11 @@ class DeleteStickyWorkspaceConfirmModal extends Modal {
 export class WorkspacePanelModal extends Modal {
 	/** 正在执行 `finalizeWorkspaceSwitch` 的工作区 id，用于角标加载态。 */
 	private openingWorkspaceId: string | null = null;
+	/**
+	 * 弹窗打开时 Obsidian 会把焦点落到第一个 tabbable；首张工作区卡片即获焦并出现 :focus-visible 描边。
+	 * 仅在本次打开后的首次 render 结束时 blur 一次，避免「额外紫框」；后续 refresh 不干扰键盘导航。
+	 */
+	private clearInitialWorkspaceTileFocusPending = false;
 
 	constructor(
 		app: App,
@@ -210,6 +215,7 @@ export class WorkspacePanelModal extends Modal {
 		this.modalEl.addClass('csn-workspace-panel-modal');
 		this.contentEl.empty();
 		this.contentEl.addClass('csn-workspace-panel');
+		this.clearInitialWorkspaceTileFocusPending = true;
 		this.render();
 	}
 
@@ -281,6 +287,23 @@ export class WorkspacePanelModal extends Modal {
 			if (!fromId) return;
 			void mgr.reorderWorkspaceToEnd(fromId).then(() => this.render());
 		});
+
+		if (this.clearInitialWorkspaceTileFocusPending) {
+			this.clearInitialWorkspaceTileFocusPending = false;
+			window.requestAnimationFrame(() => {
+				window.requestAnimationFrame(() => {
+					const ae = document.activeElement;
+					if (
+						ae instanceof HTMLElement &&
+						ae.classList.contains('csn-ws-panel-item') &&
+						ae.classList.contains('csn-ws-panel-item--clickable') &&
+						this.modalEl.contains(ae)
+					) {
+						ae.blur();
+					}
+				});
+			});
+		}
 	}
 
 	private renderWorkspaceTile(
