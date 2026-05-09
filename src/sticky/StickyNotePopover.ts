@@ -45,6 +45,8 @@ export interface StickyNotePopoverOptions {
 	edgeAutoStretchHeight: boolean;
 	/** 双击头部切换拉伸/恢复。 */
 	headerDoubleClickStretch: boolean;
+	/** 为 false 时禁止贴边自动全高与头部双击 / setStretched(true)（如跨多行 gridSpan）。默认允许。 */
+	allowViewportHeightStretch?: () => boolean;
 	/** 将要打开 Markdown 便笺时，外壳阶段即显示阅读/编辑切换（占位为阅读），叶视图就绪后再同步真实模式。 */
 	expectMarkdownOpen?: boolean;
 	/** 正文区域 zoom（0.3–1），作用于 `.view-content`。 */
@@ -386,6 +388,10 @@ export class StickyNotePopover {
 		return this.edgeStretchRestoreState !== null;
 	}
 
+	private viewportHeightStretchAllowed(): boolean {
+		return this.options.allowViewportHeightStretch?.() !== false;
+	}
+
 	/**
 	 * @param opts.snapHorizontalToViewport 为 true（默认）时，全高拉伸同时把 left 贴到视口左或右缘（单窗交互）。
 	 * 为 false 时保持当前 left，仅 top/高度变化，供同行绑定组内同步，避免整行被各自贴边打乱。
@@ -393,6 +399,7 @@ export class StickyNotePopover {
 	setStretched(stretched: boolean, opts?: { snapHorizontalToViewport?: boolean }): void {
 		if (stretched) {
 			if (this.collapsed || this.disposed) return;
+			if (!this.viewportHeightStretchAllowed()) return;
 			const b = this.getBounds();
 			if (!this.edgeStretchRestoreState) {
 				this.edgeStretchRestoreState = { top: b.top, height: b.height };
@@ -748,6 +755,7 @@ export class StickyNotePopover {
 			this.options.onStretchChange?.();
 			return;
 		}
+		if (!this.viewportHeightStretchAllowed()) return;
 		if (!this.edgeStretchRestoreState) {
 			this.edgeStretchRestoreState = { top: b.top, height: b.height };
 		}
@@ -1239,6 +1247,11 @@ export class StickyNotePopover {
 
 	private syncEdgeAutoStretchFromCurrentBounds(): void {
 		if (this.disposed || this.collapsed || this.isDragging || this.isResizing) return;
+		if (!this.viewportHeightStretchAllowed()) {
+			this.manualHeaderStretchActive = false;
+			this.restoreFromEdgeStretchIfNeeded();
+			return;
+		}
 		if (this.manualHeaderStretchActive) return;
 		if (!this.edgeAutoStretchHeight) {
 			this.restoreFromEdgeStretchIfNeeded();

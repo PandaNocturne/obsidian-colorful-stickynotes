@@ -803,7 +803,11 @@ export class StickyNoteManager {
 			onDragEnd: e => this.handleDragEnd(id, e),
 			onResizeStart: (e, dir) => this.handleResizeStart(id, e, dir),
 			onResizeMove: (next, e, dir) => this.handleResizeMove(id, next, e, dir),
-			onResizeEnd: e => this.handleResizeEnd(id, e)
+			onResizeEnd: e => this.handleResizeEnd(id, e),
+			allowViewportHeightStretch: () => {
+				const g = this.stickyGridSpan.get(id);
+				return !(g && g.rowMin < g.rowMax);
+			}
 		});
 	}
 
@@ -1127,23 +1131,71 @@ export class StickyNoteManager {
 		return [...set].filter(other => this.popovers.has(other));
 	}
 
+	private static bindingRowIntervalsOverlap(
+		a: { rowMin: number; rowMax: number },
+		b: { rowMin: number; rowMax: number }
+	): boolean {
+		return a.rowMin <= b.rowMax && b.rowMin <= a.rowMax;
+	}
+
+	/** 与 `layoutBindingGroupAsGrid` 相同的 span / placement 管线，供折叠同步按「网格行」过滤同伴。 */
+	private resolveBindingChromeLayoutContext(group: string[]): {
+		spanById: Map<string, StickyGridSpan>;
+		placement: Map<string, { c: number; r: number }>;
+	} | null {
+		const topo = this.computeBindingGroupNorm(group);
+		if (!topo) return null;
+		const spanById = this.collectSpanMapForGroup(group, undefined);
+		this.pruneStaleGridSpans(topo.norm, spanById);
+		this.dedupeOverlappingSpans(spanById);
+		const { placement } = this.resolveVirtualPlacement(
+			topo.norm,
+			topo.maxC,
+			topo.maxR,
+			group,
+			spanById
+		);
+		return { spanById, placement };
+	}
+
+	private memberRowIntervalFromMaps(
+		memberId: string,
+		spanById: Map<string, StickyGridSpan>,
+		placement: Map<string, { c: number; r: number }>
+	): { rowMin: number; rowMax: number } | null {
+		const span = spanById.get(memberId);
+		if (span) return { rowMin: span.rowMin, rowMax: span.rowMax };
+		const cell = placement.get(memberId);
+		if (!cell) return null;
+		return { rowMin: cell.r, rowMax: cell.r };
+	}
+
 	/** ?????????/????????????????????????????????????????????????????????? repair??? */
 	private applyBindingPeersChromeStateOnly(sourceId: string): boolean {
 		const src = this.popovers.get(sourceId);
 		if (!src) return false;
 		const group = this.resolveBindingGroupIds(sourceId);
 		if (group.length <= 1) return false;
+		const ctx = this.resolveBindingChromeLayoutContext(group);
+		if (!ctx) return true;
+		const srcIv = this.memberRowIntervalFromMaps(sourceId, ctx.spanById, ctx.placement);
+		if (!srcIv) return true;
 		const collapsed = src.getCollapsed();
 		const stretched = src.isStretched();
 		for (const gid of group) {
 			if (gid === sourceId) continue;
+			const peerIv = this.memberRowIntervalFromMaps(gid, ctx.spanById, ctx.placement);
+			if (!peerIv || !StickyNoteManager.bindingRowIntervalsOverlap(srcIv, peerIv)) continue;
 			const p = this.popovers.get(gid);
 			if (!p) continue;
 			if (p.getCollapsed() !== collapsed) {
 				p.setCollapsed(collapsed, { silent: true });
 			}
-			if (p.isStretched() !== stretched) {
-				p.setStretched(stretched, { snapHorizontalToViewport: false });
+			const peerGs = this.stickyGridSpan.get(gid);
+			const peerMultiRow = !!(peerGs && peerGs.rowMin < peerGs.rowMax);
+			const targetStretched = peerMultiRow && stretched ? false : stretched;
+			if (p.isStretched() !== targetStretched) {
+				p.setStretched(targetStretched, { snapHorizontalToViewport: false });
 			}
 		}
 		return true;
@@ -1210,9 +1262,7 @@ export class StickyNoteManager {
 					anchorId = gid;
 				}
 			}
-			if (this.applyBindingPeersChromeStateOnly(anchorId)) {
-				repairAnchors.push(anchorId);
-			}
+			repairAnchors.push(anchorId);
 		}
 		window.requestAnimationFrame(() => {
 			window.requestAnimationFrame(() => {
