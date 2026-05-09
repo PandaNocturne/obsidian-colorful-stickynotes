@@ -41,6 +41,8 @@ const GRID_LAYOUT_ITERATIONS = 4;
 /** ??????/???????????????????????????????????????????????????? */
 const GRID_FALLBACK_MIN_W = 280;
 const GRID_FALLBACK_MIN_H = 200;
+/** 暂时关闭网格跨行/跨列（Ctrl 缩放后占多格）及持久化；改为 `true` 恢复。 */
+const ENABLE_GRID_MULTI_CELL_SPAN = false;
 
 /** ?????????????????????? obsidian ??????????????? `App` ?????? `commands`??? */
 function executeCommandById(app: App, commandId: string): boolean {
@@ -396,8 +398,10 @@ export class StickyNoteManager {
 				yamlVisible: pop.getYamlVisible()
 			};
 			if (popColor != null) row.color = popColor;
-			const gs = this.stickyGridSpan.get(id);
-			if (gs) row.gridSpan = { ...gs };
+			if (ENABLE_GRID_MULTI_CELL_SPAN) {
+				const gs = this.stickyGridSpan.get(id);
+				if (gs) row.gridSpan = { ...gs };
+			}
 			if (file.extension === 'md') {
 				row.markdownMode = pop.getMarkdownMode();
 			}
@@ -805,6 +809,7 @@ export class StickyNoteManager {
 			onResizeMove: (next, e, dir) => this.handleResizeMove(id, next, e, dir),
 			onResizeEnd: e => this.handleResizeEnd(id, e),
 			allowViewportHeightStretch: () => {
+				if (!ENABLE_GRID_MULTI_CELL_SPAN) return true;
 				const g = this.stickyGridSpan.get(id);
 				return !(g && g.rowMin < g.rowMax);
 			}
@@ -1020,7 +1025,7 @@ export class StickyNoteManager {
 			defaultMarkdownMode: restoredMdMode
 		});
 		this.popovers.set(id, pop);
-		if (this.isValidPersistedGridSpan(serial.gridSpan)) {
+		if (ENABLE_GRID_MULTI_CELL_SPAN && this.isValidPersistedGridSpan(serial.gridSpan)) {
 			this.stickyGridSpan.set(id, serial.gridSpan!);
 		}
 		if (Array.isArray(serial.bindings) && serial.bindings.length > 0) {
@@ -1191,7 +1196,7 @@ export class StickyNoteManager {
 			if (p.getCollapsed() !== collapsed) {
 				p.setCollapsed(collapsed, { silent: true });
 			}
-			const peerGs = this.stickyGridSpan.get(gid);
+			const peerGs = ENABLE_GRID_MULTI_CELL_SPAN ? this.stickyGridSpan.get(gid) : undefined;
 			const peerMultiRow = !!(peerGs && peerGs.rowMin < peerGs.rowMax);
 			const targetStretched = peerMultiRow && stretched ? false : stretched;
 			if (p.isStretched() !== targetStretched) {
@@ -1628,7 +1633,11 @@ export class StickyNoteManager {
 			let spanOpts:
 				| { multiCellSpanForId: { id: string; colMin: number; colMax: number; rowMin: number; rowMax: number } }
 				| undefined;
-			if (session.ctrlSpanningResize && session.groupIds.length > 1) {
+			if (
+				ENABLE_GRID_MULTI_CELL_SPAN &&
+				session.ctrlSpanningResize &&
+				session.groupIds.length > 1
+			) {
 				const span = this.computeMultiCellSpanFromResize(id);
 				if (span) {
 					spanOpts = { multiCellSpanForId: { id, ...span } };
@@ -1957,6 +1966,7 @@ export class StickyNoteManager {
 		}
 	): Map<string, StickyGridSpan> {
 		const m = new Map<string, StickyGridSpan>();
+		if (!ENABLE_GRID_MULTI_CELL_SPAN) return m;
 		for (const id of group) {
 			const x = this.stickyGridSpan.get(id);
 			if (x) m.set(id, { ...x });
