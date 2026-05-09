@@ -541,6 +541,19 @@ export class StickyNoteManager {
 		});
 	}
 
+	/** 关闭该笔记对应的浮动便笺窗口（与从窗口关闭一致，含空白便笺确认）。 */
+	async closeStickyWindowForFile(file: TFile): Promise<void> {
+		const ids: string[] = [];
+		for (const [id, pop] of this.popovers) {
+			const vf =
+				pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
+			if (vf?.path === file.path) ids.push(id);
+		}
+		for (const id of ids) {
+			await this.handleStickyCloseRequest(id);
+		}
+	}
+
 	/**
 	 * 在便笺中打开该文件（行为同 openStickyForFile），并关闭主工作区中仍打开该文件的叶标签（不含便笺浮动叶）。
 	 */

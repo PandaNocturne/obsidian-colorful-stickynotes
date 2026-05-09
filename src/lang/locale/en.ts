@@ -166,6 +166,8 @@ export const en = {
 	LIST_PAGINATION_PAGE_ARIA: 'Page {page}',
 	LIST_EMPTY: 'No matching stickies',
 	OPEN_NOTE: 'Open note',
+	OPEN_STICKY_FLOAT: 'Open sticky',
+	CLOSE_STICKY_FLOAT: 'Close sticky',
 	CHANGE_BG: 'Change background',
 	LIST_ARCHIVE_CARD: 'Archive sticky',
 	LIST_UNARCHIVE_CARD: 'Unarchive sticky',

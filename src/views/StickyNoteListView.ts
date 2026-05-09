@@ -487,15 +487,8 @@ export class StickyNoteListView extends ItemView {
 			const rawListColor = (card as HTMLElement).dataset.csnListColor;
 			const color: StickyColorId | null =
 				rawListColor && rawListColor.length > 0 ? (rawListColor as StickyColorId) : null;
+			const floatOpen = this.plugin.stickies.getOpenStickyNotePaths().has(f.path);
 			const menu = new Menu();
-			menu.addItem(item => {
-				item.setTitle(t('OPEN_NOTE'))
-					.setIcon('file-text')
-					.onClick(() => {
-						void this.app.workspace.getLeaf('tab').openFile(f);
-					});
-			});
-			menu.addSeparator();
 			menu.addItem(item => {
 				item.setTitle(t('CHANGE_BG')).setIcon('palette');
 				const sub = item.setSubmenu();
@@ -511,6 +504,29 @@ export class StickyNoteListView extends ItemView {
 						});
 					});
 				}
+			});
+			menu.addItem(item => {
+				item.setTitle(t('OPEN_STICKY_FLOAT'))
+					.setIcon('square-pen')
+					.onClick(() => {
+						void this.plugin.stickies.openStickyForFile(f);
+					});
+			});
+			menu.addItem(item => {
+				item.setTitle(t('OPEN_NOTE'))
+					.setIcon('file-text')
+					.onClick(() => {
+						void this.app.workspace.getLeaf('tab').openFile(f);
+					});
+			});
+			menu.addItem(item => {
+				item.setTitle(t('CLOSE_STICKY_FLOAT'))
+					.setIcon('x')
+					.setDisabled(!floatOpen)
+					.onClick(() => {
+						if (!floatOpen) return;
+						void this.plugin.stickies.closeStickyWindowForFile(f);
+					});
 			});
 			menu.addSeparator();
 			const archivedNow = (card as HTMLElement).dataset.csnArchived === 'true';

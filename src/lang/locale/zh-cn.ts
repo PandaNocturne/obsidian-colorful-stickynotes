@@ -155,6 +155,8 @@ export const zhCn: Record<MessageKey, string> = {
 	LIST_PAGINATION_PAGE_ARIA: '第 {page} 页',
 	LIST_EMPTY: '没有匹配的便笺',
 	OPEN_NOTE: '打开笔记',
+	OPEN_STICKY_FLOAT: '打开便笺',
+	CLOSE_STICKY_FLOAT: '关闭便笺',
 	CHANGE_BG: '修改背景',
 	LIST_ARCHIVE_CARD: '归档卡片',
 	LIST_UNARCHIVE_CARD: '取消归档',
