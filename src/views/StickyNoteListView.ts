@@ -798,15 +798,23 @@ export class StickyNoteListView extends ItemView {
 			if (!node || !canvasColor) return;
 			node.color = canvasColor;
 		};
-		const maybeAutoFitHeight = (v: CanvasViewLike, node: { onResizeDblclick?: (e: MouseEvent, pos: 'top' | 'bottom' | 'left' | 'right') => void } | null | undefined): void => {
+		const autoFitHeightForNodes = async (
+			v: CanvasViewLike,
+			nodes: Array<{ onResizeDblclick?: (e: MouseEvent, pos: 'top' | 'bottom' | 'left' | 'right') => void }>
+		): Promise<void> => {
 			if (!this.plugin.settings.canvasLinkAutoFitHeight) return;
-			if (!node || typeof node.onResizeDblclick !== 'function') return;
-			window.requestAnimationFrame(() => {
-				window.requestAnimationFrame(() => {
-					node.onResizeDblclick?.(new MouseEvent('dblclick'), 'bottom');
-					void v.canvas?.requestSave?.();
-				});
-			});
+			if (nodes.length > 1) return;
+			const fitTargets = nodes.filter(n => typeof n.onResizeDblclick === 'function');
+			if (fitTargets.length === 0) return;
+			// 批量导入时避免并发触发双击自适应：先等待画布稳定，再逐个触发并打帧。
+			for (let fr = 0; fr < 2; fr++) {
+				await new Promise<void>(r => requestAnimationFrame(() => r()));
+			}
+			for (const n of fitTargets) {
+				n.onResizeDblclick?.(new MouseEvent('dblclick'), 'bottom');
+				await v.canvas?.requestFrame?.();
+			}
+			await v.canvas?.requestSave?.();
 		};
 		const offsetPos = (pos: unknown, dx: number, dy: number): unknown => {
 			if (!pos || typeof pos !== 'object') return pos;
@@ -903,7 +911,7 @@ export class StickyNoteListView extends ItemView {
 				}
 
 				void v.canvas?.requestSave?.();
-				for (const n of createdNodes) maybeAutoFitHeight(v, n);
+				await autoFitHeightForNodes(v, createdNodes);
 
 				if (
 					this.plugin.settings.canvasLinkZoomToSelection &&
