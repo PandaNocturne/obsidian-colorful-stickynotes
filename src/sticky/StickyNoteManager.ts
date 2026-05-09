@@ -503,6 +503,36 @@ export class StickyNoteManager {
 		new Notice(t('NOTICE_WORKSPACE_COPIED'));
 	}
 
+	/** 将工作区拖到另一张卡片前时：插入到 `beforeId` 之前。 */
+	async reorderWorkspaceBefore(draggedId: string, beforeId: string): Promise<void> {
+		if (draggedId === beforeId) return;
+		const list = this.workspaces.workspaces;
+		const fromIdx = list.findIndex(w => w.id === draggedId);
+		const toIdx = list.findIndex(w => w.id === beforeId);
+		if (fromIdx < 0 || toIdx < 0) return;
+		const next = [...list];
+		const [moved] = next.splice(fromIdx, 1);
+		if (moved === undefined) return;
+		const insertAt = next.findIndex(w => w.id === beforeId);
+		if (insertAt < 0) return;
+		next.splice(insertAt, 0, moved);
+		this.workspaces.workspaces = next;
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+	}
+
+	/** 拖到「新建」格上时移到列表末尾。 */
+	async reorderWorkspaceToEnd(draggedId: string): Promise<void> {
+		const list = this.workspaces.workspaces;
+		const fromIdx = list.findIndex(w => w.id === draggedId);
+		if (fromIdx < 0) return;
+		const next = [...list];
+		const [moved] = next.splice(fromIdx, 1);
+		if (moved === undefined) return;
+		next.push(moved);
+		this.workspaces.workspaces = next;
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+	}
+
 	private persistOpenWindows(): void {
 		const ws = this.activeWorkspace();
 		if (!ws) return;

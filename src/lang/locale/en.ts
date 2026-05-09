@@ -194,6 +194,7 @@ export const en = {
 	WS_NAME_LABEL: 'Name',
 	WS_REMARK_LABEL: 'Notes',
 	WS_REMARK_PLACEHOLDER: 'Optional; shown on the workspace card',
+	WS_REMARK_EMPTY_PLACEHOLDER: 'No notes',
 	WS_DELETE_TITLE: 'Delete sticky workspace',
 	WS_DELETE_BODY: 'Delete sticky workspace “{name}”? This cannot be undone.',
 	MODAL_CANCEL: 'Cancel',
@@ -218,6 +219,7 @@ export const en = {
 	WS_DELETE_DEFAULT_ARIA: 'Delete workspace (default cannot be deleted)',
 	NOTICE_DEFAULT_WS_CANNOT_DELETE: 'The default workspace cannot be deleted',
 	WS_SWITCH_ARIA: 'Switch to this workspace',
+	WS_REORDER_DRAG_ARIA: 'Drag to reorder workspaces',
 	NOTICE_SWITCHED_WORKSPACE: 'Switched workspace',
 
 	WS_TIME_UNKNOWN: 'Modified time unknown',

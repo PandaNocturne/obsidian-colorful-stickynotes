@@ -182,6 +182,7 @@ export const zhCn: Record<MessageKey, string> = {
 	WS_NAME_LABEL: '名称',
 	WS_REMARK_LABEL: '备注',
 	WS_REMARK_PLACEHOLDER: '可选，显示在工作区卡片上',
+	WS_REMARK_EMPTY_PLACEHOLDER: '暂无备注',
 	WS_DELETE_TITLE: '删除便笺工作区',
 	WS_DELETE_BODY: '确定删除便笺工作区「{name}」？此操作不可撤销。',
 	MODAL_CANCEL: '取消',
@@ -206,6 +207,7 @@ export const zhCn: Record<MessageKey, string> = {
 	WS_DELETE_DEFAULT_ARIA: '删除便笺工作区（默认便笺工作区不可删除）',
 	NOTICE_DEFAULT_WS_CANNOT_DELETE: '默认便笺工作区不可删除',
 	WS_SWITCH_ARIA: '切换到该便笺工作区',
+	WS_REORDER_DRAG_ARIA: '拖动排序工作区',
 	NOTICE_SWITCHED_WORKSPACE: '已切换到该便笺工作区',
 
 	WS_TIME_UNKNOWN: '修改时间未知',

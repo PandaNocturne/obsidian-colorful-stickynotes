@@ -4,6 +4,9 @@ import type ColorfulStickyNotesPlugin from '../main';
 import { saveWorkspacesFile } from '../workspace-store';
 import type { StickyWorkspace } from '../types';
 
+/** HTML5 DnD 用 payload（text/plain 兼容性最好） */
+const WORKSPACE_DND_MIME = 'text/plain';
+
 function formatWorkspaceRelativeTime(updatedAt: number | undefined): string {
 	if (updatedAt === undefined || !Number.isFinite(updatedAt)) {
 		return t('WS_TIME_UNKNOWN');
@@ -248,6 +251,28 @@ export class WorkspacePanelModal extends Modal {
 			e.preventDefault();
 			openNewBlankWorkspace();
 		});
+
+		const clearAddDropStyle = (): void => {
+			addTile.classList.remove('csn-ws-panel-add-tile--drop-target');
+		};
+		addTile.addEventListener('dragover', (e: DragEvent) => {
+			if (!e.dataTransfer?.types.includes(WORKSPACE_DND_MIME)) return;
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'move';
+			addTile.classList.add('csn-ws-panel-add-tile--drop-target');
+		});
+		addTile.addEventListener('dragleave', (e: DragEvent) => {
+			const r = e.relatedTarget as Node | null;
+			if (r && addTile.contains(r)) return;
+			clearAddDropStyle();
+		});
+		addTile.addEventListener('drop', (e: DragEvent) => {
+			e.preventDefault();
+			clearAddDropStyle();
+			const fromId = e.dataTransfer?.getData(WORKSPACE_DND_MIME);
+			if (!fromId) return;
+			void mgr.reorderWorkspaceToEnd(fromId).then(() => this.render());
+		});
 	}
 
 	private renderWorkspaceTile(
@@ -270,6 +295,26 @@ export class WorkspacePanelModal extends Modal {
 			row.setAttribute('aria-label', ws.name);
 		}
 
+		const dragHandle = row.createDiv({
+			cls: 'csn-ws-panel-item-drag',
+			attr: { draggable: 'true', 'aria-label': t('WS_REORDER_DRAG_ARIA') }
+		});
+		setIcon(dragHandle, 'move');
+		dragHandle.addEventListener('click', e => e.stopPropagation());
+		dragHandle.addEventListener('dragstart', (e: DragEvent) => {
+			e.stopPropagation();
+			row.classList.add('csn-ws-panel-item--dragging');
+			e.dataTransfer?.setData(WORKSPACE_DND_MIME, ws.id);
+			e.dataTransfer!.effectAllowed = 'move';
+		});
+		dragHandle.addEventListener('dragend', () => {
+			row.classList.remove('csn-ws-panel-item--dragging');
+			for (const el of Array.from(gridEl.querySelectorAll('.csn-ws-panel-item--drop-target'))) {
+				el.classList.remove('csn-ws-panel-item--drop-target');
+			}
+			gridEl.querySelector('.csn-ws-panel-add-tile')?.classList.remove('csn-ws-panel-add-tile--drop-target');
+		});
+
 		if (isActive) {
 			row.createSpan({
 				text: t('WS_BADGE_ACTIVE'),
@@ -280,11 +325,36 @@ export class WorkspacePanelModal extends Modal {
 		const main = row.createDiv({ cls: 'csn-ws-panel-item-main' });
 		const titleRow = main.createDiv({ cls: 'csn-ws-panel-item-title-row' });
 		titleRow.createSpan({ text: ws.name, cls: 'csn-ws-panel-item-name' });
+
+		row.addEventListener('dragover', (e: DragEvent) => {
+			if (!e.dataTransfer?.types.includes(WORKSPACE_DND_MIME)) return;
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'move';
+			row.classList.add('csn-ws-panel-item--drop-target');
+		});
+		row.addEventListener('dragleave', (e: DragEvent) => {
+			const r = e.relatedTarget as Node | null;
+			if (r && row.contains(r)) return;
+			row.classList.remove('csn-ws-panel-item--drop-target');
+		});
+		row.addEventListener('drop', (e: DragEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			row.classList.remove('csn-ws-panel-item--drop-target');
+			const fromId = e.dataTransfer?.getData(WORKSPACE_DND_MIME);
+			if (!fromId || fromId === ws.id) return;
+			void mgr.reorderWorkspaceBefore(fromId, ws.id).then(() => refresh());
+		});
 		const remarkText = ws.remark?.trim();
 		if (remarkText) {
 			main.createDiv({
 				text: remarkText,
 				cls: 'csn-ws-panel-item-remark'
+			});
+		} else {
+			main.createDiv({
+				text: t('WS_REMARK_EMPTY_PLACEHOLDER'),
+				cls: 'csn-ws-panel-item-remark csn-ws-panel-item-remark--placeholder'
 			});
 		}
 
@@ -357,6 +427,7 @@ export class WorkspacePanelModal extends Modal {
 		row.addEventListener('click', e => {
 			const el = e.target;
 			if (el instanceof HTMLElement && el.closest('.csn-ws-panel-item-float-actions')) return;
+			if (el instanceof HTMLElement && el.closest('.csn-ws-panel-item-drag')) return;
 			void activateWorkspace();
 		});
 
