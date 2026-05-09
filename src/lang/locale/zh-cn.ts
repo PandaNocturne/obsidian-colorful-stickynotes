@@ -206,8 +206,6 @@ export const zhCn: Record<MessageKey, string> = {
 	WS_DELETE_ARIA: '删除便笺工作区',
 	WS_SWITCH_ARIA: '切换到该便笺工作区',
 	WS_REORDER_DRAG_ARIA: '拖动排序工作区',
-	NOTICE_SWITCHED_WORKSPACE: '已切换到该便笺工作区',
-	NOTICE_CLOSED_WORKSPACE: '已取消选中便笺工作区（浮动便笺已关闭）',
 	WS_TOGGLE_OPEN_HINT: '单击打开',
 	WS_TOGGLE_CLOSE_HINT: '再次单击关闭',
 

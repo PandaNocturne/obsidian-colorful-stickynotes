@@ -101,6 +101,11 @@ export class StickyNoteManager {
 	private workspaceSwitchGeneration = 0;
 	/** 串行化 finalize，避免两次切换的 flush/close/restore 交错执行。 */
 	private workspaceSwitchTail: Promise<void> = Promise.resolve();
+	/**
+	 * 与 {@link workspaceSwitchGeneration} 对齐：存在时表示切换/关闭流程进行中，
+	 * 禁止常规持久化与列表写操作，直至 finalize / deselect 在 finally 中解除。
+	 */
+	private workspacePersistFreezeToken: number | null = null;
 	/** ????????????????????????????????? vault ????????????????????? */
 	private pendingDeleteListener: EventRef | null = null;
 	private pendingDeleteSafetyTimer: number | null = null;
@@ -428,6 +433,7 @@ export class StickyNoteManager {
 	 * ????????????? id ??????????????????? `persistOpenWindows` ????????????????????
 	 */
 	async createWorkspaceFromCurrentLayout(name: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
 		this.persistOpenWindows();
 		const trimmed = name.trim();
 		const finalName = trimmed || `???????? ${this.workspaces.workspaces.length + 1}`;
@@ -450,6 +456,7 @@ export class StickyNoteManager {
 	 * @param options.name 留空或仅空白则使用自动命名（便笺工作区 n）。
 	 */
 	async createBlankWorkspace(options?: { name?: string; remark?: string }): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
 		this.persistOpenWindows();
 		const id = `ws_${Date.now().toString(36)}`;
 		const n = this.workspaces.workspaces.length + 1;
@@ -473,24 +480,47 @@ export class StickyNoteManager {
 	 */
 	beginWorkspaceSwitchForUi(wsId: string): number | null {
 		if (!this.workspaces.workspaces.some(w => w.id === wsId)) return null;
-		this.persistOpenWindows();
+		if (this.isWorkspacePersistFrozen()) return null;
+		this.persistOpenWindows({ bypassFreeze: true });
+		const token = ++this.workspaceSwitchGeneration;
+		this.workspacePersistFreezeToken = token;
 		this.workspaces.activeWorkspaceId = wsId;
-		return ++this.workspaceSwitchGeneration;
+		return token;
 	}
 
 	private isStaleWorkspaceSwitch(token: number): boolean {
 		return token !== this.workspaceSwitchGeneration;
 	}
 
+	private isWorkspacePersistFrozen(): boolean {
+		return this.workspacePersistFreezeToken !== null;
+	}
+
+	private endWorkspacePersistFreeze(token: number): void {
+		if (this.workspacePersistFreezeToken === token) {
+			this.workspacePersistFreezeToken = null;
+		}
+	}
+
+	/** 便笺工作区列表或磁盘写入（非切换流程内）是否允许；冻结中时提示并返回 false。 */
+	private assertWorkspaceMetaMutable(): boolean {
+		if (this.isWorkspacePersistFrozen()) return false;
+		return true;
+	}
+
 	/** 落盘活动工作区、关闭当前浮动便笺并按快照恢复（在 beginWorkspaceSwitchForUi 之后调用）。 */
 	async finalizeWorkspaceSwitch(token: number): Promise<void> {
 		const job = this.workspaceSwitchTail.then(async () => {
-			if (this.isStaleWorkspaceSwitch(token)) return;
-			await this.flushWorkspacesToDisk();
-			if (this.isStaleWorkspaceSwitch(token)) return;
-			this.closeAllOpenStickyWindows(true);
-			if (this.isStaleWorkspaceSwitch(token)) return;
-			await this.restoreWorkspaceWindows(token);
+			try {
+				if (this.isStaleWorkspaceSwitch(token)) return;
+				await this.flushWorkspacesToDisk();
+				if (this.isStaleWorkspaceSwitch(token)) return;
+				this.closeAllOpenStickyWindows(true);
+				if (this.isStaleWorkspaceSwitch(token)) return;
+				await this.restoreWorkspaceWindows(token);
+			} finally {
+				this.endWorkspacePersistFreeze(token);
+			}
 		});
 		this.workspaceSwitchTail = job.catch(() => undefined);
 		await job;
@@ -512,21 +542,31 @@ export class StickyNoteManager {
 	async deselectActiveStickyWorkspace(): Promise<void> {
 		const job = this.workspaceSwitchTail.then(async () => {
 			if (this.workspaces.activeWorkspaceId === null) return;
-			this.workspaceSwitchGeneration++;
-			this.persistOpenWindows();
+			if (this.isWorkspacePersistFrozen()) return;
+			this.persistOpenWindows({ bypassFreeze: true });
 			if (this.saveTimer !== null) {
 				window.clearTimeout(this.saveTimer);
 				this.saveTimer = null;
 			}
-			this.workspaces.activeWorkspaceId = null;
-			this.closeAllOpenStickyWindows(true);
-			await this.flushWorkspacesToDisk();
+			const token = ++this.workspaceSwitchGeneration;
+			this.workspacePersistFreezeToken = token;
+			try {
+				this.workspaces.activeWorkspaceId = null;
+				this.closeAllOpenStickyWindows(true);
+				await this.flushWorkspacesToDisk();
+			} finally {
+				this.endWorkspacePersistFreeze(token);
+			}
 		});
-		this.workspaceSwitchTail = job.catch(() => undefined);
-		await job;
+		this.workspaceSwitchTail = job.then(
+			() => undefined,
+			() => undefined
+		);
+		await job.catch(() => undefined);
 	}
 
 	async updateWorkspace(wsId: string, name: string, remark: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
 		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
 		if (!ws) return;
 		const next = name.trim();
@@ -545,6 +585,7 @@ export class StickyNoteManager {
 
 	/** 复制工作区快照为新条目；不切换活动工作区。若源为当前活动区，先持久化当前打开的便笺布局再复制。 */
 	async duplicateWorkspace(wsId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
 		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
 		if (!ws) return;
 		if (this.workspaces.activeWorkspaceId === wsId) {
@@ -569,27 +610,33 @@ export class StickyNoteManager {
 	 * 删除后列表为空时恢复内置默认工作区。
 	 */
 	async deleteStickyWorkspace(wsId: string): Promise<void> {
-		this.workspaceSwitchGeneration++;
-		const wasActive = this.workspaces.activeWorkspaceId === wsId;
-		this.workspaces.workspaces = this.workspaces.workspaces.filter(x => x.id !== wsId);
-		if (this.workspaces.workspaces.length === 0) {
-			const fresh = defaultWorkspacesFile();
-			this.workspaces.workspaces = fresh.workspaces;
-			this.workspaces.activeWorkspaceId = fresh.activeWorkspaceId;
-			this.closeAllOpenStickyWindows(true);
-		} else if (wasActive) {
-			this.workspaces.activeWorkspaceId = null;
-			this.closeAllOpenStickyWindows(true);
-		}
-		if (this.saveTimer !== null) {
-			window.clearTimeout(this.saveTimer);
-			this.saveTimer = null;
-		}
-		await this.flushWorkspacesToDisk();
+		const job = this.workspaceSwitchTail.then(async () => {
+			if (this.isWorkspacePersistFrozen()) return;
+			this.workspaceSwitchGeneration++;
+			const wasActive = this.workspaces.activeWorkspaceId === wsId;
+			this.workspaces.workspaces = this.workspaces.workspaces.filter(x => x.id !== wsId);
+			if (this.workspaces.workspaces.length === 0) {
+				const fresh = defaultWorkspacesFile();
+				this.workspaces.workspaces = fresh.workspaces;
+				this.workspaces.activeWorkspaceId = fresh.activeWorkspaceId;
+				this.closeAllOpenStickyWindows(true);
+			} else if (wasActive) {
+				this.workspaces.activeWorkspaceId = null;
+				this.closeAllOpenStickyWindows(true);
+			}
+			if (this.saveTimer !== null) {
+				window.clearTimeout(this.saveTimer);
+				this.saveTimer = null;
+			}
+			await this.flushWorkspacesToDisk();
+		});
+		this.workspaceSwitchTail = job.catch(() => undefined);
+		await job;
 	}
 
 	/** 将工作区拖到另一张卡片前时：插入到 `beforeId` 之前。 */
 	async reorderWorkspaceBefore(draggedId: string, beforeId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
 		if (draggedId === beforeId) return;
 		const list = this.workspaces.workspaces;
 		const fromIdx = list.findIndex(w => w.id === draggedId);
@@ -607,6 +654,7 @@ export class StickyNoteManager {
 
 	/** 拖到「新建」格上时移到列表末尾。 */
 	async reorderWorkspaceToEnd(draggedId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
 		const list = this.workspaces.workspaces;
 		const fromIdx = list.findIndex(w => w.id === draggedId);
 		if (fromIdx < 0) return;
@@ -618,7 +666,8 @@ export class StickyNoteManager {
 		await this.flushWorkspacesToDisk();
 	}
 
-	private persistOpenWindows(): void {
+	private persistOpenWindows(opts?: { bypassFreeze?: boolean }): void {
+		if (!opts?.bypassFreeze && this.isWorkspacePersistFrozen()) return;
 		const ws = this.activeWorkspace();
 		if (!ws) return;
 		ws.windows = this.serializeOpenWindowsSnapshot();
@@ -1293,7 +1342,7 @@ export class StickyNoteManager {
 			this.closeAllOpenStickyWindows(true);
 			return;
 		}
-		this.persistOpenWindows();
+		this.persistOpenWindows({ bypassFreeze: true });
 	}
 
 	updateBottomBarsFromSettings(): void {

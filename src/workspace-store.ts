@@ -3,7 +3,27 @@ import { normalizePath } from 'obsidian';
 import { t } from './lang/helpers';
 import type { WorkspacesFile } from './types';
 
-const FILE_NAME = 'workspaces.json';
+function workspacesPrefixedPath(plugin: Plugin): string {
+	return normalizePath(`${plugin.manifest.dir}/${plugin.manifest.id}-workspaces.json`);
+}
+
+function workspacesLegacyPath(plugin: Plugin): string {
+	return normalizePath(`${plugin.manifest.dir}/workspaces.json`);
+}
+
+async function migrateLegacyWorkspacesFile(plugin: Plugin): Promise<void> {
+	const next = workspacesPrefixedPath(plugin);
+	const prev = workspacesLegacyPath(plugin);
+	if (await plugin.app.vault.adapter.exists(next)) return;
+	if (!(await plugin.app.vault.adapter.exists(prev))) return;
+	try {
+		const rawText = await plugin.app.vault.adapter.read(prev);
+		await plugin.app.vault.adapter.write(next, rawText);
+		await plugin.app.vault.adapter.remove(prev);
+	} catch {
+		/* 迁移失败则保留旧文件 */
+	}
+}
 
 export function defaultWorkspacesFile(): WorkspacesFile {
 	const id = 'default';
@@ -16,8 +36,8 @@ export function defaultWorkspacesFile(): WorkspacesFile {
 }
 
 export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile> {
-	const dir = plugin.manifest.dir;
-	const path = normalizePath(`${dir}/${FILE_NAME}`);
+	await migrateLegacyWorkspacesFile(plugin);
+	const path = workspacesPrefixedPath(plugin);
 	const exists = await plugin.app.vault.adapter.exists(path);
 	if (!exists) return defaultWorkspacesFile();
 	try {
@@ -67,7 +87,7 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 }
 
 export async function saveWorkspacesFile(plugin: Plugin, data: WorkspacesFile): Promise<void> {
-	const dir = plugin.manifest.dir;
-	const path = normalizePath(`${dir}/${FILE_NAME}`);
+	await migrateLegacyWorkspacesFile(plugin);
+	const path = workspacesPrefixedPath(plugin);
 	await plugin.app.vault.adapter.write(path, JSON.stringify(data, null, 2));
 }

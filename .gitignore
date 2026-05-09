@@ -23,7 +23,11 @@ src/main.js
 
 # obsidian
 data.json
+# legacy plugin state filenames (migrated on load to `{id}-*.json`)
+note-list.json
 workspaces.json
+*-note-list.json
+*-workspaces.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store

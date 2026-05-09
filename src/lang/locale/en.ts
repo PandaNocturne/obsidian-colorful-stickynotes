@@ -218,8 +218,6 @@ export const en = {
 	WS_DELETE_ARIA: 'Delete workspace',
 	WS_SWITCH_ARIA: 'Switch to this workspace',
 	WS_REORDER_DRAG_ARIA: 'Drag to reorder workspaces',
-	NOTICE_SWITCHED_WORKSPACE: 'Switched workspace',
-	NOTICE_CLOSED_WORKSPACE: 'Workspace deselected (floating stickies closed)',
 	WS_TOGGLE_OPEN_HINT: 'Click to open',
 	WS_TOGGLE_CLOSE_HINT: 'Click again to close',
 

@@ -411,13 +411,11 @@ export class WorkspacePanelModal extends Modal {
 			if (isActive) {
 				await mgr.deselectActiveStickyWorkspace();
 				refresh();
-				new Notice(t('NOTICE_CLOSED_WORKSPACE'));
 				return;
 			}
 			const token = mgr.beginWorkspaceSwitchForUi(ws.id);
 			if (token === null) return;
 			refresh();
-			new Notice(t('NOTICE_SWITCHED_WORKSPACE'));
 			await mgr.finalizeWorkspaceSwitch(token);
 		};
 

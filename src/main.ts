@@ -7,6 +7,18 @@ import {
 	type ColorfulStickyNotesSettings
 } from './settings';
 import { WorkspacePanelModal } from './modals/WorkspacePanelModal';
+import {
+	applyNoteListPersisted,
+	extractNoteListPersisted,
+	loadNoteListPersistedFile,
+	NOTE_LIST_DATA_JSON_KEYS,
+	normalizeNoteListColorFilters,
+	normalizeNoteListPinnedPathsStorage,
+	pruneNoteListPinnedPathsAfterDelete,
+	rawPluginDataHasNoteListKeys,
+	saveNoteListPersistedFile,
+	samePinnedPathsOrder
+} from './note-list-store';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
 import { registerSendToStickyMenus } from './register-send-to-sticky-menus';
@@ -50,64 +62,6 @@ const VALID_NOTE_LIST_FLOAT_OPEN_FILTER: readonly NoteListFloatOpenFilter[] = ['
 const VALID_NOTE_LIST_ARCHIVE_FILTER: readonly NoteListArchiveFilter[] = ['all', 'unarchived', 'archived'];
 
 const VALID_HEADER_NEW_STICKY_ADJACENT_SIDE: readonly HeaderNewStickyAdjacentSide[] = ['left', 'right'];
-
-function normalizeNoteListColorFilters(value: unknown): StickyColorId[] {
-	if (!Array.isArray(value)) return [];
-	const out: StickyColorId[] = [];
-	const seen = new Set<string>();
-	for (const x of value) {
-		if (typeof x !== 'string' || !VALID_NEW_STICKY_BG.includes(x as StickyColorId)) continue;
-		if (seen.has(x)) continue;
-		seen.add(x);
-		out.push(x as StickyColorId);
-	}
-	return out;
-}
-
-/**
- * 便笺列表置顶路径：仅做规范化与去重。
- * 不在加载时用 vault 校验文件是否存在，否则插件早于库就绪时会把合法路径整批丢掉，表现为「置顶未保存」。
- */
-function normalizeNoteListPinnedPathsStorage(value: unknown): string[] {
-	if (!Array.isArray(value)) return [];
-	const seen = new Set<string>();
-	const out: string[] = [];
-	for (const x of value) {
-		if (typeof x !== 'string' || !x.trim()) continue;
-		const p = normalizePath(x);
-		if (seen.has(p)) continue;
-		seen.add(p);
-		out.push(p);
-	}
-	return out;
-}
-
-function samePinnedPathsOrder(a: readonly string[], b: readonly string[]): boolean {
-	if (a.length !== b.length) return false;
-	for (let i = 0; i < a.length; i++) {
-		if (normalizePath(a[i]!) !== normalizePath(b[i]!)) return false;
-	}
-	return true;
-}
-
-/**
- * 便笺被删或整夹删除后，从置顶列表去掉对应路径（夹删除时去掉其下所有路径）。
- */
-function pruneNoteListPinnedPathsAfterDelete(
-	pinned: readonly string[],
-	deletedPath: string,
-	isFolder: boolean
-): string[] {
-	const del = normalizePath(deletedPath);
-	const prefix = `${del}/`;
-	const kept = pinned.filter(p => {
-		const n = normalizePath(p);
-		if (n === del) return false;
-		if (isFolder && n.startsWith(prefix)) return false;
-		return true;
-	});
-	return normalizeNoteListPinnedPathsStorage(kept);
-}
 
 export default class ColorfulStickyNotesPlugin extends Plugin {
 	settings!: ColorfulStickyNotesSettings;
@@ -470,12 +424,35 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		) {
 			this.settings.headerNewStickyAdjacentSide = DEFAULT_SETTINGS.headerNewStickyAdjacentSide;
 		}
+
+		const listFromDisk = await loadNoteListPersistedFile(this);
+		if (listFromDisk) {
+			applyNoteListPersisted(this.settings, listFromDisk);
+		} else {
+			await saveNoteListPersistedFile(this, extractNoteListPersisted(this.settings));
+		}
+		if (rawPluginDataHasNoteListKeys(raw)) {
+			await this.persistPluginSettingsWithoutNoteListKeys();
+		}
+	}
+
+	/** 写入 `data.json` 时去掉便笺列表字段（列表状态在 `note-list.json`）。 */
+	private async persistPluginSettingsWithoutNoteListKeys(): Promise<void> {
+		const payload = JSON.parse(JSON.stringify(this.settings)) as Record<string, unknown>;
+		for (const k of NOTE_LIST_DATA_JSON_KEYS) {
+			delete payload[k];
+		}
+		await this.saveData(payload);
 	}
 
 	async saveSettings(): Promise<void> {
 		try {
+			await saveNoteListPersistedFile(this, extractNoteListPersisted(this.settings));
 			/* 深拷贝后写入，避免不可 JSON 序列化字段或 Obsidian 内部引用导致静默失败 */
-			const payload = JSON.parse(JSON.stringify(this.settings)) as ColorfulStickyNotesSettings;
+			const payload = JSON.parse(JSON.stringify(this.settings)) as Record<string, unknown>;
+			for (const k of NOTE_LIST_DATA_JSON_KEYS) {
+				delete payload[k];
+			}
 			await this.saveData(payload);
 		} catch (e) {
 			console.error('[colorful-sticky-notes] saveSettings failed', e);
