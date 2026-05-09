@@ -424,6 +424,22 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		) {
 			this.settings.headerNewStickyAdjacentSide = DEFAULT_SETTINGS.headerNewStickyAdjacentSide;
 		}
+		let canvasW = this.settings.canvasLinkNodeWidth;
+		if (typeof canvasW !== 'number' || !Number.isFinite(canvasW)) {
+			canvasW = DEFAULT_SETTINGS.canvasLinkNodeWidth;
+		}
+		this.settings.canvasLinkNodeWidth = Math.max(120, Math.min(2000, Math.round(canvasW)));
+		let canvasH = this.settings.canvasLinkNodeHeight;
+		if (typeof canvasH !== 'number' || !Number.isFinite(canvasH)) {
+			canvasH = DEFAULT_SETTINGS.canvasLinkNodeHeight;
+		}
+		this.settings.canvasLinkNodeHeight = Math.max(80, Math.min(2000, Math.round(canvasH)));
+		if (typeof this.settings.canvasLinkAutoFitHeight !== 'boolean') {
+			this.settings.canvasLinkAutoFitHeight = DEFAULT_SETTINGS.canvasLinkAutoFitHeight;
+		}
+		if (typeof this.settings.canvasLinkMatchColor !== 'boolean') {
+			this.settings.canvasLinkMatchColor = DEFAULT_SETTINGS.canvasLinkMatchColor;
+		}
 
 		const listFromDisk = await loadNoteListPersistedFile(this);
 		if (listFromDisk) {

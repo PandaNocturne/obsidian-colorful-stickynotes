@@ -461,13 +461,14 @@ export class StickyNoteListView extends ItemView {
 			if (!path) return;
 			const f = this.app.vault.getAbstractFileByPath(path);
 			if (!(f instanceof TFile)) return;
+			const stickyColor = ((card as HTMLElement).dataset.csnListColor as StickyColorId | undefined) ?? 'default';
 			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
 			const md = this.app.fileManager.generateMarkdownLink(f, sourcePath);
 			const dt = evt.dataTransfer;
 			if (!dt) return;
 			dt.setData('text/plain', md);
 			dt.effectAllowed = 'copy';
-			this.beginCanvasDropSessionForFile(f);
+			this.beginCanvasDropSessionForFile(f, stickyColor);
 		});
 
 		this.registerDomEvent(this.listItemsEl, 'click', (evt: MouseEvent) => {
@@ -606,13 +607,58 @@ export class StickyNoteListView extends ItemView {
 		});
 	}
 
-	private beginCanvasDropSessionForFile(file: TFile): void {
+	private beginCanvasDropSessionForFile(file: TFile, stickyColor: StickyColorId): void {
+		const CANVAS_COLOR_BY_STICKY: Record<StickyColorId, string | null> = {
+			default: null,
+			yellow: '#f5e6a3',
+			pink: '#f5c2d6',
+			mint: '#a8e6cf',
+			blue: '#a8d4f0',
+			lavender: '#d4c4f5',
+			gray: '#d8d8d8'
+		};
 		type CanvasViewLike = {
 			containerEl?: HTMLElement;
+			file?: TFile;
 			canvas?: {
 				posFromEvt: (evt: DragEvent) => unknown;
-				createFileNode: (arg: { file: TFile; pos: unknown; save: boolean }) => unknown;
+				createTextNode?: (arg: {
+					text: string;
+					pos: unknown;
+					save: boolean;
+					size?: { width: number; height: number };
+				}) => {
+					color?: string;
+					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
+				};
+				createFileNode: (arg: {
+					file: TFile;
+					pos: unknown;
+					save: boolean;
+					size?: { width: number; height: number };
+				}) => {
+					color?: string;
+					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
+				};
+				requestSave?: () => Promise<void>;
 			};
+		};
+		const maybeApplyCanvasNodeColor = (node: { color?: string } | null | undefined): void => {
+			const canvasColor = this.plugin.settings.canvasLinkMatchColor
+				? CANVAS_COLOR_BY_STICKY[stickyColor]
+				: null;
+			if (!node || !canvasColor) return;
+			node.color = canvasColor;
+		};
+		const maybeAutoFitHeight = (v: CanvasViewLike, node: { onResizeDblclick?: (e: MouseEvent, pos: 'top' | 'bottom' | 'left' | 'right') => void } | null | undefined): void => {
+			if (!this.plugin.settings.canvasLinkAutoFitHeight) return;
+			if (!node || typeof node.onResizeDblclick !== 'function') return;
+			window.requestAnimationFrame(() => {
+				window.requestAnimationFrame(() => {
+					node.onResizeDblclick?.(new MouseEvent('dblclick'), 'bottom');
+					void v.canvas?.requestSave?.();
+				});
+			});
 		};
 		const getCanvasViewFromDropEvent = (evt: DragEvent): CanvasViewLike | null => {
 			const target = evt.target;
@@ -633,11 +679,49 @@ export class StickyNoteListView extends ItemView {
 			evt.preventDefault();
 			evt.stopPropagation();
 			const pos = v.canvas.posFromEvt(evt);
-			v.canvas.createFileNode({
-				file,
-				pos,
-				save: true
+			const size = {
+				width: this.plugin.settings.canvasLinkNodeWidth,
+				height: this.plugin.settings.canvasLinkNodeHeight
+			};
+
+			// 默认：内容导入（Canvas text 节点）
+			// Ctrl：文件引用（Canvas file 节点）
+			// Shift：内容导入并删除原文件（移入回收站）
+			void (async () => {
+				const isDeleteOriginal = evt.shiftKey && !evt.ctrlKey;
+				const isFileRefOnly = evt.ctrlKey && !evt.shiftKey;
+
+				let node:
+					| { color?: string; onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void }
+					| undefined;
+
+				if (isFileRefOnly) {
+					node = v.canvas?.createFileNode({
+						file,
+						pos,
+						size,
+						save: true
+					});
+				} else {
+					const text = await this.app.vault.cachedRead(file);
+					node = v.canvas?.createTextNode?.({
+						text,
+						pos,
+						size,
+						save: true
+					});
+				}
+
+				maybeApplyCanvasNodeColor(node);
+				void v.canvas?.requestSave?.();
+				maybeAutoFitHeight(v, node);
+				if (isDeleteOriginal) {
+					await this.app.fileManager.trashFile(file);
+				}
+			})().catch(() => undefined).finally(() => {
+				cleanup();
 			});
+			return;
 			cleanup();
 		};
 		const onDragEndCapture = (): void => {

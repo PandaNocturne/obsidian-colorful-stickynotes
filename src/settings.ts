@@ -135,6 +135,14 @@ export interface ColorfulStickyNotesSettings {
 	defaultNewStickyBackground: StickyColorId;
 	/** 便笺头部「+」新建时相对当前窗口的优先侧（相邻左侧 / 相邻右侧）。 */
 	headerNewStickyAdjacentSide: HeaderNewStickyAdjacentSide;
+	/** 列表拖入 Canvas 时，文件节点默认宽度（px）。 */
+	canvasLinkNodeWidth: number;
+	/** 列表拖入 Canvas 时，文件节点默认高度（px）。 */
+	canvasLinkNodeHeight: number;
+	/** 列表拖入 Canvas 后，是否自动双击底边以贴合内容高度。 */
+	canvasLinkAutoFitHeight: boolean;
+	/** 列表拖入 Canvas 时是否同步节点颜色。 */
+	canvasLinkMatchColor: boolean;
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -168,7 +176,11 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	defaultNewStickyWidth: 420,
 	defaultNewStickyHeight: 360,
 	defaultNewStickyBackground: 'yellow',
-	headerNewStickyAdjacentSide: 'left'
+	headerNewStickyAdjacentSide: 'left',
+	canvasLinkNodeWidth: 420,
+	canvasLinkNodeHeight: 320,
+	canvasLinkAutoFitHeight: true,
+	canvasLinkMatchColor: true
 };
 
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
@@ -628,6 +640,54 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 						this.display();
 					})
+			);
+
+		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_CANVAS_LINK'));
+		new Setting(containerEl)
+			.setName(t('SETTINGS_CANVAS_CARD_WIDTH_NAME'))
+			.setDesc(t('SETTINGS_CANVAS_CARD_WIDTH_DESC'))
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.canvasLinkNodeWidth))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.canvasLinkNodeWidth = Number.isFinite(n)
+							? Math.max(120, Math.min(2000, n))
+							: DEFAULT_SETTINGS.canvasLinkNodeWidth;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_CANVAS_CARD_HEIGHT_NAME'))
+			.setDesc(t('SETTINGS_CANVAS_CARD_HEIGHT_DESC'))
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.canvasLinkNodeHeight))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.canvasLinkNodeHeight = Number.isFinite(n)
+							? Math.max(80, Math.min(2000, n))
+							: DEFAULT_SETTINGS.canvasLinkNodeHeight;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_CANVAS_CARD_AUTO_FIT_HEIGHT_NAME'))
+			.setDesc(t('SETTINGS_CANVAS_CARD_AUTO_FIT_HEIGHT_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.canvasLinkAutoFitHeight).onChange(async v => {
+					this.plugin.settings.canvasLinkAutoFitHeight = v;
+					await this.plugin.saveSettings();
+				})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_CANVAS_MATCH_COLOR_NAME'))
+			.setDesc(t('SETTINGS_CANVAS_MATCH_COLOR_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.canvasLinkMatchColor).onChange(async v => {
+					this.plugin.settings.canvasLinkMatchColor = v;
+					await this.plugin.saveSettings();
+				})
 			);
 	}
 }

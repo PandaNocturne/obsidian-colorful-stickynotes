@@ -110,6 +110,18 @@ export const en = {
 	SETTINGS_DEFAULT_BG_NAME: 'Default background',
 	SETTINGS_DEFAULT_BG_DESC:
 		'When no template or no colorful-sticky-bg, write this background (matches bottom color strip).',
+	SETTINGS_HEADING_CANVAS_LINK: 'Canvas link',
+	SETTINGS_CANVAS_CARD_WIDTH_NAME: 'Canvas card default width',
+	SETTINGS_CANVAS_CARD_WIDTH_DESC:
+		'Default width (px) when dragging a sticky card from list into Canvas.',
+	SETTINGS_CANVAS_CARD_HEIGHT_NAME: 'Canvas card default height',
+	SETTINGS_CANVAS_CARD_HEIGHT_DESC:
+		'Default height (px) when dragging a sticky card from list into Canvas.',
+	SETTINGS_CANVAS_CARD_AUTO_FIT_HEIGHT_NAME: 'Auto-fit Canvas card height',
+	SETTINGS_CANVAS_CARD_AUTO_FIT_HEIGHT_DESC:
+		'After dropping into Canvas, auto fit node height to rendered content.',
+	SETTINGS_CANVAS_MATCH_COLOR_NAME: 'Match sticky color',
+	SETTINGS_CANVAS_MATCH_COLOR_DESC: 'When dropping into Canvas, sync node color to sticky color.',
 
 	SETTINGS_HEADING_LIST: 'Sticky list',
 	SETTINGS_LIST_OPEN_LOCATION_NAME: 'List open location',
