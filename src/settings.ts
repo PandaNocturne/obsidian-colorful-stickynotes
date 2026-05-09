@@ -143,6 +143,15 @@ export interface ColorfulStickyNotesSettings {
 	canvasLinkAutoFitHeight: boolean;
 	/** 列表拖入 Canvas 时是否同步节点颜色。 */
 	canvasLinkMatchColor: boolean;
+	/** 列表批量拖入 Canvas 时相邻卡片的间隔（px）。 */
+	canvasLinkBatchGridGap: number;
+	/** 列表批量拖入 Canvas 时每行最大卡片数量。 */
+	canvasLinkBatchMaxPerRow: number;
+	/**
+	 * @deprecated 旧版「纵向错开」的设置键，保留用于迁移到 `canvasLinkBatchGridGap`。
+	 * 不再用于排布计算，也不再在设置 UI 中展示。
+	 */
+	canvasLinkBatchStackDy: number;
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -180,7 +189,10 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	canvasLinkNodeWidth: 420,
 	canvasLinkNodeHeight: 320,
 	canvasLinkAutoFitHeight: true,
-	canvasLinkMatchColor: true
+	canvasLinkMatchColor: true,
+	canvasLinkBatchGridGap: 24,
+	canvasLinkBatchMaxPerRow: 10,
+	canvasLinkBatchStackDy: 24
 };
 
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
@@ -688,6 +700,34 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					this.plugin.settings.canvasLinkMatchColor = v;
 					await this.plugin.saveSettings();
 				})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_CANVAS_BATCH_GAP_NAME'))
+			.setDesc(t('SETTINGS_CANVAS_BATCH_GAP_DESC'))
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.canvasLinkBatchGridGap))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.canvasLinkBatchGridGap = Number.isFinite(n)
+							? Math.max(0, Math.min(500, Math.round(n)))
+							: DEFAULT_SETTINGS.canvasLinkBatchGridGap;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_CANVAS_BATCH_MAX_PER_ROW_NAME'))
+			.setDesc(t('SETTINGS_CANVAS_BATCH_MAX_PER_ROW_DESC'))
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.canvasLinkBatchMaxPerRow))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.canvasLinkBatchMaxPerRow = Number.isFinite(n)
+							? Math.max(1, Math.min(50, Math.round(n)))
+							: DEFAULT_SETTINGS.canvasLinkBatchMaxPerRow;
+						await this.plugin.saveSettings();
+					})
 			);
 	}
 }

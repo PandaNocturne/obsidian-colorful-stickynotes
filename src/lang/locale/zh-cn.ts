@@ -111,6 +111,11 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_CANVAS_CARD_AUTO_FIT_HEIGHT_DESC: '拖入 Canvas 后按内容自动贴合节点高度。',
 	SETTINGS_CANVAS_MATCH_COLOR_NAME: '匹配便笺颜色',
 	SETTINGS_CANVAS_MATCH_COLOR_DESC: '拖入 Canvas 时将节点颜色同步为便笺颜色。',
+	SETTINGS_CANVAS_BATCH_GAP_NAME: '批量导入卡片间隔',
+	SETTINGS_CANVAS_BATCH_GAP_DESC:
+		'批量拖入 Canvas 时，按节点宽高做网格排列；该值为相邻卡片之间的间隔（0–500）。',
+	SETTINGS_CANVAS_BATCH_MAX_PER_ROW_NAME: '每行最大数量',
+	SETTINGS_CANVAS_BATCH_MAX_PER_ROW_DESC: '批量拖入 Canvas 时每行最多放多少张卡片（1–50）。默认 10。',
 
 	SETTINGS_HEADING_LIST: '便笺列表',
 	SETTINGS_LIST_OPEN_LOCATION_NAME: '列表打开位置',

@@ -862,6 +862,8 @@ body .csn-sticky-window-body .view-content {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--csn-list-grid-min-width, 320px), 1fr));
   gap: 10px;
+  /* 选中态使用 outline 外边框：给滚动容器留出边距，避免贴边时被 overflow 裁剪 */
+  padding: 4px;
   align-content: start;
 }
 .csn-list-pagination {
@@ -937,9 +939,13 @@ body .csn-sticky-window-body .view-content {
   overflow: hidden;
   transition: box-shadow 0.12s ease, transform 0.12s ease;
 }
+.csn-list-card.is-selected {
+  /* 外边框高亮：不改变卡片布局尺寸（对比 border） */
+  outline: 2px solid var(--text-accent);
+  outline-offset: 2px;
+}
 .csn-list-card:hover {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 4px 14px rgba(0, 0, 0, 0.06);
-  transform: translateY(-1px);
 }
 .csn-list-card[data-csn-list-color='yellow'] {
   --csn-list-card-bg: #fff8d4;

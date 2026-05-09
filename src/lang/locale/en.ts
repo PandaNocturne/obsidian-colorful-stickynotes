@@ -122,6 +122,12 @@ export const en = {
 		'After dropping into Canvas, auto fit node height to rendered content.',
 	SETTINGS_CANVAS_MATCH_COLOR_NAME: 'Match sticky color',
 	SETTINGS_CANVAS_MATCH_COLOR_DESC: 'When dropping into Canvas, sync node color to sticky color.',
+	SETTINGS_CANVAS_BATCH_GAP_NAME: 'Batch card spacing',
+	SETTINGS_CANVAS_BATCH_GAP_DESC:
+		'When dragging multiple stickies into Canvas, arrange them in a grid using node size; this is the gap (px) between adjacent cards (0–500).',
+	SETTINGS_CANVAS_BATCH_MAX_PER_ROW_NAME: 'Max per row',
+	SETTINGS_CANVAS_BATCH_MAX_PER_ROW_DESC:
+		'When dragging multiple stickies into Canvas, maximum cards per row (1–50). Default: 10.',
 
 	SETTINGS_HEADING_LIST: 'Sticky list',
 	SETTINGS_LIST_OPEN_LOCATION_NAME: 'List open location',

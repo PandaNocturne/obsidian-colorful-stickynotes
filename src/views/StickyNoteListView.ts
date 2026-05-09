@@ -269,6 +269,10 @@ export class StickyNoteListView extends ItemView {
 	private listRenderChain: Promise<void> = Promise.resolve();
 	/** 开启后卡片头部显示归档复选框，便于勾选修改。 */
 	private listArchiveCheckboxEditMode = false;
+	/** 列表卡片多选：当前选中的便笺路径（normalizePath）。 */
+	private readonly selectedListNotePaths = new Set<string>();
+	/** Shift 范围选择的锚点（最后一次显式选择）。 */
+	private lastSelectedListNotePath: string | null = null;
 	private listBulkEditBtn: HTMLButtonElement | null = null;
 	/** 列表预览区是否在固定高度内裁剪/滚动（与 `settings.noteListCardOverflowHidden` 一致）。 */
 	private listCardOverflowClipBtn: HTMLButtonElement | null = null;
@@ -459,16 +463,30 @@ export class StickyNoteListView extends ItemView {
 			if (!card) return;
 			const path = (card as HTMLElement).dataset.csnNotePath;
 			if (!path) return;
-			const f = this.app.vault.getAbstractFileByPath(path);
-			if (!(f instanceof TFile)) return;
+			const normPath = normalizePath(path);
+			const selected =
+				this.selectedListNotePaths.size > 0 && this.selectedListNotePaths.has(normPath)
+					? [...this.selectedListNotePaths]
+					: [normPath];
+
+			const items: Array<{ file: TFile; color: StickyColorId }> = [];
+			for (const p of selected) {
+				const abs = this.app.vault.getAbstractFileByPath(p);
+				if (!(abs instanceof TFile)) continue;
+				const el = this.listItemsEl?.querySelector(`.csn-list-card[data-csn-note-path="${CSS.escape(p)}"]`);
+				const rawColor =
+					el instanceof HTMLElement ? (el.dataset.csnListColor as StickyColorId | undefined) : undefined;
+				items.push({ file: abs, color: rawColor ?? 'default' });
+			}
+			if (items.length === 0) return;
 			const stickyColor = ((card as HTMLElement).dataset.csnListColor as StickyColorId | undefined) ?? 'default';
 			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
-			const md = this.app.fileManager.generateMarkdownLink(f, sourcePath);
+			const md = this.app.fileManager.generateMarkdownLink(items[0]!.file, sourcePath);
 			const dt = evt.dataTransfer;
 			if (!dt) return;
 			dt.setData('text/plain', md);
 			dt.effectAllowed = 'copy';
-			this.beginCanvasDropSessionForFile(f, stickyColor);
+			this.beginCanvasDropSessionForFiles(items);
 		});
 
 		this.registerDomEvent(this.listItemsEl, 'click', (evt: MouseEvent) => {
@@ -566,6 +584,60 @@ export class StickyNoteListView extends ItemView {
 			menu.showAtMouseEvent(evt);
 		});
 
+		this.registerDomEvent(this.listItemsEl, 'mousedown', (evt: MouseEvent) => {
+			if (evt.button !== 0) return;
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			// 这些交互不参与多选（避免影响 pin/menu/归档复选框/拖拽手柄）
+			if (
+				hit.closest('.csn-list-card-pin-btn') ||
+				hit.closest('.csn-list-card-menu-btn') ||
+				hit.closest('.csn-list-card-archive-wrap') ||
+				hit.closest('.csn-list-card-drag-handle')
+			) {
+				return;
+			}
+			const card = hit.closest('.csn-list-card');
+			if (!card || !this.listItemsEl?.contains(card)) {
+				// 点击空白处清空选择
+				if (this.selectedListNotePaths.size > 0) {
+					this.selectedListNotePaths.clear();
+					this.lastSelectedListNotePath = null;
+					this.syncListCardSelectionChrome();
+				}
+				return;
+			}
+			const rawPath = (card as HTMLElement).dataset.csnNotePath;
+			if (!rawPath) return;
+			const path = normalizePath(rawPath);
+
+			const ctrl = evt.ctrlKey || evt.metaKey;
+			const shift = evt.shiftKey;
+			const order = this.getRenderedListCardPathsInOrder();
+
+			if (shift && this.lastSelectedListNotePath) {
+				const a = order.indexOf(this.lastSelectedListNotePath);
+				const b = order.indexOf(path);
+				if (a !== -1 && b !== -1) {
+					const [s, e] = a <= b ? [a, b] : [b, a];
+					this.selectedListNotePaths.clear();
+					for (let i = s; i <= e; i++) this.selectedListNotePaths.add(order[i]!);
+				} else {
+					this.selectedListNotePaths.clear();
+					this.selectedListNotePaths.add(path);
+				}
+			} else if (ctrl) {
+				if (this.selectedListNotePaths.has(path)) this.selectedListNotePaths.delete(path);
+				else this.selectedListNotePaths.add(path);
+				this.lastSelectedListNotePath = path;
+			} else {
+				this.selectedListNotePaths.clear();
+				this.selectedListNotePaths.add(path);
+				this.lastSelectedListNotePath = path;
+			}
+			this.syncListCardSelectionChrome();
+		});
+
 		this.registerDomEvent(this.listItemsEl, 'change', (evt: Event) => {
 			const t = evt.target;
 			if (!(t instanceof HTMLInputElement) || !t.classList.contains('csn-list-card-archive-checkbox')) return;
@@ -607,7 +679,7 @@ export class StickyNoteListView extends ItemView {
 		});
 	}
 
-	private beginCanvasDropSessionForFile(file: TFile, stickyColor: StickyColorId): void {
+	private beginCanvasDropSessionForFiles(items: Array<{ file: TFile; color: StickyColorId }>): void {
 		const CANVAS_COLOR_BY_STICKY: Record<StickyColorId, string | null> = {
 			default: null,
 			yellow: '#f5e6a3',
@@ -627,6 +699,7 @@ export class StickyNoteListView extends ItemView {
 					pos: unknown;
 					save: boolean;
 					size?: { width: number; height: number };
+					focus?: boolean;
 				}) => {
 					color?: string;
 					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
@@ -636,17 +709,18 @@ export class StickyNoteListView extends ItemView {
 					pos: unknown;
 					save: boolean;
 					size?: { width: number; height: number };
+					focus?: boolean;
 				}) => {
 					color?: string;
 					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
 				};
 				requestSave?: () => Promise<void>;
+				requestFrame?: () => Promise<void>;
+				selection?: Set<unknown>;
 			};
 		};
-		const maybeApplyCanvasNodeColor = (node: { color?: string } | null | undefined): void => {
-			const canvasColor = this.plugin.settings.canvasLinkMatchColor
-				? CANVAS_COLOR_BY_STICKY[stickyColor]
-				: null;
+		const maybeApplyCanvasNodeColor = (node: { color?: string } | null | undefined, stickyColor: StickyColorId): void => {
+			const canvasColor = this.plugin.settings.canvasLinkMatchColor ? CANVAS_COLOR_BY_STICKY[stickyColor] : null;
 			if (!node || !canvasColor) return;
 			node.color = canvasColor;
 		};
@@ -659,6 +733,14 @@ export class StickyNoteListView extends ItemView {
 					void v.canvas?.requestSave?.();
 				});
 			});
+		};
+		const offsetPos = (pos: unknown, dx: number, dy: number): unknown => {
+			if (!pos || typeof pos !== 'object') return pos;
+			const anyPos = pos as { x?: unknown; y?: unknown };
+			if (typeof anyPos.x === 'number' && typeof anyPos.y === 'number') {
+				return { x: anyPos.x + dx, y: anyPos.y + dy };
+			}
+			return pos;
 		};
 		const getCanvasViewFromDropEvent = (evt: DragEvent): CanvasViewLike | null => {
 			const target = evt.target;
@@ -691,32 +773,61 @@ export class StickyNoteListView extends ItemView {
 				const isDeleteOriginal = evt.shiftKey && !evt.ctrlKey;
 				const isFileRefOnly = evt.ctrlKey && !evt.shiftKey;
 
-				let node:
-					| { color?: string; onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void }
-					| undefined;
+				const createdNodes: Array<{ onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void }> = [];
+				const gap = Math.max(0, Math.min(500, Math.round(this.plugin.settings.canvasLinkBatchGridGap)));
+				const maxPerRow = Math.max(1, Math.min(50, Math.round(this.plugin.settings.canvasLinkBatchMaxPerRow)));
+				const cellW = Math.max(1, Math.round(size.width)) + gap;
+				const cellH = Math.max(1, Math.round(size.height)) + gap;
+				for (let i = 0; i < items.length; i++) {
+					const it = items[i]!;
+					const col = i % maxPerRow;
+					const row = Math.floor(i / maxPerRow);
+					const p2 = offsetPos(pos, col * cellW, row * cellH);
+					let node:
+						| { color?: string; onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void }
+						| undefined;
 
-				if (isFileRefOnly) {
-					node = v.canvas?.createFileNode({
-						file,
-						pos,
-						size,
-						save: true
-					});
-				} else {
-					const text = await this.app.vault.cachedRead(file);
-					node = v.canvas?.createTextNode?.({
-						text,
-						pos,
-						size,
-						save: true
-					});
+					if (isFileRefOnly) {
+						node = v.canvas?.createFileNode({
+							file: it.file,
+							pos: p2,
+							size,
+							focus: false,
+							save: true
+						});
+					} else {
+						const text = await this.app.vault.cachedRead(it.file);
+						node = v.canvas?.createTextNode?.({
+							text,
+							pos: p2,
+							size,
+							focus: false,
+							save: true
+						});
+					}
+
+					maybeApplyCanvasNodeColor(node, it.color);
+					if (node) createdNodes.push(node);
 				}
 
-				maybeApplyCanvasNodeColor(node);
+				// 导入后将本次新建节点设为选中状态（Canvas 会高亮 selection）
+				try {
+					v.canvas?.selection?.clear();
+					for (const n of createdNodes) {
+						(v.canvas?.selection as Set<unknown> | undefined)?.add?.(n as unknown);
+					}
+					await v.canvas?.requestFrame?.();
+				} catch {
+					// ignore
+				}
+
 				void v.canvas?.requestSave?.();
-				maybeAutoFitHeight(v, node);
+				for (const n of createdNodes) maybeAutoFitHeight(v, n);
+
 				if (isDeleteOriginal) {
-					await this.app.fileManager.trashFile(file);
+					for (const it of items) {
+						await this.app.fileManager.trashFile(it.file);
+					}
 				}
 			})().catch(() => undefined).finally(() => {
 				cleanup();
@@ -729,6 +840,29 @@ export class StickyNoteListView extends ItemView {
 		};
 		window.addEventListener('drop', onDropCapture, true);
 		window.addEventListener('dragend', onDragEndCapture, true);
+	}
+
+	private getRenderedListCardPathsInOrder(): string[] {
+		const container = this.listItemsEl;
+		if (!container) return [];
+		const out: string[] = [];
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (p) out.push(normalizePath(p));
+		}
+		return out;
+	}
+
+	private syncListCardSelectionChrome(): void {
+		const container = this.listItemsEl;
+		if (!container) return;
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (!p) continue;
+			el.toggleClass('is-selected', this.selectedListNotePaths.has(normalizePath(p)));
+		}
 	}
 
 	private stickyFolderRoot(): string {
@@ -1555,6 +1689,7 @@ export class StickyNoteListView extends ItemView {
 				container.empty();
 				await this.renderListCardsFull(container, pageFiles, sortMode, pinnedSet);
 			}
+			this.syncListCardSelectionChrome();
 
 			this.lastRenderedPageIndex = this.listPageIndex;
 
