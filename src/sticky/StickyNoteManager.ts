@@ -18,7 +18,12 @@ import {
 import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
-import { defaultWorkspacesFile, loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
+import {
+	defaultWorkspacesFile,
+	loadWorkspacesFile,
+	newStickyWorkspaceId,
+	saveWorkspacesFile
+} from '../workspace-store';
 import { StickyNotePopover } from './StickyNotePopover';
 
 /** ?????????????????????? setViewState????????????????????????????? YAML ?????? */
@@ -110,11 +115,7 @@ export class StickyNoteManager {
 	private pendingDeleteListener: EventRef | null = null;
 	private pendingDeleteSafetyTimer: number | null = null;
 
-	workspaces: WorkspacesFile = {
-		version: 1,
-		activeWorkspaceId: 'default',
-		workspaces: [{ id: 'default', name: t('DEFAULT_WORKSPACE_NAME'), windows: [], updatedAt: Date.now() }]
-	};
+	workspaces: WorkspacesFile = defaultWorkspacesFile();
 
 	constructor(
 		private readonly plugin: ColorfulStickyNotesPlugin,
@@ -454,9 +455,10 @@ export class StickyNoteManager {
 		if (!this.assertWorkspaceMetaMutable()) return;
 		this.persistOpenWindows();
 		const trimmed = name.trim();
-		const finalName = trimmed || `???????? ${this.workspaces.workspaces.length + 1}`;
+		const n = this.workspaces.workspaces.length + 1;
+		const finalName = trimmed || t('WS_NEW_WORKSPACE_AUTO_NAME', { n });
 		const snapshot = this.serializeOpenWindowsSnapshot();
-		const id = `ws_${Date.now().toString(36)}`;
+		const id = newStickyWorkspaceId();
 		const nw: StickyWorkspace = {
 			id,
 			name: finalName,
@@ -476,7 +478,7 @@ export class StickyNoteManager {
 	async createBlankWorkspace(options?: { name?: string; remark?: string }): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
 		this.persistOpenWindows();
-		const id = `ws_${Date.now().toString(36)}`;
+		const id = newStickyWorkspaceId();
 		const n = this.workspaces.workspaces.length + 1;
 		const nameTrim = options?.name?.trim() ?? '';
 		const nw: StickyWorkspace = {
@@ -609,7 +611,7 @@ export class StickyNoteManager {
 		if (this.workspaces.activeWorkspaceId === wsId) {
 			this.persistOpenWindows();
 		}
-		const id = `ws_${Date.now().toString(36)}`;
+		const id = newStickyWorkspaceId();
 		const windowsCopy = structuredClone(ws.windows) as SerializedStickyWindow[];
 		const nw: StickyWorkspace = {
 			id,

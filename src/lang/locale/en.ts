@@ -24,8 +24,6 @@ export const en = {
 	NOTICE_CANNOT_CREATE_LEFT_SIDEBAR: 'Cannot create left sidebar view',
 	NOTICE_CANNOT_CREATE_RIGHT_SIDEBAR: 'Cannot create right sidebar view',
 
-	DEFAULT_WORKSPACE_NAME: 'Default sticky workspace',
-
 	NOTICE_NAME_EMPTY: 'Name cannot be empty',
 	NOTICE_WORKSPACE_UPDATED: 'Sticky workspace updated',
 	NOTICE_INVALID_FILENAME_TEMPLATE:

@@ -8,6 +8,11 @@ export function stickyWorkspacesJsonVaultPath(plugin: Plugin): string {
 import { t } from './lang/helpers';
 import type { WorkspacesFile } from './types';
 
+/** 新便笺工作区条目的 id（与创建/复制/空白区逻辑一致）。 */
+export function newStickyWorkspaceId(): string {
+	return `ws_${Date.now().toString(36)}`;
+}
+
 function workspacesPrefixedPath(plugin: Plugin): string {
 	return normalizePath(`${plugin.manifest.dir}/${plugin.manifest.id}-workspaces.json`);
 }
@@ -31,12 +36,19 @@ async function migrateLegacyWorkspacesFile(plugin: Plugin): Promise<void> {
 }
 
 export function defaultWorkspacesFile(): WorkspacesFile {
-	const id = 'default';
+	const id = newStickyWorkspaceId();
 	const now = Date.now();
 	return {
 		version: 1,
 		activeWorkspaceId: id,
-		workspaces: [{ id, name: t('DEFAULT_WORKSPACE_NAME'), windows: [], updatedAt: now }]
+		workspaces: [
+			{
+				id,
+				name: t('WS_NEW_WORKSPACE_AUTO_NAME', { n: 1 }),
+				windows: [],
+				updatedAt: now
+			}
+		]
 	};
 }
 
@@ -64,7 +76,10 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 			/* 磁盘上活动 id 已不在列表中（例如手工编辑或异常），不强行选中第一项 */
 			active = null;
 		} else {
-			active = parsed.workspaces[0]?.id ?? 'default';
+			const first = parsed.workspaces.find(
+				w => typeof w.id === 'string' && w.id.length > 0
+			);
+			active = first?.id ?? null;
 		}
 		return {
 			version: 1,

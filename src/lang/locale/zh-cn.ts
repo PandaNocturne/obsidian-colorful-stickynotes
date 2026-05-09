@@ -25,8 +25,6 @@ export const zhCn: Record<MessageKey, string> = {
 	NOTICE_CANNOT_CREATE_LEFT_SIDEBAR: '无法创建左侧侧边栏视图',
 	NOTICE_CANNOT_CREATE_RIGHT_SIDEBAR: '无法创建右侧侧边栏视图',
 
-	DEFAULT_WORKSPACE_NAME: '默认便笺工作区',
-
 	NOTICE_NAME_EMPTY: '名称不能为空',
 	NOTICE_WORKSPACE_UPDATED: '已更新便笺工作区',
 	NOTICE_INVALID_FILENAME_TEMPLATE: '便笺文件名格式无效，请在设置中检查 Moment 格式',
