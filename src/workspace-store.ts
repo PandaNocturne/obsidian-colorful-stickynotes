@@ -33,16 +33,22 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 		return {
 			version: 1,
 			activeWorkspaceId: active,
-			workspaces: parsed.workspaces.map(w => ({
-				id: w.id,
-				name: w.name,
-				windows: Array.isArray(w.windows) ? w.windows : [],
-				updatedAt:
-					typeof (w as { updatedAt?: unknown }).updatedAt === 'number' &&
-					Number.isFinite((w as { updatedAt: number }).updatedAt)
-						? (w as { updatedAt: number }).updatedAt
-						: undefined
-			}))
+			workspaces: parsed.workspaces.map(w => {
+				const rawRemark = (w as { remark?: unknown }).remark;
+				const remark =
+					typeof rawRemark === 'string' ? rawRemark : undefined;
+				return {
+					id: w.id,
+					name: w.name,
+					...(remark !== undefined ? { remark } : {}),
+					windows: Array.isArray(w.windows) ? w.windows : [],
+					updatedAt:
+						typeof (w as { updatedAt?: unknown }).updatedAt === 'number' &&
+						Number.isFinite((w as { updatedAt: number }).updatedAt)
+							? (w as { updatedAt: number }).updatedAt
+							: undefined
+				};
+			})
 		};
 	} catch {
 		return defaultWorkspacesFile();

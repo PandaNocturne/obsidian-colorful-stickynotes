@@ -432,24 +432,25 @@ export class StickyNoteManager {
 	}
 
 	/**
-	 * 先持久化当前工作区布局，再新建无窗口快照的空白工作区并切换；
-	 * 关闭当前浮动便笺后走与普通切换相同的恢复逻辑（空布局时会新建一张便笺）。
+	 * 持久化当前布局后新建空白工作区（无窗口快照）并写入列表；
+	 * 不切换活动工作区，不改变已打开的浮动便笺。
+	 * @param options.name 留空或仅空白则使用自动命名（便笺工作区 n）。
 	 */
-	async createBlankWorkspace(): Promise<void> {
+	async createBlankWorkspace(options?: { name?: string; remark?: string }): Promise<void> {
 		this.persistOpenWindows();
 		const id = `ws_${Date.now().toString(36)}`;
 		const n = this.workspaces.workspaces.length + 1;
+		const nameTrim = options?.name?.trim() ?? '';
 		const nw: StickyWorkspace = {
 			id,
-			name: t('WS_NEW_WORKSPACE_AUTO_NAME', { n }),
+			name: nameTrim ? nameTrim : t('WS_NEW_WORKSPACE_AUTO_NAME', { n }),
 			windows: [],
 			updatedAt: Date.now()
 		};
+		const remarkTrim = options?.remark?.trim() ?? '';
+		if (remarkTrim) nw.remark = remarkTrim;
 		this.workspaces.workspaces.push(nw);
-		this.workspaces.activeWorkspaceId = id;
 		await saveWorkspacesFile(this.plugin, this.workspaces);
-		this.closeAllOpenStickyWindows(true);
-		await this.restoreWorkspaceWindows();
 	}
 
 	/**
@@ -464,7 +465,7 @@ export class StickyNoteManager {
 		await this.restoreWorkspaceWindows();
 	}
 
-	async renameWorkspace(wsId: string, name: string): Promise<void> {
+	async updateWorkspace(wsId: string, name: string, remark: string): Promise<void> {
 		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
 		if (!ws) return;
 		const next = name.trim();
@@ -473,9 +474,33 @@ export class StickyNoteManager {
 			return;
 		}
 		ws.name = next;
+		const r = remark.trim();
+		if (r) ws.remark = r;
+		else delete ws.remark;
 		ws.updatedAt = Date.now();
 		await saveWorkspacesFile(this.plugin, this.workspaces);
-		new Notice(t('NOTICE_WORKSPACE_RENAMED'));
+		new Notice(t('NOTICE_WORKSPACE_UPDATED'));
+	}
+
+	/** 复制工作区快照为新条目；不切换活动工作区。若源为当前活动区，先持久化当前打开的便笺布局再复制。 */
+	async duplicateWorkspace(wsId: string): Promise<void> {
+		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
+		if (!ws) return;
+		if (this.workspaces.activeWorkspaceId === wsId) {
+			this.persistOpenWindows();
+		}
+		const id = `ws_${Date.now().toString(36)}`;
+		const windowsCopy = structuredClone(ws.windows) as SerializedStickyWindow[];
+		const nw: StickyWorkspace = {
+			id,
+			name: t('WS_DUPLICATE_NAME', { name: ws.name }),
+			windows: windowsCopy,
+			updatedAt: Date.now()
+		};
+		if (ws.remark) nw.remark = ws.remark;
+		this.workspaces.workspaces.push(nw);
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+		new Notice(t('NOTICE_WORKSPACE_COPIED'));
 	}
 
 	private persistOpenWindows(): void {
@@ -1104,6 +1129,7 @@ export class StickyNoteManager {
 		await this.finalizeExistingStickyOpen(prepared, { workspaceActive: true });
 	}
 
+	/** 按当前活动工作区快照恢复窗口；快照为空时不自动新建便笺。 */
 	async restoreWorkspaceWindows(): Promise<void> {
 		const ws = this.activeWorkspace();
 		const openPaths = new Set<string>();
@@ -1113,7 +1139,6 @@ export class StickyNoteManager {
 			if (vf) openPaths.add(vf.path);
 		}
 		if (!ws || ws.windows.length === 0) {
-			await this.addStickyWindow();
 			return;
 		}
 		const pending = ws.windows.filter(w => !openPaths.has(w.path));

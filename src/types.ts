@@ -49,6 +49,8 @@ export interface SerializedStickyWindow {
 export interface StickyWorkspace {
 	id: string;
 	name: string;
+	/** 工作区备注（可选），显示在工作区面板卡片上。 */
+	remark?: string;
 	windows: SerializedStickyWindow[];
 	/** 最近一次写入该便笺工作区快照的时间（毫秒时间戳）。 */
 	updatedAt?: number;

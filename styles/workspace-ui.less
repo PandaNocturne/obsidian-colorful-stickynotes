@@ -25,8 +25,12 @@
 .modal.csn-workspace-panel-modal {
 	width: 100%;
 	max-width: min(80vw, 800px);
-	max-height: 80vh;
+	min-height: 200px;
 	overflow-y: auto;
+
+	.modal-header{
+		margin-bottom: 1rem;
+	}
 }
 
 .csn-workspace-panel {
@@ -38,7 +42,7 @@
 
 .csn-ws-panel-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	grid-template-columns: repeat(3, 1fr);
 	gap: 10px;
 	align-items: stretch;
 }
@@ -134,7 +138,6 @@
 	align-items: stretch;
 	justify-content: flex-start;
 	gap: 10px;
-	min-height: 120px;
 	padding: 12px 12px;
 	border-radius: var(--radius-m);
 	border: 1px solid var(--background-modifier-border);
@@ -146,7 +149,8 @@
 
 .csn-ws-panel-item--active {
 	border-color: var(--interactive-accent);
-	box-shadow: none;
+	/* 与普通卡片相同的 elevation，选中态仅强调边框色 */
+	box-shadow: var(--shadow-s);
 }
 
 .csn-ws-panel-item--clickable {
@@ -158,27 +162,34 @@
 	outline-offset: 2px;
 }
 
+/* 使用 div[role=button]，避免主题对原生 button 的偏斜阴影/双边框叠在虚线上 */
 .csn-ws-panel-add-tile {
-	display: inline-flex;
+	position: relative;
+	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
+	align-self: stretch;
+	width: 100%;
 	min-height: 120px;
 	padding: 12px;
 	border-radius: var(--radius-m);
 	border: 1px dashed var(--background-modifier-border);
-	background: transparent;
+	/* 与 .csn-ws-panel-item 相同的底色与柔和阴影，四边视觉一致 */
+	background: var(--background-secondary);
+	box-shadow: var(--shadow-s);
+	box-sizing: border-box;
 	color: var(--text-muted);
 	cursor: pointer;
-	box-sizing: border-box;
-	-webkit-appearance: none;
-	appearance: none;
+	gap: 0;
+	margin: 0;
+	outline: none;
 	font-size: inherit;
 	font-family: inherit;
-	gap: 0;
+	-webkit-tap-highlight-color: transparent;
 }
 
-.csn-ws-panel-add-tile:hover:not(:disabled) {
+.csn-ws-panel-add-tile:hover {
 	border-color: var(--interactive-accent);
 	color: var(--text-normal);
 	background: var(--background-modifier-hover);
@@ -189,39 +200,62 @@
 	outline-offset: 2px;
 }
 
-.csn-ws-panel-add-tile:disabled {
-	opacity: 0.45;
-	cursor: not-allowed;
+/* 与卡片底部 .csn-ws-panel-icon-btn 内 Lucide 图标视觉一致 */
+.csn-ws-panel-add-tile-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	color: inherit;
+	line-height: 0;
 }
 
-.csn-ws-panel-add-tile svg {
-	width: 28px;
-	height: 28px;
-	stroke-width: 2px;
+.csn-ws-panel-add-tile-icon svg {
+	width: var(--icon-size, 18px);
+	height: var(--icon-size, 18px);
+	max-width: var(--icon-size, 18px);
+	max-height: var(--icon-size, 18px);
 	flex-shrink: 0;
+	stroke: currentColor;
+	fill: none;
+	stroke-width: 2px;
+	stroke-linecap: round;
+	stroke-linejoin: round;
 }
 
 .csn-ws-panel-item-main {
 	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
 	min-width: 0;
-	padding-right: 56px;
+	width: 100%;
 	box-sizing: border-box;
 }
 
 .csn-ws-panel-item-title-row {
 	display: flex;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
 	align-items: center;
+	justify-content: center;
 	gap: 8px;
 	margin-bottom: 4px;
+	min-width: 0;
+	width: 100%;
 }
 
 .csn-ws-panel-item-name {
 	font-size: var(--font-ui-medium);
 	font-weight: 600;
 	color: var(--text-normal);
-	word-break: break-word;
 	line-height: 1.35;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: center;
+	flex: 1 1 auto;
+	width: 100%;
+	max-width: 100%;
 }
 
 .csn-ws-panel-badge {
@@ -236,29 +270,77 @@
 	line-height: 1.3;
 }
 
+/* 「使用中」：悬浮在卡片左上角，不占文档流 */
+.csn-ws-panel-badge--floating {
+	position: absolute;
+	top: 12px;
+	left: 12px;
+	z-index: 2;
+	max-width: calc(100% - 24px);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
+	box-shadow: var(--shadow-s);
+}
+
+.csn-ws-panel-item-footer {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 10px;
+	margin-top: auto;
+	padding-top: 8px;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.csn-ws-panel-item-footer-left {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: flex-end;
+	gap: 6px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.csn-ws-panel-item-remark {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	line-height: 1.45;
+	margin: 2px 0 6px;
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	word-break: break-word;
+	white-space: pre-wrap;
+}
+
 .csn-ws-panel-item-meta {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
 	line-height: 1.4;
+	text-align: left;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
-/* 悬浮在卡片右上角，不占正文布局空间 */
+/* 底部右侧图标按钮 */
 .csn-ws-panel-item-float-actions {
-	position: absolute;
-	top: 8px;
-	right: 8px;
-	z-index: 2;
-	display: inline-flex;
-	flex-wrap: nowrap;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
 	align-items: center;
 	justify-content: flex-end;
-	gap: 2px;
-	padding: 3px 4px;
-	border-radius: var(--radius-m);
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	box-shadow: var(--shadow-s);
-	pointer-events: auto;
+	gap: 6px;
+	padding-top: 0;
+	width: auto;
+	box-sizing: border-box;
 }
 
 .csn-ws-panel-icon-btn {
@@ -291,7 +373,7 @@
 	flex-shrink: 0;
 }
 
-/* 悬浮条内图标：无额外框线 */
+/* 底部操作行内图标：无额外框线 */
 .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn {
 	width: calc(var(--input-height) - 4px);
 	min-width: calc(var(--input-height) - 4px);
@@ -317,11 +399,30 @@
 	background: transparent !important;
 }
 
-/* 重命名小弹窗 */
-.csn-ws-rename-modal .csn-ws-rename-input {
+.csn-ws-new-blank-modal-desc {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	line-height: 1.45;
+	margin: 0 0 14px;
+}
+
+/* 编辑工作区（名称 + 备注） */
+.csn-ws-edit-modal .csn-ws-edit-field-label {
+	font-size: var(--font-ui-smaller);
+	font-weight: 500;
+	color: var(--text-muted);
+	margin-bottom: 6px;
+	margin-top: 2px;
+}
+
+.csn-ws-edit-modal .csn-ws-edit-field-label:first-child {
+	margin-top: 0;
+}
+
+.csn-ws-edit-modal .csn-ws-edit-name-input {
 	display: block;
 	width: 100%;
-	margin-bottom: 14px;
+	margin-bottom: 12px;
 	height: var(--input-height);
 	padding: 0 10px;
 	border-radius: var(--radius-m);
@@ -332,7 +433,24 @@
 	box-sizing: border-box;
 }
 
-.csn-ws-rename-actions {
+.csn-ws-edit-modal .csn-ws-edit-remark-input {
+	display: block;
+	width: 100%;
+	min-height: 88px;
+	margin-bottom: 14px;
+	padding: 8px 10px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	font-family: var(--font-text);
+	line-height: 1.45;
+	resize: vertical;
+	box-sizing: border-box;
+}
+
+.csn-ws-edit-actions {
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;

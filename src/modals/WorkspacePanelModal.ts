@@ -20,47 +20,130 @@ function formatWorkspaceRelativeTime(updatedAt: number | undefined): string {
 	return t('WS_TIME_OLDER');
 }
 
-class RenameStickyWorkspaceModal extends Modal {
+class EditStickyWorkspaceModal extends Modal {
 	constructor(
 		app: App,
 		private readonly initialName: string,
-		private readonly onCommit: (name: string) => void
+		private readonly initialRemark: string,
+		private readonly onCommit: (payload: { name: string; remark: string }) => void | Promise<void>
 	) {
 		super(app);
 	}
 
 	onOpen(): void {
-		this.titleEl.setText(t('WS_RENAME_TITLE'));
-		this.contentEl.addClass('csn-ws-rename-modal');
+		this.titleEl.setText(t('WS_EDIT_WORKSPACE_TITLE'));
+		this.contentEl.addClass('csn-ws-edit-modal');
+
+		this.contentEl.createDiv({
+			cls: 'csn-ws-edit-field-label',
+			text: t('WS_NAME_LABEL')
+		});
 		const input = this.contentEl.createEl('input', {
 			type: 'text',
-			cls: 'csn-ws-rename-input',
+			cls: 'csn-ws-edit-name-input',
 			value: this.initialName
 		});
+
+		this.contentEl.createDiv({
+			cls: 'csn-ws-edit-field-label',
+			text: t('WS_REMARK_LABEL')
+		});
+		const textarea = this.contentEl.createEl('textarea', {
+			cls: 'csn-ws-edit-remark-input',
+			attr: { rows: '4', placeholder: t('WS_REMARK_PLACEHOLDER') }
+		});
+		textarea.value = this.initialRemark;
+
 		input.addEventListener('keydown', (e: KeyboardEvent) => {
 			if (e.key === 'Enter') {
 				e.preventDefault();
-				this.commit(input.value);
+				void this.commit(input.value, textarea.value);
 			}
 		});
-		const row = this.contentEl.createDiv({ cls: 'csn-ws-rename-actions' });
+
+		const row = this.contentEl.createDiv({ cls: 'csn-ws-edit-actions' });
 		const cancel = row.createEl('button', { text: t('MODAL_CANCEL') });
 		cancel.addEventListener('click', () => this.close());
 		const ok = row.createEl('button', { text: t('MODAL_OK'), cls: 'mod-cta' });
-		ok.addEventListener('click', () => this.commit(input.value));
+		ok.addEventListener('click', () => void this.commit(input.value, textarea.value));
 		requestAnimationFrame(() => {
 			input.focus();
 			input.select();
 		});
 	}
 
-	private commit(raw: string): void {
-		const name = raw.trim();
+	private async commit(rawName: string, rawRemark: string): Promise<void> {
+		const name = rawName.trim();
 		if (!name) {
 			new Notice(t('NOTICE_NAME_EMPTY'));
 			return;
 		}
-		this.onCommit(name);
+		await Promise.resolve(this.onCommit({ name, remark: rawRemark }));
+		this.close();
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/** 新建空白工作区：填写后确认添加（名称可留空则自动命名） */
+class NewBlankWorkspaceModal extends Modal {
+	constructor(
+		app: App,
+		private readonly autoNamePreview: string,
+		private readonly onCommit: (payload: { name: string; remark: string }) => void | Promise<void>
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(t('WS_NEW_BLANK_MODAL_TITLE'));
+		this.contentEl.addClass('csn-ws-edit-modal');
+		this.contentEl.createEl('p', {
+			cls: 'csn-ws-new-blank-modal-desc',
+			text: t('WS_NEW_BLANK_MODAL_BODY')
+		});
+
+		this.contentEl.createDiv({
+			cls: 'csn-ws-edit-field-label',
+			text: t('WS_NAME_LABEL')
+		});
+		const input = this.contentEl.createEl('input', {
+			type: 'text',
+			cls: 'csn-ws-edit-name-input',
+			attr: {
+				placeholder: t('WS_NEW_BLANK_USE_AUTO_HINT', { name: this.autoNamePreview }),
+				'aria-label': t('WS_NAME_LABEL')
+			}
+		});
+
+		this.contentEl.createDiv({
+			cls: 'csn-ws-edit-field-label',
+			text: t('WS_REMARK_LABEL')
+		});
+		const textarea = this.contentEl.createEl('textarea', {
+			cls: 'csn-ws-edit-remark-input',
+			attr: { rows: '4', placeholder: t('WS_REMARK_PLACEHOLDER') }
+		});
+
+		input.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				void this.commit(input.value, textarea.value);
+			}
+		});
+
+		const row = this.contentEl.createDiv({ cls: 'csn-ws-edit-actions' });
+		const cancel = row.createEl('button', { text: t('MODAL_CANCEL') });
+		cancel.addEventListener('click', () => this.close());
+		const ok = row.createEl('button', { text: t('MODAL_OK'), cls: 'mod-cta' });
+		ok.addEventListener('click', () => void this.commit(input.value, textarea.value));
+		requestAnimationFrame(() => input.focus());
+	}
+
+	private async commit(rawName: string, rawRemark: string): Promise<void> {
+		await Promise.resolve(this.onCommit({ name: rawName, remark: rawRemark }));
 		this.close();
 	}
 
@@ -137,20 +220,33 @@ export class WorkspacePanelModal extends Modal {
 			this.renderWorkspaceTile(gridEl, ws, data.activeWorkspaceId, () => this.render());
 		}
 
-		const addTile = gridEl.createEl('button', {
+		const addTile = gridEl.createDiv({
 			cls: 'csn-ws-panel-add-tile',
-			attr: { type: 'button', 'aria-label': t('WS_NEW_BLANK_ARIA') }
+			attr: {
+				role: 'button',
+				tabindex: '0',
+				'aria-label': t('WS_NEW_BLANK_ARIA')
+			}
 		});
-		setIcon(addTile, 'plus');
-		addTile.addEventListener('click', async () => {
-			addTile.disabled = true;
-			try {
-				await mgr.createBlankWorkspace();
+		const addIconWrap = addTile.createSpan({ cls: 'csn-ws-panel-add-tile-icon' });
+		setIcon(addIconWrap, 'plus');
+		const openNewBlankWorkspace = (): void => {
+			const nextN = data.workspaces.length + 1;
+			const autoPreview = t('WS_NEW_WORKSPACE_AUTO_NAME', { n: nextN });
+			new NewBlankWorkspaceModal(this.app, autoPreview, async ({ name, remark }) => {
+				await mgr.createBlankWorkspace({
+					name: name.trim() ? name : undefined,
+					remark
+				});
 				new Notice(t('NOTICE_NEW_BLANK_WORKSPACE'));
 				this.render();
-			} finally {
-				addTile.disabled = false;
-			}
+			}).open();
+		};
+		addTile.addEventListener('click', openNewBlankWorkspace);
+		addTile.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key !== 'Enter' && e.key !== ' ') return;
+			e.preventDefault();
+			openNewBlankWorkspace();
 		});
 	}
 
@@ -171,26 +267,60 @@ export class WorkspacePanelModal extends Modal {
 			row.setAttribute('aria-current', 'true');
 			row.setAttribute('aria-label', `${ws.name}（${t('WS_BADGE_ACTIVE')}）`);
 		} else {
-			row.setAttribute(
-				'aria-label',
-				`${ws.name} — ${t('WS_CARD_SWITCH_HINT')} ${t('WS_CARD_SWITCH_HINT_A11Y')}`
-			);
+			row.setAttribute('aria-label', ws.name);
 		}
 
-		const actions = row.createDiv({ cls: 'csn-ws-panel-item-float-actions' });
+		if (isActive) {
+			row.createSpan({
+				text: t('WS_BADGE_ACTIVE'),
+				cls: 'csn-ws-panel-badge csn-ws-panel-badge--floating'
+			});
+		}
+
+		const main = row.createDiv({ cls: 'csn-ws-panel-item-main' });
+		const titleRow = main.createDiv({ cls: 'csn-ws-panel-item-title-row' });
+		titleRow.createSpan({ text: ws.name, cls: 'csn-ws-panel-item-name' });
+		const remarkText = ws.remark?.trim();
+		if (remarkText) {
+			main.createDiv({
+				text: remarkText,
+				cls: 'csn-ws-panel-item-remark'
+			});
+		}
+
+		const footer = row.createDiv({ cls: 'csn-ws-panel-item-footer' });
+		const footLeft = footer.createDiv({ cls: 'csn-ws-panel-item-footer-left' });
+		footLeft.createDiv({
+			text: formatWorkspaceRelativeTime(ws.updatedAt),
+			cls: 'csn-ws-panel-item-meta'
+		});
+
+		const actions = footer.createDiv({ cls: 'csn-ws-panel-item-float-actions' });
 		const btnEdit = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
-			attr: { 'aria-label': t('WS_EDIT_NAME_ARIA') }
+			attr: { 'aria-label': t('WS_EDIT_WORKSPACE_ARIA') }
 		});
 		setIcon(btnEdit, 'pen-line');
 		btnEdit.addEventListener('click', e => {
 			e.stopPropagation();
-			new RenameStickyWorkspaceModal(this.app, ws.name, async name => {
-				await mgr.renameWorkspace(ws.id, name);
+			new EditStickyWorkspaceModal(this.app, ws.name, ws.remark ?? '', async ({ name, remark }) => {
+				await mgr.updateWorkspace(ws.id, name, remark);
 				refresh();
 			}).open();
 		});
-		btnEdit.addEventListener('dblclick', e => e.stopPropagation());
+
+		const btnCopy = actions.createEl('button', {
+			cls: 'csn-ws-panel-icon-btn',
+			attr: { 'aria-label': t('WS_COPY_WORKSPACE_ARIA') }
+		});
+		setIcon(btnCopy, 'copy');
+		btnCopy.addEventListener('click', e => {
+			e.stopPropagation();
+			void (async () => {
+				await mgr.duplicateWorkspace(ws.id);
+				refresh();
+			})();
+		});
 
 		const btnDel = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
@@ -216,18 +346,6 @@ export class WorkspacePanelModal extends Modal {
 				refresh();
 			}).open();
 		});
-		btnDel.addEventListener('dblclick', e => e.stopPropagation());
-
-		const main = row.createDiv({ cls: 'csn-ws-panel-item-main' });
-		const titleRow = main.createDiv({ cls: 'csn-ws-panel-item-title-row' });
-		titleRow.createSpan({ text: ws.name, cls: 'csn-ws-panel-item-name' });
-		if (isActive) {
-			titleRow.createSpan({ text: t('WS_BADGE_ACTIVE'), cls: 'csn-ws-panel-badge' });
-		}
-		main.createDiv({
-			text: formatWorkspaceRelativeTime(ws.updatedAt),
-			cls: 'csn-ws-panel-item-meta'
-		});
 
 		const activateWorkspace = async (): Promise<void> => {
 			if (isActive) return;
@@ -236,7 +354,7 @@ export class WorkspacePanelModal extends Modal {
 			refresh();
 		};
 
-		row.addEventListener('dblclick', e => {
+		row.addEventListener('click', e => {
 			const el = e.target;
 			if (el instanceof HTMLElement && el.closest('.csn-ws-panel-item-float-actions')) return;
 			void activateWorkspace();
