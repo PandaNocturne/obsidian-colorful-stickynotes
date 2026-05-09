@@ -278,6 +278,8 @@ export class StickyNoteListView extends ItemView {
 	private listCardOverflowClipBtn: HTMLButtonElement | null = null;
 	/** 颜色条 `aria-controls` / `id`，避免多开列表视图时 DOM id 冲突 */
 	private readonly colorFilterStripDomId = `csn-list-cf-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now())}`;
+	/** 从拖拽手柄拖拽时，附着在 `document.body` 上的 Canvas 行为说明浮层（拖拽结束或关闭视图时移除）。 */
+	private canvasDragCanvasHintEl: HTMLElement | null = null;
 	constructor(
 		leaf: WorkspaceLeaf,
 		private readonly plugin: ColorfulStickyNotesPlugin
@@ -426,6 +428,71 @@ export class StickyNoteListView extends ItemView {
 		return c;
 	}
 
+	private hideCanvasDragBehaviorHint(): void {
+		this.canvasDragCanvasHintEl?.remove();
+		this.canvasDragCanvasHintEl = null;
+	}
+
+	private updateCanvasDragBehaviorHintPos(clientX: number, clientY: number): void {
+		const el = this.canvasDragCanvasHintEl;
+		if (!el) return;
+		const m = 16;
+		const w = window.innerWidth;
+		const h = window.innerHeight;
+		const x = Math.min(Math.max(m, clientX + 18), Math.max(m, w - m));
+		const y = Math.min(Math.max(m, clientY + 18), Math.max(m, h - m));
+		el.style.left = `${x}px`;
+		el.style.top = `${y}px`;
+	}
+
+	private updateCanvasDragBehaviorHintState(ctrlOrCmd: boolean, shift: boolean): void {
+		const wrap = this.canvasDragCanvasHintEl;
+		if (!wrap) return;
+		const plainEl = wrap.querySelector('[data-csn-drag-mode="plain"]');
+		const fileRefEl = wrap.querySelector('[data-csn-drag-mode="fileRef"]');
+		const shiftEl = wrap.querySelector('[data-csn-drag-mode="deleteOriginal"]');
+		if (!(plainEl instanceof HTMLElement)) return;
+		if (!(fileRefEl instanceof HTMLElement)) return;
+		if (!(shiftEl instanceof HTMLElement)) return;
+		const isDeleteOriginal = shift && !ctrlOrCmd;
+		const isFileRefOnly = ctrlOrCmd && !shift;
+		const isPlain = !isDeleteOriginal && !isFileRefOnly;
+		plainEl.toggleClass('is-active', isPlain);
+		fileRefEl.toggleClass('is-active', isFileRefOnly);
+		shiftEl.toggleClass('is-active', isDeleteOriginal);
+	}
+
+	/** 从列表拖向 Canvas（或编辑器）期间的按键说明：固定于视口底部，不拦截指针。 */
+	private showCanvasDragBehaviorHint(selectedCount: number, evt?: DragEvent): void {
+		this.hideCanvasDragBehaviorHint();
+		const wrap = document.body.createDiv({ cls: 'csn-canvas-drag-hint', attr: { 'aria-live': 'polite' } });
+		this.canvasDragCanvasHintEl = wrap;
+		wrap.createDiv({ cls: 'csn-canvas-drag-hint-title', text: t('LIST_DRAG_CANVAS_HINT_TITLE') });
+		if (selectedCount > 1) {
+			wrap.createDiv({
+				cls: 'csn-canvas-drag-hint-batch',
+				text: t('LIST_DRAG_CANVAS_HINT_BATCH', { n: selectedCount })
+			});
+		}
+		const ul = wrap.createEl('ul', { cls: 'csn-canvas-drag-hint-list' });
+		ul.createEl('li', { text: t('LIST_DRAG_CANVAS_HINT_PLAIN'), attr: { 'data-csn-drag-mode': 'plain' } });
+		ul.createEl('li', {
+			text: t('LIST_DRAG_CANVAS_HINT_CTRL_OR_CMD'),
+			attr: { 'data-csn-drag-mode': 'fileRef' }
+		});
+		ul.createEl('li', {
+			text: t('LIST_DRAG_CANVAS_HINT_SHIFT'),
+			attr: { 'data-csn-drag-mode': 'deleteOriginal' }
+		});
+		wrap.createDiv({ cls: 'csn-canvas-drag-hint-note', text: t('LIST_DRAG_CANVAS_HINT_NOTE_LINK') });
+		if (evt) {
+			this.updateCanvasDragBehaviorHintPos(evt.clientX, evt.clientY);
+			this.updateCanvasDragBehaviorHintState(evt.ctrlKey || evt.metaKey, evt.shiftKey);
+		} else {
+			this.updateCanvasDragBehaviorHintState(false, false);
+		}
+	}
+
 	private buildListStructureKey(
 		sortMode: NoteListSort,
 		query: string,
@@ -479,14 +546,20 @@ export class StickyNoteListView extends ItemView {
 				items.push({ file: abs, color: rawColor ?? 'default' });
 			}
 			if (items.length === 0) return;
-			const stickyColor = ((card as HTMLElement).dataset.csnListColor as StickyColorId | undefined) ?? 'default';
 			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
 			const md = this.app.fileManager.generateMarkdownLink(items[0]!.file, sourcePath);
 			const dt = evt.dataTransfer;
 			if (!dt) return;
 			dt.setData('text/plain', md);
 			dt.effectAllowed = 'copy';
+			if (this.plugin.settings.canvasLinkShowDragHint) {
+				this.showCanvasDragBehaviorHint(items.length, evt);
+			}
 			this.beginCanvasDropSessionForFiles(items);
+		});
+
+		this.registerDomEvent(this.listItemsEl, 'dragend', () => {
+			this.hideCanvasDragBehaviorHint();
 		});
 
 		this.registerDomEvent(this.listItemsEl, 'click', (evt: MouseEvent) => {
@@ -755,6 +828,12 @@ export class StickyNoteListView extends ItemView {
 		const cleanup = (): void => {
 			window.removeEventListener('drop', onDropCapture, true);
 			window.removeEventListener('dragend', onDragEndCapture, true);
+			window.removeEventListener('dragover', onDragOverCapture, true);
+		};
+		const onDragOverCapture = (evt: DragEvent): void => {
+			if (!this.plugin.settings.canvasLinkShowDragHint) return;
+			this.updateCanvasDragBehaviorHintPos(evt.clientX, evt.clientY);
+			this.updateCanvasDragBehaviorHintState(evt.ctrlKey || evt.metaKey, evt.shiftKey);
 		};
 		const onDropCapture = (evt: DragEvent): void => {
 			const v = getCanvasViewFromDropEvent(evt);
@@ -768,11 +847,12 @@ export class StickyNoteListView extends ItemView {
 			};
 
 			// 默认：内容导入（Canvas text 节点）
-			// Ctrl：文件引用（Canvas file 节点）
-			// Shift：内容导入并删除原文件（移入回收站）
+			// Ctrl / Cmd（macOS ⌘）：文件引用（Canvas file 节点）
+			// Shift（且未按 Ctrl/Cmd）：内容导入并删除原文件（移入回收站）
 			void (async () => {
-				const isDeleteOriginal = evt.shiftKey && !evt.ctrlKey;
-				const isFileRefOnly = evt.ctrlKey && !evt.shiftKey;
+				const ctrlOrCmd = evt.ctrlKey || evt.metaKey;
+				const isDeleteOriginal = evt.shiftKey && !ctrlOrCmd;
+				const isFileRefOnly = ctrlOrCmd && !evt.shiftKey;
 
 				const createdNodes: Array<{ onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void }> = [];
 				const gap = Math.max(0, Math.min(500, Math.round(this.plugin.settings.canvasLinkBatchGridGap)));
@@ -857,6 +937,7 @@ export class StickyNoteListView extends ItemView {
 		const onDragEndCapture = (): void => {
 			cleanup();
 		};
+		window.addEventListener('dragover', onDragOverCapture, true);
 		window.addEventListener('drop', onDropCapture, true);
 		window.addEventListener('dragend', onDragEndCapture, true);
 	}
@@ -1764,6 +1845,7 @@ export class StickyNoteListView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.hideCanvasDragBehaviorHint();
 		this.closeColorFilterStrip();
 		this.listToolRegionEl = null;
 		this.floatFilterDropdownBtn = null;

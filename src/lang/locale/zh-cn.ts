@@ -114,6 +114,9 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_CANVAS_ZOOM_SELECTION_NAME: '导入后缩放到选中节点',
 	SETTINGS_CANVAS_ZOOM_SELECTION_DESC:
 		'从便笺列表拖入 Canvas 后，自动缩放并平移视角，使本次导入并已选中的节点进入视野。',
+	SETTINGS_CANVAS_DRAG_HINT_NAME: '显示拖拽行为提示',
+	SETTINGS_CANVAS_DRAG_HINT_DESC:
+		'从便笺列表拖拽时，在鼠标附近显示修饰键行为提示（文本卡片/文件卡片/Shift 删除原件等）。',
 	SETTINGS_CANVAS_BATCH_GAP_NAME: '批量导入卡片间隔',
 	SETTINGS_CANVAS_BATCH_GAP_DESC:
 		'批量拖入 Canvas 时，按节点宽高做网格排列；该值为相邻卡片之间的间隔（0–500）。',
@@ -194,6 +197,13 @@ export const zhCn: Record<MessageKey, string> = {
 	LIST_COLOR_FILTER_SUMMARY_ALL: '颜色筛选（未选则显示全部）',
 	LIST_COLOR_FILTER_SUMMARY_SOME: '颜色筛选：已选 {n} 种（多选）',
 	LIST_COLOR_SWATCH_FILTER_HINT: '{label}，点击加入或移出筛选；未选任何色时显示全部',
+
+	LIST_DRAG_CANVAS_HINT_TITLE: '拖拽到 Canvas',
+	LIST_DRAG_CANVAS_HINT_BATCH: '当前拖拽 {n} 张便笺',
+	LIST_DRAG_CANVAS_HINT_PLAIN: '默认拖拽：文本卡片（嵌入内容）',
+	LIST_DRAG_CANVAS_HINT_CTRL_OR_CMD: '按住 Ctrl 键：文件卡片（库内引用）',
+	LIST_DRAG_CANVAS_HINT_SHIFT: '按住 Shift 键：文本卡片 + 删除原便笺',
+	LIST_DRAG_CANVAS_HINT_NOTE_LINK: '拖入笔记编辑区：插入 Markdown 链接',
 
 	WS_PANEL_TITLE: '便笺工作区',
 	WS_EDIT_WORKSPACE_TITLE: '编辑便笺工作区',

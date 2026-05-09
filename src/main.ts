@@ -443,6 +443,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.canvasLinkZoomToSelection !== 'boolean') {
 			this.settings.canvasLinkZoomToSelection = DEFAULT_SETTINGS.canvasLinkZoomToSelection;
 		}
+		if (typeof this.settings.canvasLinkShowDragHint !== 'boolean') {
+			this.settings.canvasLinkShowDragHint = DEFAULT_SETTINGS.canvasLinkShowDragHint;
+		}
 		// 批量拖入 Canvas 的网格排布设置（兼容旧版 `canvasLinkBatchStackDy`）。
 		const rawAny = raw as Record<string, unknown>;
 		let gridGap =

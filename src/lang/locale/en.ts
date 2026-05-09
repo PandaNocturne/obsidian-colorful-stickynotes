@@ -125,6 +125,9 @@ export const en = {
 	SETTINGS_CANVAS_ZOOM_SELECTION_NAME: 'Zoom to dropped nodes',
 	SETTINGS_CANVAS_ZOOM_SELECTION_DESC:
 		'After dropping stickies into Canvas, zoom/pan so the imported (selected) cards are in view.',
+	SETTINGS_CANVAS_DRAG_HINT_NAME: 'Show drag behavior hint',
+	SETTINGS_CANVAS_DRAG_HINT_DESC:
+		'While dragging from sticky list, show a floating hint near the cursor for modifier-key behavior.',
 	SETTINGS_CANVAS_BATCH_GAP_NAME: 'Batch card spacing',
 	SETTINGS_CANVAS_BATCH_GAP_DESC:
 		'When dragging multiple stickies into Canvas, arrange them in a grid using node size; this is the gap (px) between adjacent cards (0–500).',
@@ -209,6 +212,13 @@ export const en = {
 	LIST_COLOR_FILTER_SUMMARY_SOME: 'Color filter: {n} selected (multi-select)',
 	LIST_COLOR_SWATCH_FILTER_HINT:
 		'{label}: click to add or remove from filter; when none selected, show all',
+
+	LIST_DRAG_CANVAS_HINT_TITLE: 'Drop to Canvas',
+	LIST_DRAG_CANVAS_HINT_BATCH: 'Dragging {n} stickies',
+	LIST_DRAG_CANVAS_HINT_PLAIN: 'Default: text cards (embedded content)',
+	LIST_DRAG_CANVAS_HINT_CTRL_OR_CMD: 'Ctrl / Cmd: file cards (vault link)',
+	LIST_DRAG_CANVAS_HINT_SHIFT: 'Shift only: text cards + trash originals',
+	LIST_DRAG_CANVAS_HINT_NOTE_LINK: 'Drop into note editor: insert Markdown link',
 
 	WS_PANEL_TITLE: 'Sticky workspaces',
 	WS_EDIT_WORKSPACE_TITLE: 'Edit sticky workspace',
