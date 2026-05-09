@@ -345,6 +345,64 @@
 	box-shadow: var(--shadow-s);
 }
 
+.csn-ws-panel-item--opening {
+	cursor: wait;
+}
+
+.csn-ws-panel-badge--loading {
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	min-height: 28px;
+	padding: 0;
+	border-radius: 50%;
+	aspect-ratio: 1;
+	align-items: center;
+	justify-content: center;
+}
+
+.csn-ws-panel-badge-spinner {
+	display: block;
+	width: 15px;
+	height: 15px;
+	box-sizing: border-box;
+	border: 2px solid color-mix(in srgb, currentColor 32%, transparent);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: csn-ws-badge-spin 0.72s linear infinite;
+	flex-shrink: 0;
+}
+
+@keyframes csn-ws-badge-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.csn-ws-panel-badge--icon-only {
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	min-height: 28px;
+	padding: 0;
+	border-radius: 50%;
+	aspect-ratio: 1;
+	justify-content: center;
+	align-items: center;
+}
+
+.csn-ws-panel-badge--icon-only svg {
+	display: block;
+	width: 15px;
+	height: 15px;
+	flex-shrink: 0;
+	stroke: currentColor;
+	fill: none;
+	stroke-width: 2.5px;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
 .csn-ws-panel-item-footer {
 	display: flex;
 	flex-direction: row;

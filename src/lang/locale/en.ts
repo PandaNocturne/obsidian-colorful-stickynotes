@@ -210,6 +210,7 @@ export const en = {
 	NOTICE_ENTER_WORKSPACE_NAME: 'Enter a sticky workspace name',
 	NOTICE_SAVED_AND_SWITCHED: 'Saved and switched to this workspace',
 	WS_BADGE_ACTIVE: 'Active',
+	WS_BADGE_LOADING: 'Opening…',
 	WS_EDIT_WORKSPACE_ARIA: 'Edit workspace name and notes',
 	WS_COPY_WORKSPACE_ARIA: 'Duplicate sticky workspace',
 	WS_DUPLICATE_NAME: 'Copy of {name}',

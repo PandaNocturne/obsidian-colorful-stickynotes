@@ -195,6 +195,9 @@ class DeleteStickyWorkspaceConfirmModal extends Modal {
 }
 
 export class WorkspacePanelModal extends Modal {
+	/** 正在执行 `finalizeWorkspaceSwitch` 的工作区 id，用于角标加载态。 */
+	private openingWorkspaceId: string | null = null;
+
 	constructor(
 		app: App,
 		private readonly plugin: ColorfulStickyNotesPlugin
@@ -219,7 +222,13 @@ export class WorkspacePanelModal extends Modal {
 
 		const gridEl = this.contentEl.createDiv({ cls: 'csn-ws-panel-grid' });
 		for (const ws of data.workspaces) {
-			this.renderWorkspaceTile(gridEl, ws, data.activeWorkspaceId, () => this.render());
+			this.renderWorkspaceTile(
+				gridEl,
+				ws,
+				data.activeWorkspaceId,
+				this.openingWorkspaceId,
+				() => this.render()
+			);
 		}
 
 		const addTile = gridEl.createDiv({
@@ -278,21 +287,27 @@ export class WorkspacePanelModal extends Modal {
 		gridEl: HTMLDivElement,
 		ws: StickyWorkspace,
 		activeId: string | null,
+		openingWorkspaceId: string | null,
 		refresh: () => void
 	): void {
 		const mgr = this.plugin.stickies;
 		const isActive = ws.id === activeId;
+		const isOpening = isActive && openingWorkspaceId === ws.id;
 
 		const row = gridEl.createDiv({
-			cls: `csn-ws-panel-item csn-ws-panel-item--clickable${isActive ? ' csn-ws-panel-item--active' : ''}`
+			cls: `csn-ws-panel-item csn-ws-panel-item--clickable${isActive ? ' csn-ws-panel-item--active' : ''}${isOpening ? ' csn-ws-panel-item--opening' : ''}`
 		});
 		row.tabIndex = 0;
 		if (isActive) {
 			row.setAttribute('aria-current', 'true');
-			row.setAttribute(
-				'aria-label',
-				`${ws.name}（${t('WS_BADGE_ACTIVE')}） — ${t('WS_TOGGLE_CLOSE_HINT')}`
-			);
+			if (isOpening) {
+				row.setAttribute('aria-label', `${ws.name} — ${t('WS_BADGE_LOADING')}`);
+			} else {
+				row.setAttribute(
+					'aria-label',
+					`${ws.name}（${t('WS_BADGE_ACTIVE')}） — ${t('WS_TOGGLE_CLOSE_HINT')}`
+				);
+			}
 		} else {
 			row.setAttribute('aria-label', `${ws.name} — ${t('WS_TOGGLE_OPEN_HINT')}`);
 		}
@@ -318,10 +333,19 @@ export class WorkspacePanelModal extends Modal {
 		});
 
 		if (isActive) {
-			row.createSpan({
-				text: t('WS_BADGE_ACTIVE'),
-				cls: 'csn-ws-panel-badge csn-ws-panel-badge--floating'
-			});
+			if (isOpening) {
+				const loadingBadge = row.createSpan({
+					cls: 'csn-ws-panel-badge csn-ws-panel-badge--floating csn-ws-panel-badge--loading',
+					attr: { 'aria-hidden': 'true' }
+				});
+				loadingBadge.createSpan({ cls: 'csn-ws-panel-badge-spinner' });
+			} else {
+				const okBadge = row.createSpan({
+					cls: 'csn-ws-panel-badge csn-ws-panel-badge--floating csn-ws-panel-badge--icon-only',
+					attr: { 'aria-hidden': 'true' }
+				});
+				setIcon(okBadge, 'check');
+			}
 		}
 
 		const main = row.createDiv({ cls: 'csn-ws-panel-item-main' });
@@ -408,6 +432,7 @@ export class WorkspacePanelModal extends Modal {
 		});
 
 		const toggleWorkspace = async (): Promise<void> => {
+			if (this.openingWorkspaceId === ws.id) return;
 			if (isActive) {
 				await mgr.deselectActiveStickyWorkspace();
 				refresh();
@@ -415,8 +440,14 @@ export class WorkspacePanelModal extends Modal {
 			}
 			const token = mgr.beginWorkspaceSwitchForUi(ws.id);
 			if (token === null) return;
+			this.openingWorkspaceId = ws.id;
 			refresh();
-			await mgr.finalizeWorkspaceSwitch(token);
+			try {
+				await mgr.finalizeWorkspaceSwitch(token);
+			} finally {
+				this.openingWorkspaceId = null;
+				refresh();
+			}
 		};
 
 		row.addEventListener('click', e => {

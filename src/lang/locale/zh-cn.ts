@@ -198,6 +198,7 @@ export const zhCn: Record<MessageKey, string> = {
 	NOTICE_ENTER_WORKSPACE_NAME: '请输入便笺工作区名称',
 	NOTICE_SAVED_AND_SWITCHED: '已保存并切换到该便笺工作区',
 	WS_BADGE_ACTIVE: '已打开',
+	WS_BADGE_LOADING: '正在打开…',
 	WS_EDIT_WORKSPACE_ARIA: '编辑便笺工作区名称与备注',
 	WS_COPY_WORKSPACE_ARIA: '复制便笺工作区',
 	WS_DUPLICATE_NAME: '{name} 副本',
