@@ -18,7 +18,7 @@ import {
 import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
-import { loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
+import { defaultWorkspacesFile, loadWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
 import { StickyNotePopover } from './StickyNotePopover';
 
 /** ?????????????????????? setViewState????????????????????????????? YAML ?????? */
@@ -505,6 +505,27 @@ export class StickyNoteManager {
 		await this.finalizeWorkspaceSwitch(token);
 	}
 
+	/**
+	 * 再次单击当前活动区：把当前浮动布局写回该区快照后取消选中并关闭浮动便笺（与删除当前区时的「无选中」行为一致）。
+	 * 经 workspaceSwitchTail 排队，避免与进行中的切换交错。
+	 */
+	async deselectActiveStickyWorkspace(): Promise<void> {
+		const job = this.workspaceSwitchTail.then(async () => {
+			if (this.workspaces.activeWorkspaceId === null) return;
+			this.workspaceSwitchGeneration++;
+			this.persistOpenWindows();
+			if (this.saveTimer !== null) {
+				window.clearTimeout(this.saveTimer);
+				this.saveTimer = null;
+			}
+			this.workspaces.activeWorkspaceId = null;
+			this.closeAllOpenStickyWindows(true);
+			await this.flushWorkspacesToDisk();
+		});
+		this.workspaceSwitchTail = job.catch(() => undefined);
+		await job;
+	}
+
 	async updateWorkspace(wsId: string, name: string, remark: string): Promise<void> {
 		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
 		if (!ws) return;
@@ -541,6 +562,30 @@ export class StickyNoteManager {
 		this.workspaces.workspaces.push(nw);
 		await this.flushWorkspacesToDisk();
 		new Notice(t('NOTICE_WORKSPACE_COPIED'));
+	}
+
+	/**
+	 * 从列表移除工作区并落盘。删除当前活动区时：不自动选中其它区（避免当前浮动布局误写入另一区快照），关闭浮动便笺且不向任何区 persist。
+	 * 删除后列表为空时恢复内置默认工作区。
+	 */
+	async deleteStickyWorkspace(wsId: string): Promise<void> {
+		this.workspaceSwitchGeneration++;
+		const wasActive = this.workspaces.activeWorkspaceId === wsId;
+		this.workspaces.workspaces = this.workspaces.workspaces.filter(x => x.id !== wsId);
+		if (this.workspaces.workspaces.length === 0) {
+			const fresh = defaultWorkspacesFile();
+			this.workspaces.workspaces = fresh.workspaces;
+			this.workspaces.activeWorkspaceId = fresh.activeWorkspaceId;
+			this.closeAllOpenStickyWindows(true);
+		} else if (wasActive) {
+			this.workspaces.activeWorkspaceId = null;
+			this.closeAllOpenStickyWindows(true);
+		}
+		if (this.saveTimer !== null) {
+			window.clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
+		await this.flushWorkspacesToDisk();
 	}
 
 	/** 将工作区拖到另一张卡片前时：插入到 `beforeId` 之前。 */

@@ -26,10 +26,21 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 		if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.workspaces)) {
 			return defaultWorkspacesFile();
 		}
-		const active =
-			typeof parsed.activeWorkspaceId === 'string' && parsed.activeWorkspaceId
-				? parsed.activeWorkspaceId
-				: parsed.workspaces[0]?.id ?? 'default';
+		const ids = new Set(
+			parsed.workspaces.map(w => w.id).filter((id): id is string => typeof id === 'string' && id.length > 0)
+		);
+		const rawActive = parsed.activeWorkspaceId;
+		let active: string | null;
+		if (rawActive === null) {
+			active = null;
+		} else if (typeof rawActive === 'string' && rawActive.length > 0 && ids.has(rawActive)) {
+			active = rawActive;
+		} else if (typeof rawActive === 'string' && rawActive.length > 0) {
+			/* 磁盘上活动 id 已不在列表中（例如手工编辑或异常），不强行选中第一项 */
+			active = null;
+		} else {
+			active = parsed.workspaces[0]?.id ?? 'default';
+		}
 		return {
 			version: 1,
 			activeWorkspaceId: active,

@@ -1420,7 +1420,7 @@
   color: var(--text-on-accent);
   line-height: 1.3;
 }
-/* 「使用中」：悬浮右上角 */
+/* 「已打开」：悬浮右上角 */
 .csn-ws-panel-badge--floating {
   position: absolute;
   top: 10px;

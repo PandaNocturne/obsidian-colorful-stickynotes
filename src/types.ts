@@ -59,7 +59,8 @@ export interface StickyWorkspace {
 export interface WorkspacesFile {
 	version: 1;
 	workspaces: StickyWorkspace[];
-	activeWorkspaceId: string;
+	/** 当前选中的便笺工作区；为 null 表示未选中（删除当前区后不应默认落到其它区，以免把当前浮动布局误写入该区快照）。 */
+	activeWorkspaceId: string | null;
 }
 
 export const VIEW_STICKY_NOTE_LIST = 'colorful-sticky-notes-list';

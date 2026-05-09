@@ -1,7 +1,6 @@
 import { App, Modal, Notice, Setting, setIcon } from 'obsidian';
 import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
-import { defaultWorkspacesFile } from '../workspace-store';
 import type { StickyWorkspace } from '../types';
 
 /** HTML5 DnD 用 payload（text/plain 兼容性最好） */
@@ -278,7 +277,7 @@ export class WorkspacePanelModal extends Modal {
 	private renderWorkspaceTile(
 		gridEl: HTMLDivElement,
 		ws: StickyWorkspace,
-		activeId: string,
+		activeId: string | null,
 		refresh: () => void
 	): void {
 		const mgr = this.plugin.stickies;
@@ -290,9 +289,12 @@ export class WorkspacePanelModal extends Modal {
 		row.tabIndex = 0;
 		if (isActive) {
 			row.setAttribute('aria-current', 'true');
-			row.setAttribute('aria-label', `${ws.name}（${t('WS_BADGE_ACTIVE')}）`);
+			row.setAttribute(
+				'aria-label',
+				`${ws.name}（${t('WS_BADGE_ACTIVE')}） — ${t('WS_TOGGLE_CLOSE_HINT')}`
+			);
 		} else {
-			row.setAttribute('aria-label', ws.name);
+			row.setAttribute('aria-label', `${ws.name} — ${t('WS_TOGGLE_OPEN_HINT')}`);
 		}
 
 		const dragHandle = row.createDiv({
@@ -400,21 +402,18 @@ export class WorkspacePanelModal extends Modal {
 		btnDel.addEventListener('click', e => {
 			e.stopPropagation();
 			new DeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
-				mgr.workspaces.workspaces = mgr.workspaces.workspaces.filter(x => x.id !== ws.id);
-				if (mgr.workspaces.workspaces.length === 0) {
-					const fresh = defaultWorkspacesFile();
-					mgr.workspaces.workspaces = fresh.workspaces;
-					mgr.workspaces.activeWorkspaceId = fresh.activeWorkspaceId;
-				} else if (mgr.workspaces.activeWorkspaceId === ws.id) {
-					mgr.workspaces.activeWorkspaceId = mgr.workspaces.workspaces[0]!.id;
-				}
-				await mgr.flushWorkspacesToDisk();
+				await mgr.deleteStickyWorkspace(ws.id);
 				refresh();
 			}).open();
 		});
 
-		const activateWorkspace = async (): Promise<void> => {
-			if (isActive) return;
+		const toggleWorkspace = async (): Promise<void> => {
+			if (isActive) {
+				await mgr.deselectActiveStickyWorkspace();
+				refresh();
+				new Notice(t('NOTICE_CLOSED_WORKSPACE'));
+				return;
+			}
 			const token = mgr.beginWorkspaceSwitchForUi(ws.id);
 			if (token === null) return;
 			refresh();
@@ -426,14 +425,14 @@ export class WorkspacePanelModal extends Modal {
 			const el = e.target;
 			if (el instanceof HTMLElement && el.closest('.csn-ws-panel-item-float-actions')) return;
 			if (el instanceof HTMLElement && el.closest('.csn-ws-panel-item-drag')) return;
-			void activateWorkspace();
+			void toggleWorkspace();
 		});
 
 		row.addEventListener('keydown', (e: KeyboardEvent) => {
 			if (e.key !== 'Enter' && e.key !== ' ') return;
 			if (e.target !== row) return;
 			e.preventDefault();
-			void activateWorkspace();
+			void toggleWorkspace();
 		});
 	}
 

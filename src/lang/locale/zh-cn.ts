@@ -198,7 +198,7 @@ export const zhCn: Record<MessageKey, string> = {
 	NOTICE_NEW_BLANK_WORKSPACE: '已新建空白便笺工作区',
 	NOTICE_ENTER_WORKSPACE_NAME: '请输入便笺工作区名称',
 	NOTICE_SAVED_AND_SWITCHED: '已保存并切换到该便笺工作区',
-	WS_BADGE_ACTIVE: '使用中',
+	WS_BADGE_ACTIVE: '已打开',
 	WS_EDIT_WORKSPACE_ARIA: '编辑便笺工作区名称与备注',
 	WS_COPY_WORKSPACE_ARIA: '复制便笺工作区',
 	WS_DUPLICATE_NAME: '{name} 副本',
@@ -207,6 +207,9 @@ export const zhCn: Record<MessageKey, string> = {
 	WS_SWITCH_ARIA: '切换到该便笺工作区',
 	WS_REORDER_DRAG_ARIA: '拖动排序工作区',
 	NOTICE_SWITCHED_WORKSPACE: '已切换到该便笺工作区',
+	NOTICE_CLOSED_WORKSPACE: '已取消选中便笺工作区（浮动便笺已关闭）',
+	WS_TOGGLE_OPEN_HINT: '单击打开',
+	WS_TOGGLE_CLOSE_HINT: '再次单击关闭',
 
 	WS_TIME_UNKNOWN: '修改时间未知',
 	WS_TIME_SECONDS: '修改于几秒前',
