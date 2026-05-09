@@ -453,9 +453,9 @@ export class StickyNoteListView extends ItemView {
 		this.registerDomEvent(this.listItemsEl, 'dragstart', (evt: DragEvent) => {
 			const hit = evt.target;
 			if (!(hit instanceof Element)) return;
-			const titleEl = hit.closest('.csn-list-card-title');
-			if (!titleEl || !this.listItemsEl?.contains(titleEl)) return;
-			const card = titleEl.closest('.csn-list-card');
+			const dragHandleEl = hit.closest('.csn-list-card-drag-handle');
+			if (!dragHandleEl || !this.listItemsEl?.contains(dragHandleEl)) return;
+			const card = dragHandleEl.closest('.csn-list-card');
 			if (!card) return;
 			const path = (card as HTMLElement).dataset.csnNotePath;
 			if (!path) return;
@@ -467,6 +467,7 @@ export class StickyNoteListView extends ItemView {
 			if (!dt) return;
 			dt.setData('text/plain', md);
 			dt.effectAllowed = 'copy';
+			this.beginCanvasDropSessionForFile(f);
 		});
 
 		this.registerDomEvent(this.listItemsEl, 'click', (evt: MouseEvent) => {
@@ -603,6 +604,47 @@ export class StickyNoteListView extends ItemView {
 			evt.stopPropagation();
 			void this.plugin.openStickyForFile(f);
 		});
+	}
+
+	private beginCanvasDropSessionForFile(file: TFile): void {
+		type CanvasViewLike = {
+			containerEl?: HTMLElement;
+			canvas?: {
+				posFromEvt: (evt: DragEvent) => unknown;
+				createFileNode: (arg: { file: TFile; pos: unknown; save: boolean }) => unknown;
+			};
+		};
+		const getCanvasViewFromDropEvent = (evt: DragEvent): CanvasViewLike | null => {
+			const target = evt.target;
+			if (!(target instanceof Node)) return null;
+			for (const leaf of this.app.workspace.getLeavesOfType('canvas')) {
+				const v = leaf.view as CanvasViewLike;
+				if (v.containerEl instanceof HTMLElement && v.containerEl.contains(target)) return v;
+			}
+			return null;
+		};
+		const cleanup = (): void => {
+			window.removeEventListener('drop', onDropCapture, true);
+			window.removeEventListener('dragend', onDragEndCapture, true);
+		};
+		const onDropCapture = (evt: DragEvent): void => {
+			const v = getCanvasViewFromDropEvent(evt);
+			if (!v?.canvas) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			const pos = v.canvas.posFromEvt(evt);
+			v.canvas.createFileNode({
+				file,
+				pos,
+				save: true
+			});
+			cleanup();
+		};
+		const onDragEndCapture = (): void => {
+			cleanup();
+		};
+		window.addEventListener('drop', onDropCapture, true);
+		window.addEventListener('dragend', onDragEndCapture, true);
 	}
 
 	private stickyFolderRoot(): string {
@@ -1130,6 +1172,17 @@ export class StickyNoteListView extends ItemView {
 		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 		const head = card.createDiv({ cls: 'csn-list-card-head' });
 		const headLeft = head.createDiv({ cls: 'csn-list-card-head-left' });
+		headLeft.createDiv(
+			{
+				cls: 'csn-list-card-drag-handle',
+				attr: {
+					draggable: 'true',
+					'aria-label': t('LIST_CARD_TITLE_DRAG_ARIA'),
+					title: t('LIST_CARD_TITLE_DRAG_TITLE')
+				}
+			},
+			(el: HTMLDivElement) => setIcon(el, 'grip-vertical')
+		);
 		const archiveWrap = headLeft.createEl('label', {
 			cls: `csn-list-card-archive-wrap${archived ? ' is-archived' : ''}`,
 			attr: { 'aria-hidden': 'false' }
@@ -1147,11 +1200,7 @@ export class StickyNoteListView extends ItemView {
 		headLeft.createDiv({
 			cls: 'csn-list-card-title',
 			text: f.basename,
-			attr: {
-				draggable: 'true',
-				'aria-label': t('LIST_CARD_TITLE_DRAG_ARIA'),
-				title: t('LIST_CARD_TITLE_DRAG_TITLE')
-			}
+			attr: { title: f.basename }
 		});
 		const headRight = head.createDiv({ cls: 'csn-list-card-head-right' });
 		const isPinned = pinnedSet.has(normalizePath(f.path));

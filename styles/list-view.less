@@ -167,7 +167,7 @@
 }
 
 /* 调色板：展开或已选颜色筛选时高亮为交互强调色 */
-.csn-list-toolbar-color-wrap.is-expanded .csn-list-color-palette-btn{
+.csn-list-toolbar-color-wrap.is-expanded .csn-list-color-palette-btn {
 	color: var(--interactive-accent);
 }
 
@@ -211,7 +211,7 @@
 	--csn-list-color-filter-swatch-size: 24px;
 	width: var(--csn-list-color-filter-swatch-size);
 	height: var(--csn-list-color-filter-swatch-size);
-	min-width:var(--csn-list-color-filter-swatch-size);
+	min-width: var(--csn-list-color-filter-swatch-size);
 	border-radius: 4px;
 }
 
@@ -514,6 +514,27 @@
 	flex: 1 1 auto;
 }
 
+.csn-list-card-drag-handle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 18px;
+	height: 18px;
+	color: var(--text-muted);
+	cursor: grab;
+	user-select: none;
+	-webkit-user-drag: element;
+}
+
+.csn-list-card-drag-handle:hover {
+	color: var(--text-normal);
+}
+
+.csn-list-card-drag-handle:active {
+	cursor: grabbing;
+}
+
 /* 褰掓。澶嶉€夋锛氶粯璁ら殣钘忥紱宸ュ叿鏍忋€岀紪杈戙€嶅紑鍚悗鏄剧ず锛堣 `.csn-list-view--archive-checkbox-edit`锛?*/
 .csn-list-card-archive-wrap {
 	display: none;
@@ -547,17 +568,7 @@
 	flex: 1 1 auto;
 	min-width: 0;
 	max-width: fit-content;
-	cursor: grab;
-	user-select: none;
-}
-
-// .csn-list-card-title:hover {
-// 	background-color: var(--background-modifier-hover);
-// 	border-radius: var(--radius-s);
-// }
-
-.csn-list-card-title:active {
-	cursor: grabbing;
+	user-select: text;
 }
 
 .csn-list-card-head-right {
