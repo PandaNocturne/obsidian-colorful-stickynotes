@@ -28,8 +28,8 @@ function resolveLocaleId(raw: string): keyof typeof localePacks {
 	if (raw === 'zh' || raw.startsWith('zh-')) return 'zh-cn';
 	const base = raw.split('-')[0] ?? 'en';
 	if (base === 'zh') return 'zh-cn';
-	if (raw in localePacks) return raw as keyof typeof localePacks;
-	if (base in localePacks) return base as keyof typeof localePacks;
+	if (raw in localePacks) return raw;
+	if (base in localePacks) return base;
 	return 'en';
 }
 
@@ -52,7 +52,7 @@ function applyVars(template: string, vars?: Record<string, string | number>): st
  */
 export function t(key: MessageKey, vars?: Record<string, string | number>): string {
 	const pack = activePack();
-	const template = (pack[key] ?? en[key]) as string;
+	const template = pack[key] ?? en[key];
 	return applyVars(template, vars);
 }
 

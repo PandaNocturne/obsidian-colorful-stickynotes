@@ -190,23 +190,29 @@ export function applyNoteListPersisted(
 	settings.noteListArchiveFilter = normalized.noteListArchiveFilter;
 }
 
+function coerceNoteListSort(raw: unknown): NoteListSort {
+	if (typeof raw !== 'string') return 'ctime-desc';
+	return VALID_SORT.find(s => s === raw) ?? 'ctime-desc';
+}
+
+function coerceNoteListFloatOpenFilter(raw: unknown): NoteListFloatOpenFilter {
+	if (typeof raw !== 'string') return 'all';
+	return VALID_FLOAT.find(s => s === raw) ?? 'all';
+}
+
+function coerceNoteListArchiveFilter(raw: unknown): NoteListArchiveFilter {
+	if (typeof raw !== 'string') return 'all';
+	return VALID_ARCHIVE.find(s => s === raw) ?? 'all';
+}
+
 function normalizeNoteListFile(raw: Partial<NoteListPersistedFile>): NoteListPersistedFile {
-	let sort = raw.noteListSort;
-	if (typeof sort !== 'string' || !VALID_SORT.includes(sort as NoteListSort)) {
-		sort = 'ctime-desc';
-	}
-	let floatOpen = raw.noteListFloatOpenFilter;
-	if (typeof floatOpen !== 'string' || !VALID_FLOAT.includes(floatOpen as NoteListFloatOpenFilter)) {
-		floatOpen = 'all';
-	}
-	let archive = raw.noteListArchiveFilter;
-	if (typeof archive !== 'string' || !VALID_ARCHIVE.includes(archive as NoteListArchiveFilter)) {
-		archive = 'all';
-	}
+	const sort = coerceNoteListSort(raw.noteListSort);
+	const floatOpen = coerceNoteListFloatOpenFilter(raw.noteListFloatOpenFilter);
+	const archive = coerceNoteListArchiveFilter(raw.noteListArchiveFilter);
 	return {
 		version: 1,
 		noteListPinnedPaths: normalizeNoteListPinnedPathsStorage(raw.noteListPinnedPaths),
-		noteListSort: sort as NoteListSort,
+		noteListSort: sort,
 		noteListColorFilters: normalizeNoteListColorFilters(raw.noteListColorFilters),
 		noteListWorkspaceFilterId: (() => {
 			const ext = raw as Partial<NoteListPersistedFile> & { noteListWorkspaceFilterIds?: unknown };
@@ -215,8 +221,8 @@ function normalizeNoteListFile(raw: Partial<NoteListPersistedFile>): NoteListPer
 			}
 			return pickFirstFromLegacyWorkspaceFilterIdsArray(ext.noteListWorkspaceFilterIds);
 		})(),
-		noteListFloatOpenFilter: floatOpen as NoteListFloatOpenFilter,
-		noteListArchiveFilter: archive as NoteListArchiveFilter
+		noteListFloatOpenFilter: floatOpen,
+		noteListArchiveFilter: archive
 	};
 }
 

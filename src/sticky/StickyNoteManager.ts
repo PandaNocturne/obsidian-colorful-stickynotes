@@ -221,7 +221,8 @@ export class StickyNoteManager {
 
 	private ensureActivePopoverId(): string | null {
 		if (this.activePopoverId && this.popovers.has(this.activePopoverId)) return this.activePopoverId;
-		const next = this.popovers.keys().next().value ?? null;
+		const first = this.popovers.keys().next();
+		const next: string | null = first.done ? null : first.value;
 		this.activePopoverId = next;
 		return next;
 	}
@@ -365,10 +366,11 @@ export class StickyNoteManager {
 			if (typeof obj[FM_ARCHIVED_KEY] !== 'boolean') {
 				obj[FM_ARCHIVED_KEY] = false;
 			}
+			const colorVal = obj[FM_COLOR_KEY];
 			if (
 				preferredColor &&
 				preferredColor !== 'default' &&
-				(typeof obj[FM_COLOR_KEY] !== 'string' || (obj[FM_COLOR_KEY] as string).trim().length === 0)
+				(typeof colorVal !== 'string' || colorVal.trim().length === 0)
 			) {
 				obj[FM_COLOR_KEY] = preferredColor;
 			}
@@ -594,7 +596,7 @@ export class StickyNoteManager {
 			this.persistOpenWindows();
 		}
 		const id = newStickyWorkspaceId();
-		const windowsCopy = structuredClone(ws.windows) as SerializedStickyWindow[];
+		const windowsCopy: SerializedStickyWindow[] = structuredClone(ws.windows);
 		const nw: StickyWorkspace = {
 			id,
 			name: t('WS_DUPLICATE_NAME', { name: ws.name }),
@@ -1096,7 +1098,7 @@ export class StickyNoteManager {
 		}
 		for (const id of ids) this.closeSticky(id);
 		try {
-			await this.app.vault.trash(file, false);
+			await this.app.fileManager.trashFile(file);
 		} catch {
 			new Notice(t('NOTICE_CANNOT_DELETE_STICKY'));
 		}
@@ -1175,7 +1177,7 @@ export class StickyNoteManager {
 		this.notifyStickyListOpenIndicators();
 		if (!trashIfBlank || !(file instanceof TFile)) return;
 		if (!this.app.vault.getAbstractFileByPath(file.path)) return;
-		void this.app.vault.trash(file, false).catch(() => {
+		void this.app.fileManager.trashFile(file).catch(() => {
 			new Notice(t('NOTICE_CANNOT_AUTO_DELETE_BLANK_STICKY'));
 		});
 	}
@@ -1251,7 +1253,8 @@ export class StickyNoteManager {
 		});
 		this.popovers.set(id, pop);
 		if (ENABLE_GRID_MULTI_CELL_SPAN && this.isValidPersistedGridSpan(serial.gridSpan)) {
-			this.stickyGridSpan.set(id, serial.gridSpan!);
+			const span = serial.gridSpan;
+			this.stickyGridSpan.set(id, span);
 		}
 		if (Array.isArray(serial.bindings) && serial.bindings.length > 0) {
 			this.pendingBindings.set(
@@ -1943,7 +1946,6 @@ export class StickyNoteManager {
 
 		let bestDx = 0;
 		let bestDy = 0;
-		let bestDxAbs = threshold + 1;
 		let bestDyAbs = threshold + 1;
 		let snappedToId: string | null = null;
 		let snappedAxis: 'x' | 'y' | null = null;
@@ -2059,7 +2061,6 @@ export class StickyNoteManager {
 		if (bestRowDxAbs <= threshold && bestColDyAbs <= threshold) {
 			if (bestRowDxAbs <= bestColDyAbs) {
 				bestDx = bestRowDx;
-				bestDxAbs = bestRowDxAbs;
 				snappedToId = bestRowTarget;
 				snappedAxis = 'x';
 				rowEdgeAlign = bestRowEdge;
@@ -2080,7 +2081,6 @@ export class StickyNoteManager {
 			}
 		} else if (bestRowDxAbs <= threshold) {
 			bestDx = bestRowDx;
-			bestDxAbs = bestRowDxAbs;
 			snappedToId = bestRowTarget;
 			snappedAxis = 'x';
 			rowEdgeAlign = bestRowEdge;
@@ -2140,6 +2140,7 @@ export class StickyNoteManager {
 		maxC: number;
 		maxR: number;
 	} | null {
+		type GridCell = { c: number; r: number };
 		if (group.length <= 1) return null;
 		const groupSet = new Set(group);
 		let anchorId: string = group[0]!;
@@ -2156,7 +2157,7 @@ export class StickyNoteManager {
 			}
 		}
 
-		const pos = new Map();
+		const pos = new Map<string, GridCell>();
 		pos.set(anchorId, { c: 0, r: 0 });
 		const q = [anchorId];
 		while (q.length > 0) {
@@ -2195,7 +2196,7 @@ export class StickyNoteManager {
 			minC = Math.min(minC, pr.c);
 			minR = Math.min(minR, pr.r);
 		}
-		const norm = new Map();
+		const norm = new Map<string, GridCell>();
 		for (const [wid, pr] of pos) {
 			norm.set(wid, { c: pr.c - minC, r: pr.r - minR });
 		}

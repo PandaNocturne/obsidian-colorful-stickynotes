@@ -20,7 +20,7 @@ function normalizeStickyBgValue(raw: unknown): StickyColorId | null {
 
 /** 仅读元数据缓存（同步），用于刚打开文件后立刻对齐颜色等场景。 */
 export function getStickyBgColorFromMetadataCache(app: App, file: TFile): StickyColorId | null {
-	const raw = app.metadataCache.getFileCache(file)?.frontmatter?.[FM_COLOR_KEY];
+	const raw: unknown = app.metadataCache.getFileCache(file)?.frontmatter?.[FM_COLOR_KEY];
 	return normalizeStickyBgValue(raw);
 }
 

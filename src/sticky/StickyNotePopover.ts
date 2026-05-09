@@ -152,8 +152,6 @@ export class StickyNotePopover {
 			cls: 'csn-sticky',
 			attr: rootAttr
 		});
-		this.rootEl.style.setProperty('--csn-sticky-stack', '0');
-		this.rootEl.style.setProperty('--csn-sticky-active-fine-lift', '0');
 
 		this.plugin.registerDomEvent(
 			this.rootEl,
@@ -612,7 +610,7 @@ export class StickyNotePopover {
 				type: 'button',
 				attr: { 'data-csn-sheet-color': c.id, 'aria-label': t(c.labelKey) }
 			});
-			const checkWrap = sw.createSpan({ cls: 'csn-sticky-sheet-swatch-check' });
+			sw.createSpan({ cls: 'csn-sticky-sheet-swatch-check' });
 			this.colorSwatchEls.set(c.id, sw);
 			this.plugin.registerDomEvent(sw, 'click', evt => {
 				evt.preventDefault();
@@ -621,7 +619,6 @@ export class StickyNotePopover {
 				this.options.onColorChange(c.id);
 				this.refreshSheetColorSelection();
 			});
-			checkWrap.style.display = 'none';
 		}
 		this.refreshSheetColorSelection();
 	}
@@ -634,10 +631,7 @@ export class StickyNotePopover {
 			if (check instanceof HTMLElement) {
 				check.replaceChildren();
 				if (id === cur) {
-					check.style.display = '';
 					setIcon(check, 'check');
-				} else {
-					check.style.display = 'none';
 				}
 			}
 		}

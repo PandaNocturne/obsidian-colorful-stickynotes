@@ -1190,10 +1190,8 @@ export class StickyNoteListView extends ItemView {
 		const cur = card.dataset.csnEmbedMtime ?? '';
 		const next = String(f.stat.mtime);
 		if (cur === next) return;
-		const previewEl = card.querySelector(
-			'.csn-list-card-body.csn-list-card-body--rendered'
-		) as HTMLElement | null;
-		if (!previewEl) return;
+		const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
+		if (!(previewEl instanceof HTMLElement)) return;
 		await this.renderCardPreview(previewEl, f);
 		card.dataset.csnEmbedMtime = next;
 	}

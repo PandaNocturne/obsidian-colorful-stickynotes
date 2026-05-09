@@ -155,13 +155,17 @@
 .csn-sticky-sheet-swatch .csn-sticky-sheet-swatch-check {
 	position: absolute;
 	inset: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	display: none;
 	color: var(--text-normal);
 	pointer-events: none;
 	text-shadow: 0 0 2px var(--background-primary);
 	filter: drop-shadow(0 0 1px var(--background-primary));
+}
+
+.csn-sticky-sheet-swatch.is-selected .csn-sticky-sheet-swatch-check {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .csn-sticky-sheet-swatch .csn-sticky-sheet-swatch-check svg {

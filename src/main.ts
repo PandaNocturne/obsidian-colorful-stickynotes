@@ -344,23 +344,17 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.settings.noteListPageSize = Math.max(4, Math.min(48, Math.round(listPs)));
 
 		const nls = this.settings.noteListSort;
-		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.includes(nls as NoteListSort)) {
+		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.some(s => s === nls)) {
 			this.settings.noteListSort = DEFAULT_SETTINGS.noteListSort;
 		}
 
 		const nf = this.settings.noteListFloatOpenFilter;
-		if (
-			typeof nf !== 'string' ||
-			!VALID_NOTE_LIST_FLOAT_OPEN_FILTER.includes(nf as NoteListFloatOpenFilter)
-		) {
+		if (typeof nf !== 'string' || !VALID_NOTE_LIST_FLOAT_OPEN_FILTER.some(s => s === nf)) {
 			this.settings.noteListFloatOpenFilter = DEFAULT_SETTINGS.noteListFloatOpenFilter;
 		}
 
 		const naf = this.settings.noteListArchiveFilter;
-		if (
-			typeof naf !== 'string' ||
-			!VALID_NOTE_LIST_ARCHIVE_FILTER.includes(naf as NoteListArchiveFilter)
-		) {
+		if (typeof naf !== 'string' || !VALID_NOTE_LIST_ARCHIVE_FILTER.some(s => s === naf)) {
 			this.settings.noteListArchiveFilter = DEFAULT_SETTINGS.noteListArchiveFilter;
 		}
 
@@ -369,26 +363,21 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			this.settings.noteListColorFilters = normalizeNoteListColorFilters(raw.noteListColorFilters);
 		} else {
 			const leg = raw.noteListColorFilter;
-			if (
-				typeof leg === 'string' &&
-				leg !== 'all' &&
-				VALID_NEW_STICKY_BG.includes(leg as StickyColorId)
-			) {
-				this.settings.noteListColorFilters = [leg as StickyColorId];
+			const legColor =
+				typeof leg === 'string' && leg !== 'all' ? VALID_NEW_STICKY_BG.find(s => s === leg) : undefined;
+			if (legColor) {
+				this.settings.noteListColorFilters = [legColor];
 			} else {
 				this.settings.noteListColorFilters = [];
 			}
 		}
 		delete st.noteListColorFilter;
 
-		delete (st as Record<string, unknown>).noteListWorkspaceFilterIds;
+		delete st.noteListWorkspaceFilterIds;
 		this.settings.noteListWorkspaceFilterId = resolveNoteListWorkspaceFilterIdAfterMerge(raw);
 
 		const nlo = this.settings.noteListOpenLocation;
-		if (
-			typeof nlo !== 'string' ||
-			!VALID_NOTE_LIST_OPEN_LOCATION.includes(nlo as NoteListOpenLocation)
-		) {
+		if (typeof nlo !== 'string' || !VALID_NOTE_LIST_OPEN_LOCATION.some(s => s === nlo)) {
 			this.settings.noteListOpenLocation = DEFAULT_SETTINGS.noteListOpenLocation;
 		}
 		const delaySec = this.settings.restoreStickySessionDelaySec;
@@ -421,16 +410,17 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.settings.defaultNewStickyHeight = Math.max(200, Math.min(1200, Math.round(dh)));
 
 		const dbg = this.settings.defaultNewStickyBackground;
-		if (typeof dbg !== 'string' || !VALID_NEW_STICKY_BG.includes(dbg as StickyColorId)) {
+		const dbgOk = typeof dbg === 'string' ? VALID_NEW_STICKY_BG.find(s => s === dbg) : undefined;
+		if (!dbgOk) {
 			this.settings.defaultNewStickyBackground = DEFAULT_SETTINGS.defaultNewStickyBackground;
 		} else {
-			this.settings.defaultNewStickyBackground = dbg as StickyColorId;
+			this.settings.defaultNewStickyBackground = dbgOk;
 		}
 
 		const hns = this.settings.headerNewStickyAdjacentSide;
 		if (
 			typeof hns !== 'string' ||
-			!VALID_HEADER_NEW_STICKY_ADJACENT_SIDE.includes(hns as HeaderNewStickyAdjacentSide)
+			!VALID_HEADER_NEW_STICKY_ADJACENT_SIDE.some(s => s === hns)
 		) {
 			this.settings.headerNewStickyAdjacentSide = DEFAULT_SETTINGS.headerNewStickyAdjacentSide;
 		}

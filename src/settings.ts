@@ -183,24 +183,26 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_BASIC') });
+		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_BASIC'));
 		new Setting(containerEl)
 			.setName(t('SETTINGS_STICKY_FOLDER_NAME'))
 			.setDesc(t('SETTINGS_STICKY_FOLDER_DESC'))
 			.addButton(btn => {
 				btn.setButtonText(t('SETTINGS_CHOOSE_FOLDER')).onClick(() => {
-					const m = new FolderPickerModal(this.app, async path => {
-						this.plugin.settings.stickyFolder = path;
-						await this.plugin.saveSettings();
-						m.close();
-						this.display();
+					const m = new FolderPickerModal(this.app, path => {
+						void (async () => {
+							this.plugin.settings.stickyFolder = path;
+							await this.plugin.saveSettings();
+							m.close();
+							this.display();
+						})();
 					});
 					m.open();
 				});
 			})
 			.addText(text => {
 				text
-					.setPlaceholder('StickyNotes')
+					.setPlaceholder('Sticky notes')
 					.setValue(this.plugin.settings.stickyFolder)
 					.onChange(async v => {
 						this.plugin.settings.stickyFolder = v || 'StickyNotes';
@@ -252,11 +254,13 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			.setDesc(t('SETTINGS_DEFAULT_TEMPLATE_DESC'))
 			.addButton(btn => {
 				btn.setButtonText(t('SETTINGS_CHOOSE_TEMPLATE_NOTE')).onClick(() => {
-					const m = new MarkdownFilePickerModal(this.app, async path => {
-						this.plugin.settings.defaultTemplatePath = path;
-						await this.plugin.saveSettings();
-						m.close();
-						this.display();
+					const m = new MarkdownFilePickerModal(this.app, path => {
+						void (async () => {
+							this.plugin.settings.defaultTemplatePath = path;
+							await this.plugin.saveSettings();
+							m.close();
+							this.display();
+						})();
 					});
 					m.open();
 				});
@@ -271,7 +275,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_STICKY_WINDOW') });
+		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_STICKY_WINDOW'));
 		new Setting(containerEl)
 			.setName(t('SETTINGS_RESTORE_ON_STARTUP_NAME'))
 			.setDesc(t('SETTINGS_RESTORE_ON_STARTUP_DESC'))
@@ -421,7 +425,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_LIST') });
+		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_LIST'));
 		new Setting(containerEl)
 			.setName(t('SETTINGS_LIST_OPEN_LOCATION_NAME'))
 			.setDesc(t('SETTINGS_LIST_OPEN_LOCATION_DESC'))
@@ -524,7 +528,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_ASSIST_FEATURES') });
+		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_ASSIST_FEATURES'));
 		new Setting(containerEl)
 			.setName(t('SETTINGS_EDGE_STRETCH_NAME'))
 			.setDesc(t('SETTINGS_EDGE_STRETCH_DESC'))
@@ -557,7 +561,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_ASSIST') });
+		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_ASSIST'));
 		new Setting(containerEl)
 			.setName(t('SETTINGS_SNAP_TRIGGER_NAME'))
 			.setDesc(t('SETTINGS_SNAP_TRIGGER_DESC'))
