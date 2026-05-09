@@ -1,12 +1,19 @@
 /*
- * 正文区：用绝对定位铺满 flex 剩余高度，避免 percentage / flex 链条在嵌套 workspace 上断裂。
- * 底部栏「自动隐藏」若不设 min-height:0，flex 子项按内容最小高度会把正文挤成一条缝（min-height:auto 陷阱）。
+ * 正文区：DOM 与 Advanced Search UI 的 HoverNoteLeafPopover 对齐——根下有专用 shell（.csn-sticky-window-body）
+ * 仅包裹 workspace-split；样式等价于 asui-preview-window-body + body .asui-preview-window .view-content。
  */
-.csn-sticky-body {
-	position: relative;
+.csn-sticky-body.csn-sticky-window-body {
+	display: flex;
+	flex-direction: column;
 	flex: 1 1 auto;
 	min-height: 0;
+	height: auto;
+	width: 100%;
+	margin: 0;
+	padding: 0;
 	overflow: hidden;
+	box-sizing: border-box;
+	position: relative;
 }
 
 /* 首次 openFile / loadIfDeferred 完成前隐藏正文，避免空叶视图闪白 */
@@ -14,10 +21,11 @@
 	visibility: hidden;
 }
 
-/* 打补丁 */
-.csn-sticky-body {
+/* workspace 与笔记视图补丁（选择器与 ASUI 预览窗同级语义） */
+.csn-sticky-window-body {
 	--file-line-width: calc(100% - 16px);
 
+	//! 隐藏一些不寻常的元素
 	.view-header,
 	.inline-title,
 	.embedded-backlinks,
@@ -25,59 +33,119 @@
 		display: none;
 	}
 
-	.workspace-split .view-content,
-	.workspace-split {
-		position: relative;
+	/* 单叶浮动窗口不应显示 workspace 标签栏，否则会占位并把正文挤偏 */
+	.workspace-tab-header-container {
+		display: none !important;
+	}
+
+	> .workspace-split {
+		flex: 1 1 auto;
+		min-height: 0;
+		height: auto;
 		width: 100%;
-		height: 100%;
+		max-height: 100%;
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+		box-sizing: border-box;
+	}
+
+	.workspace-leaf,
+	.workspace-split {
+		min-height: 0;
+	}
+
+	.workspace-tabs,
+	.workspace-leaf {
+		display: flex;
+		flex-direction: column;
+		flex: 1 1 auto;
+		min-height: 0;
+		height: auto;
+		width: 100%;
+	}
+
+	.workspace-leaf-content {
+		flex: 1 1 auto;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		padding: 0 !important;
+		margin: 0 !important;
+	}
+
+	.workspace-split .view-content {
+		background-color: var(--csn-b);
 	}
 
 	.view-content {
 		word-break: break-all;
+		background-color: var(--csn-b);
+		/*
+		 * CM6：滚动由 .cm-scroller 承担；勿在 .view-content 上使用 zoom（易双层滚动/错位）。
+		 * 编辑缩放仅作用在 .markdown-source-view.mod-cm6；阅读缩放作用在 .markdown-preview-view。
+		 */
+		overflow: hidden;
 
-		/* !编辑模式 */
-		.markdown-source-view {
-			padding: 0px !important;
+		.empty-state {
+			display: none;
+		}
 
-			.cm-editor,
-			.cm-scroller,
-			.cm-sizer,
-			.cm-contentContainer>div {
-				padding: 0 !important;
-				margin: 0px !important;
-				max-width: none !important;
-				min-width: 100% !important;
-				/* 铺满整个便签 */
+		/* !编辑模式 — 对齐 ASUI：仅处理 scroller padding + 高度链，勿对 .cm-sizer 等一概 min-width */
+		.markdown-source-view.mod-cm6 {
+			zoom: var(--csn-sticky-view-content-zoom, 0.65);
+			padding: 0 !important;
+			flex: 1 1 auto;
+			min-height: 0;
+			height: 100%;
+			display: flex;
+			flex-direction: column;
+
+			.cm-editor {
+				flex: 1 1 auto;
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
 			}
 
-			/* .cm-scroller::-webkit-scrollbar {
-    } */
+			.cm-editor > .cm-scroller {
+				flex: 1 1 auto !important;
+				min-height: 0 !important;
+				overflow: auto !important;
+				padding: 0 !important;
+			}
 
 			.cm-contentContainer {
-				padding-top: 10px;
-				padding-left: 15px;
-				padding-bottom: 10px;
+				padding: 10px;
+				box-sizing: border-box;
 			}
 		}
 
 		/* !阅读模式 */
+		.markdown-reading-view {
+			flex: 1 1 auto;
+			min-height: 0;
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+		}
+
 		.markdown-reading-view .markdown-preview-view {
 			max-width: none !important;
-			/* 解除缩减栏宽的限制 */
 			margin: 0 !important;
-			/* 移除居中产生的两侧空白 */
 			padding: 10px !important;
-			/* 在这里统一设置你想要的 10px 内边距 */
 			width: 100% !important;
-			/* 铺满整个便签 */
+			flex: 1 1 auto;
+			min-height: 0;
+			box-sizing: border-box;
+			overflow: auto;
+			zoom: var(--csn-sticky-view-content-zoom, 0.65);
 		}
 
 		.markdown-preview-view::-webkit-scrollbar {
 			width: 0px !important;
-			/* 隐藏滚动条，但依然可以滚动 */
 		}
 
-		/* !缩减笔记下方空白大小 */
 		.markdown-preview-sizer.markdown-preview-section,
 		.cm-s-obsidian .cm-content {
 			padding: 0px !important;
@@ -85,28 +153,15 @@
 	}
 }
 
-
-/* 正文区：与便笺纸面同色；缩放由 StickyNotePopover#setViewContentZoom 写入 --csn-sticky-view-content-zoom */
-.csn-sticky .workspace-leaf-content>.view-content {
-	// --background-primary: var(--csn-b);
-	background-color: var(--csn-b);
-	zoom: var(--csn-sticky-view-content-zoom, 0.65);
-
-	.empty-state {
-		display: none;
-	}
+/*
+ * 与 ASUI「body .asui-preview-window .view-content」相同作用：抬高优先级。
+ * 编辑模式勿用 overflow:auto，否则与 .cm-scroller 形成双层滚动导致偏移。
+ */
+body .csn-sticky-window-body .view-content {
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
 }
-
-// .csn-sticky-body .workspace-leaf {
-// 	flex: 1 1 auto;
-// 	min-height: 100% !important;
-// 	min-width: 100% !important;
-// 	overflow: auto;
-// }
-
-// .csn-sticky-body .markdown-source-view.mod-cm6,
-// .csn-sticky-body .markdown-preview-view {
-// 	flex: 1 1 auto;
-// 	min-height: 0 !important;
-// 	overflow: auto;
-// }

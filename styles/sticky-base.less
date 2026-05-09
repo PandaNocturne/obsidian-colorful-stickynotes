@@ -1,5 +1,9 @@
 /* 多彩便笺 — 浮动窗口 */
 .csn-sticky {
+	/* 与 ASUI asui-preview-window 一致：避免 Electron 标题栏拖拽区域干扰嵌套 workspace */
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+
 	--csn-sticky-stack: 0;
 	--csn-sticky-active-fine-lift: 0;
 	--csn-h: var(--background-secondary);

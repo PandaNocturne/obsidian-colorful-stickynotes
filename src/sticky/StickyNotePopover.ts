@@ -188,7 +188,10 @@ export class StickyNotePopover {
 		this.wireRootSplitRouting();
 
 		this.mainColumnEl = this.rootEl.createDiv({ cls: 'csn-sticky-main' });
-		this.bodyWrapEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-body' });
+		/* 与 Advanced Search UI 预览窗一致：独立 shell 类 + body 包裹 split，便于用与 asui-preview-window-body 相同的 CSS 选择器约束布局 */
+		this.bodyWrapEl = this.mainColumnEl.createDiv({
+			cls: 'csn-sticky-body csn-sticky-window-body'
+		});
 		this.bodyWrapEl.appendChild((this.rootSplit as WorkspaceSplitWithDom).containerEl);
 		this.plugin.registerDomEvent(this.bodyWrapEl, 'mousedown', () => {
 			const leaf = this.leaf;
