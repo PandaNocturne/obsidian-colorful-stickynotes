@@ -97,6 +97,10 @@ export class StickyNoteManager {
 	/** ????? bringStickyToFront ??????? id???????????????????????????????????? vs ?????????????????????? */
 	private lastActivatedPopoverId: string | null = null;
 	private saveTimer: number | null = null;
+	/** 工作区切换世代：每次 begin 递增；finalize/restore 若发现已过期则中止，避免快速连点覆盖数据。 */
+	private workspaceSwitchGeneration = 0;
+	/** 串行化 finalize，避免两次切换的 flush/close/restore 交错执行。 */
+	private workspaceSwitchTail: Promise<void> = Promise.resolve();
 	/** ????????????????????????????????? vault ????????????????????? */
 	private pendingDeleteListener: EventRef | null = null;
 	private pendingDeleteSafetyTimer: number | null = null;
@@ -312,11 +316,20 @@ export class StickyNoteManager {
 		}
 	}
 
+	/** 取消防抖后立即写入磁盘，避免与切换/面板保存交错或延迟覆盖。 */
+	async flushWorkspacesToDisk(): Promise<void> {
+		if (this.saveTimer !== null) {
+			window.clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
+		await saveWorkspacesFile(this.plugin, this.workspaces);
+	}
+
 	private scheduleSaveWorkspaces(): void {
 		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
 		this.saveTimer = window.setTimeout(() => {
 			this.saveTimer = null;
-			void saveWorkspacesFile(this.plugin, this.workspaces);
+			void this.flushWorkspacesToDisk();
 		}, 400);
 	}
 
@@ -428,7 +441,7 @@ export class StickyNoteManager {
 		};
 		this.workspaces.workspaces.push(nw);
 		this.workspaces.activeWorkspaceId = id;
-		await saveWorkspacesFile(this.plugin, this.workspaces);
+		await this.flushWorkspacesToDisk();
 	}
 
 	/**
@@ -450,19 +463,46 @@ export class StickyNoteManager {
 		const remarkTrim = options?.remark?.trim() ?? '';
 		if (remarkTrim) nw.remark = remarkTrim;
 		this.workspaces.workspaces.push(nw);
-		await saveWorkspacesFile(this.plugin, this.workspaces);
+		await this.flushWorkspacesToDisk();
 	}
 
 	/**
-	 * ??????????????????????????????????????????????????????????????????????????????????
+	 * 保存当前布局并将活动工作区 id 切到 wsId（内存立即生效，可马上刷新面板高亮）。
+	 * 须再调用 {@link finalizeWorkspaceSwitch} 完成落盘与便笺窗口恢复。
+	 * @returns 本次切换的世代号；失败返回 null。
 	 */
-	async switchWorkspaceAndRestore(wsId: string): Promise<void> {
-		if (!this.workspaces.workspaces.some(w => w.id === wsId)) return;
+	beginWorkspaceSwitchForUi(wsId: string): number | null {
+		if (!this.workspaces.workspaces.some(w => w.id === wsId)) return null;
 		this.persistOpenWindows();
 		this.workspaces.activeWorkspaceId = wsId;
-		await saveWorkspacesFile(this.plugin, this.workspaces);
-		this.closeAllOpenStickyWindows(true);
-		await this.restoreWorkspaceWindows();
+		return ++this.workspaceSwitchGeneration;
+	}
+
+	private isStaleWorkspaceSwitch(token: number): boolean {
+		return token !== this.workspaceSwitchGeneration;
+	}
+
+	/** 落盘活动工作区、关闭当前浮动便笺并按快照恢复（在 beginWorkspaceSwitchForUi 之后调用）。 */
+	async finalizeWorkspaceSwitch(token: number): Promise<void> {
+		const job = this.workspaceSwitchTail.then(async () => {
+			if (this.isStaleWorkspaceSwitch(token)) return;
+			await this.flushWorkspacesToDisk();
+			if (this.isStaleWorkspaceSwitch(token)) return;
+			this.closeAllOpenStickyWindows(true);
+			if (this.isStaleWorkspaceSwitch(token)) return;
+			await this.restoreWorkspaceWindows(token);
+		});
+		this.workspaceSwitchTail = job.catch(() => undefined);
+		await job;
+	}
+
+	/**
+	 * 完整切换：等价于 beginWorkspaceSwitchForUi + finalizeWorkspaceSwitch。
+	 */
+	async switchWorkspaceAndRestore(wsId: string): Promise<void> {
+		const token = this.beginWorkspaceSwitchForUi(wsId);
+		if (token === null) return;
+		await this.finalizeWorkspaceSwitch(token);
 	}
 
 	async updateWorkspace(wsId: string, name: string, remark: string): Promise<void> {
@@ -478,7 +518,7 @@ export class StickyNoteManager {
 		if (r) ws.remark = r;
 		else delete ws.remark;
 		ws.updatedAt = Date.now();
-		await saveWorkspacesFile(this.plugin, this.workspaces);
+		await this.flushWorkspacesToDisk();
 		new Notice(t('NOTICE_WORKSPACE_UPDATED'));
 	}
 
@@ -499,7 +539,7 @@ export class StickyNoteManager {
 		};
 		if (ws.remark) nw.remark = ws.remark;
 		this.workspaces.workspaces.push(nw);
-		await saveWorkspacesFile(this.plugin, this.workspaces);
+		await this.flushWorkspacesToDisk();
 		new Notice(t('NOTICE_WORKSPACE_COPIED'));
 	}
 
@@ -517,7 +557,7 @@ export class StickyNoteManager {
 		if (insertAt < 0) return;
 		next.splice(insertAt, 0, moved);
 		this.workspaces.workspaces = next;
-		await saveWorkspacesFile(this.plugin, this.workspaces);
+		await this.flushWorkspacesToDisk();
 	}
 
 	/** 拖到「新建」格上时移到列表末尾。 */
@@ -530,7 +570,7 @@ export class StickyNoteManager {
 		if (moved === undefined) return;
 		next.push(moved);
 		this.workspaces.workspaces = next;
-		await saveWorkspacesFile(this.plugin, this.workspaces);
+		await this.flushWorkspacesToDisk();
 	}
 
 	private persistOpenWindows(): void {
@@ -1132,10 +1172,12 @@ export class StickyNoteManager {
 
 	private async finalizeExistingStickyOpen(
 		prepared: PreparedExistingStickyOpen,
-		opts: { workspaceActive: boolean }
+		opts: { workspaceActive: boolean; persistLayout?: boolean; switchToken?: number }
 	): Promise<void> {
+		if (opts.switchToken !== undefined && this.isStaleWorkspaceSwitch(opts.switchToken)) return;
 		const { pop, file, bounds: b, savedColor, hidden, stretched } = prepared;
 		await pop.openFile(file, { workspaceActive: opts.workspaceActive });
+		if (opts.switchToken !== undefined && this.isStaleWorkspaceSwitch(opts.switchToken)) return;
 		pop.setBounds(b);
 		/* ??????????????????????????????????????????????????????????????????? */
 		pop.setStretched(stretched, { snapHorizontalToViewport: false });
@@ -1149,7 +1191,11 @@ export class StickyNoteManager {
 				await this.setStickyBackgroundColorForFile(file, savedColor);
 			}
 		}
-		this.persistOpenWindows();
+		if (opts.switchToken !== undefined && this.isStaleWorkspaceSwitch(opts.switchToken)) return;
+		/* 批量恢复时禁止在此处 persist：并行完成顺序会导致快照只含部分窗口并覆盖磁盘。 */
+		if (opts.persistLayout !== false) {
+			this.persistOpenWindows();
+		}
 		this.notifyStickyListOpenIndicators();
 	}
 
@@ -1159,8 +1205,9 @@ export class StickyNoteManager {
 		await this.finalizeExistingStickyOpen(prepared, { workspaceActive: true });
 	}
 
-	/** 按当前活动工作区快照恢复窗口；快照为空时不自动新建便笺。 */
-	async restoreWorkspaceWindows(): Promise<void> {
+	/** 按当前活动工作区快照恢复窗口；快照为空时不自动新建便笺。switchToken 与 begin 返回的世代一致时才会完整执行；中途过期会关闭已创建的壳并中止。 */
+	async restoreWorkspaceWindows(switchToken?: number): Promise<void> {
+		if (switchToken !== undefined && this.isStaleWorkspaceSwitch(switchToken)) return;
 		const ws = this.activeWorkspace();
 		const openPaths = new Set<string>();
 		for (const pop of this.popovers.values()) {
@@ -1176,12 +1223,32 @@ export class StickyNoteManager {
 		const preparedList = (
 			await Promise.all(pending.map(w => this.prepareExistingStickyShell(w)))
 		).filter((p): p is PreparedExistingStickyOpen => p !== null);
+		if (switchToken !== undefined && this.isStaleWorkspaceSwitch(switchToken)) {
+			this.closeAllOpenStickyWindows(true);
+			return;
+		}
 		if (preparedList.length === 0) return;
-		/* ???????????????????????????????????? active ????????????????????? */
-		await Promise.all(
-			preparedList.map(p => this.finalizeExistingStickyOpen(p, { workspaceActive: false }))
-		);
+		for (const p of preparedList) {
+			if (switchToken !== undefined && this.isStaleWorkspaceSwitch(switchToken)) {
+				this.closeAllOpenStickyWindows(true);
+				return;
+			}
+			await this.finalizeExistingStickyOpen(p, {
+				workspaceActive: false,
+				persistLayout: false,
+				switchToken
+			});
+		}
+		if (switchToken !== undefined && this.isStaleWorkspaceSwitch(switchToken)) {
+			this.closeAllOpenStickyWindows(true);
+			return;
+		}
 		this.syncAllBindingGroupsChromeAfterRestore();
+		if (switchToken !== undefined && this.isStaleWorkspaceSwitch(switchToken)) {
+			this.closeAllOpenStickyWindows(true);
+			return;
+		}
+		this.persistOpenWindows();
 	}
 
 	updateBottomBarsFromSettings(): void {

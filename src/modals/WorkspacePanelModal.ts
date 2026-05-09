@@ -1,7 +1,7 @@
 import { App, Modal, Notice, Setting, setIcon } from 'obsidian';
 import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
-import { defaultWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
+import { defaultWorkspacesFile } from '../workspace-store';
 import type { StickyWorkspace } from '../types';
 
 /** HTML5 DnD 用 payload（text/plain 兼容性最好） */
@@ -408,16 +408,18 @@ export class WorkspacePanelModal extends Modal {
 				} else if (mgr.workspaces.activeWorkspaceId === ws.id) {
 					mgr.workspaces.activeWorkspaceId = mgr.workspaces.workspaces[0]!.id;
 				}
-				await saveWorkspacesFile(this.plugin, mgr.workspaces);
+				await mgr.flushWorkspacesToDisk();
 				refresh();
 			}).open();
 		});
 
 		const activateWorkspace = async (): Promise<void> => {
 			if (isActive) return;
-			await mgr.switchWorkspaceAndRestore(ws.id);
-			new Notice(t('NOTICE_SWITCHED_WORKSPACE'));
+			const token = mgr.beginWorkspaceSwitchForUi(ws.id);
+			if (token === null) return;
 			refresh();
+			new Notice(t('NOTICE_SWITCHED_WORKSPACE'));
+			await mgr.finalizeWorkspaceSwitch(token);
 		};
 
 		row.addEventListener('click', e => {
