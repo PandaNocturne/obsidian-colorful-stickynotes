@@ -216,8 +216,6 @@ export const en = {
 	WS_DUPLICATE_NAME: 'Copy of {name}',
 	NOTICE_WORKSPACE_COPIED: 'Sticky workspace duplicated',
 	WS_DELETE_ARIA: 'Delete workspace',
-	WS_DELETE_DEFAULT_ARIA: 'Delete workspace (default cannot be deleted)',
-	NOTICE_DEFAULT_WS_CANNOT_DELETE: 'The default workspace cannot be deleted',
 	WS_SWITCH_ARIA: 'Switch to this workspace',
 	WS_REORDER_DRAG_ARIA: 'Drag to reorder workspaces',
 	NOTICE_SWITCHED_WORKSPACE: 'Switched workspace',

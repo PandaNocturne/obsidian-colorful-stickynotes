@@ -1,7 +1,7 @@
 import { App, Modal, Notice, Setting, setIcon } from 'obsidian';
 import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
-import { saveWorkspacesFile } from '../workspace-store';
+import { defaultWorkspacesFile, saveWorkspacesFile } from '../workspace-store';
 import type { StickyWorkspace } from '../types';
 
 /** HTML5 DnD 用 payload（text/plain 兼容性最好） */
@@ -397,20 +397,16 @@ export class WorkspacePanelModal extends Modal {
 			attr: { 'aria-label': t('WS_DELETE_ARIA') }
 		});
 		setIcon(btnDel, 'trash-2');
-		const isDefault = ws.id === 'default';
-		if (isDefault) {
-			btnDel.setAttribute('aria-label', t('WS_DELETE_DEFAULT_ARIA'));
-		}
 		btnDel.addEventListener('click', e => {
 			e.stopPropagation();
-			if (isDefault) {
-				new Notice(t('NOTICE_DEFAULT_WS_CANNOT_DELETE'));
-				return;
-			}
 			new DeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
 				mgr.workspaces.workspaces = mgr.workspaces.workspaces.filter(x => x.id !== ws.id);
-				if (mgr.workspaces.activeWorkspaceId === ws.id) {
-					mgr.workspaces.activeWorkspaceId = mgr.workspaces.workspaces[0]?.id ?? 'default';
+				if (mgr.workspaces.workspaces.length === 0) {
+					const fresh = defaultWorkspacesFile();
+					mgr.workspaces.workspaces = fresh.workspaces;
+					mgr.workspaces.activeWorkspaceId = fresh.activeWorkspaceId;
+				} else if (mgr.workspaces.activeWorkspaceId === ws.id) {
+					mgr.workspaces.activeWorkspaceId = mgr.workspaces.workspaces[0]!.id;
 				}
 				await saveWorkspacesFile(this.plugin, mgr.workspaces);
 				refresh();

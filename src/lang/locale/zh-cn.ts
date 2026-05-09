@@ -204,8 +204,6 @@ export const zhCn: Record<MessageKey, string> = {
 	WS_DUPLICATE_NAME: '{name} 副本',
 	NOTICE_WORKSPACE_COPIED: '已复制便笺工作区',
 	WS_DELETE_ARIA: '删除便笺工作区',
-	WS_DELETE_DEFAULT_ARIA: '删除便笺工作区（默认便笺工作区不可删除）',
-	NOTICE_DEFAULT_WS_CANNOT_DELETE: '默认便笺工作区不可删除',
 	WS_SWITCH_ARIA: '切换到该便笺工作区',
 	WS_REORDER_DRAG_ARIA: '拖动排序工作区',
 	NOTICE_SWITCHED_WORKSPACE: '已切换到该便笺工作区',
