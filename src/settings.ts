@@ -143,6 +143,8 @@ export interface ColorfulStickyNotesSettings {
 	canvasLinkAutoFitHeight: boolean;
 	/** 列表拖入 Canvas 时是否同步节点颜色。 */
 	canvasLinkMatchColor: boolean;
+	/** 列表拖入 Canvas 后是否将画布 zoom 至当前选中（新建）节点。 */
+	canvasLinkZoomToSelection: boolean;
 	/** 列表批量拖入 Canvas 时相邻卡片的间隔（px）。 */
 	canvasLinkBatchGridGap: number;
 	/** 列表批量拖入 Canvas 时每行最大卡片数量。 */
@@ -190,6 +192,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	canvasLinkNodeHeight: 320,
 	canvasLinkAutoFitHeight: true,
 	canvasLinkMatchColor: true,
+	canvasLinkZoomToSelection: false,
 	canvasLinkBatchGridGap: 24,
 	canvasLinkBatchMaxPerRow: 10,
 	canvasLinkBatchStackDy: 24
@@ -698,6 +701,15 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			.addToggle(toggle =>
 				toggle.setValue(this.plugin.settings.canvasLinkMatchColor).onChange(async v => {
 					this.plugin.settings.canvasLinkMatchColor = v;
+					await this.plugin.saveSettings();
+				})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_CANVAS_ZOOM_SELECTION_NAME'))
+			.setDesc(t('SETTINGS_CANVAS_ZOOM_SELECTION_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.canvasLinkZoomToSelection).onChange(async v => {
+					this.plugin.settings.canvasLinkZoomToSelection = v;
 					await this.plugin.saveSettings();
 				})
 			);

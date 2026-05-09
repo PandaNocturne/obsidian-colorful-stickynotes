@@ -717,6 +717,7 @@ export class StickyNoteListView extends ItemView {
 				requestSave?: () => Promise<void>;
 				requestFrame?: () => Promise<void>;
 				selection?: Set<unknown>;
+				zoomToSelection?: () => void;
 			};
 		};
 		const maybeApplyCanvasNodeColor = (node: { color?: string } | null | undefined, stickyColor: StickyColorId): void => {
@@ -823,6 +824,24 @@ export class StickyNoteListView extends ItemView {
 
 				void v.canvas?.requestSave?.();
 				for (const n of createdNodes) maybeAutoFitHeight(v, n);
+
+				if (
+					this.plugin.settings.canvasLinkZoomToSelection &&
+					createdNodes.length > 0 &&
+					v.canvas?.zoomToSelection
+				) {
+					/* 等待布局与 autofit（双帧）后再 zoom，避免取景框先于节点尺寸更新 */
+					for (let fr = 0; fr < 3; fr++) {
+						await new Promise<void>(r => requestAnimationFrame(() => r()));
+					}
+					try {
+						await v.canvas.requestFrame?.();
+						v.canvas.zoomToSelection();
+						await v.canvas.requestFrame?.();
+					} catch {
+						// ignore
+					}
+				}
 
 				if (isDeleteOriginal) {
 					for (const it of items) {
