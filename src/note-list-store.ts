@@ -60,6 +60,7 @@ export const NOTE_LIST_DATA_JSON_KEYS = [
 	'noteListPinnedPaths',
 	'noteListSort',
 	'noteListColorFilters',
+	'noteListWorkspaceFilterId',
 	'noteListFloatOpenFilter',
 	'noteListArchiveFilter'
 ] as const;
@@ -72,6 +73,8 @@ export interface NoteListPersistedFile {
 	noteListPinnedPaths: string[];
 	noteListSort: NoteListSort;
 	noteListColorFilters: StickyColorId[];
+	/** 便笺列表：按单个工作区快照筛选；`null` = 不选，显示便笺目录下全部。 */
+	noteListWorkspaceFilterId: string | null;
 	noteListFloatOpenFilter: NoteListFloatOpenFilter;
 	noteListArchiveFilter: NoteListArchiveFilter;
 }
@@ -101,6 +104,41 @@ export function normalizeNoteListColorFilters(value: unknown): StickyColorId[] {
 		out.push(x as StickyColorId);
 	}
 	return out;
+}
+
+export function normalizeNoteListWorkspaceFilterIdStorage(value: unknown): string | null {
+	if (value === null || value === undefined) return null;
+	if (typeof value === 'string') {
+		const t = value.trim();
+		return t.length > 0 ? t : null;
+	}
+	return null;
+}
+
+/** 从旧版 `noteListWorkspaceFilterIds` 数组取首个 id（迁移用）。 */
+export function pickFirstFromLegacyWorkspaceFilterIdsArray(value: unknown): string | null {
+	if (!Array.isArray(value)) return null;
+	for (const x of value) {
+		if (typeof x === 'string' && x.trim()) return x.trim();
+	}
+	return null;
+}
+
+/** `loadData` 合并后：优先新字段，否则旧数组首项。 */
+export function resolveNoteListWorkspaceFilterIdAfterMerge(raw: Record<string, unknown>): string | null {
+	const fromNew = normalizeNoteListWorkspaceFilterIdStorage(raw.noteListWorkspaceFilterId);
+	if (fromNew !== null) return fromNew;
+	return pickFirstFromLegacyWorkspaceFilterIdsArray(raw.noteListWorkspaceFilterIds);
+}
+
+/** 若 id 不在有效集合中则置为 `null`。 */
+export function pruneNoteListWorkspaceFilterId(
+	id: string | null | undefined,
+	validIds: ReadonlySet<string>
+): string | null {
+	const n = normalizeNoteListWorkspaceFilterIdStorage(id);
+	if (n === null) return null;
+	return validIds.has(n) ? n : null;
 }
 
 export function samePinnedPathsOrder(a: readonly string[], b: readonly string[]): boolean {
@@ -133,6 +171,7 @@ export function extractNoteListPersisted(settings: ColorfulStickyNotesSettings):
 		noteListPinnedPaths: normalizeNoteListPinnedPathsStorage(settings.noteListPinnedPaths),
 		noteListSort: settings.noteListSort,
 		noteListColorFilters: normalizeNoteListColorFilters(settings.noteListColorFilters),
+		noteListWorkspaceFilterId: normalizeNoteListWorkspaceFilterIdStorage(settings.noteListWorkspaceFilterId),
 		noteListFloatOpenFilter: settings.noteListFloatOpenFilter,
 		noteListArchiveFilter: settings.noteListArchiveFilter
 	};
@@ -146,6 +185,7 @@ export function applyNoteListPersisted(
 	settings.noteListPinnedPaths = normalized.noteListPinnedPaths;
 	settings.noteListSort = normalized.noteListSort;
 	settings.noteListColorFilters = normalized.noteListColorFilters;
+	settings.noteListWorkspaceFilterId = normalized.noteListWorkspaceFilterId;
 	settings.noteListFloatOpenFilter = normalized.noteListFloatOpenFilter;
 	settings.noteListArchiveFilter = normalized.noteListArchiveFilter;
 }
@@ -168,6 +208,13 @@ function normalizeNoteListFile(raw: Partial<NoteListPersistedFile>): NoteListPer
 		noteListPinnedPaths: normalizeNoteListPinnedPathsStorage(raw.noteListPinnedPaths),
 		noteListSort: sort as NoteListSort,
 		noteListColorFilters: normalizeNoteListColorFilters(raw.noteListColorFilters),
+		noteListWorkspaceFilterId: (() => {
+			const ext = raw as Partial<NoteListPersistedFile> & { noteListWorkspaceFilterIds?: unknown };
+			if ('noteListWorkspaceFilterId' in ext && ext.noteListWorkspaceFilterId !== undefined) {
+				return normalizeNoteListWorkspaceFilterIdStorage(ext.noteListWorkspaceFilterId);
+			}
+			return pickFirstFromLegacyWorkspaceFilterIdsArray(ext.noteListWorkspaceFilterIds);
+		})(),
 		noteListFloatOpenFilter: floatOpen as NoteListFloatOpenFilter,
 		noteListArchiveFilter: archive as NoteListArchiveFilter
 	};
@@ -199,5 +246,7 @@ export async function saveNoteListPersistedFile(
 }
 
 export function rawPluginDataHasNoteListKeys(raw: Record<string, unknown>): boolean {
-	return NOTE_LIST_DATA_JSON_KEYS.some(k => Object.prototype.hasOwnProperty.call(raw, k));
+	if (NOTE_LIST_DATA_JSON_KEYS.some(k => Object.prototype.hasOwnProperty.call(raw, k))) return true;
+	/* 旧版 data.json 仅存数组字段名 */
+	return Object.prototype.hasOwnProperty.call(raw, 'noteListWorkspaceFilterIds');
 }

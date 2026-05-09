@@ -15,6 +15,8 @@ import {
 	normalizeNoteListColorFilters,
 	normalizeNoteListPinnedPathsStorage,
 	pruneNoteListPinnedPathsAfterDelete,
+	pruneNoteListWorkspaceFilterId,
+	resolveNoteListWorkspaceFilterIdAfterMerge,
 	rawPluginDataHasNoteListKeys,
 	saveNoteListPersistedFile,
 	samePinnedPathsOrder
@@ -79,6 +81,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		await this.loadSettings();
 		this.stickies = new StickyNoteManager(this, this.app);
 		await this.stickies.init();
+		await this.syncNoteListWorkspaceFiltersAfterWorkspacesLoad();
 
 		this.registerView(VIEW_STICKY_NOTE_LIST, leaf => new StickyNoteListView(leaf, this));
 		this.syncNoteListGridMetricsToOpenViews();
@@ -374,6 +377,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 		delete st.noteListColorFilter;
 
+		delete (st as Record<string, unknown>).noteListWorkspaceFilterIds;
+		this.settings.noteListWorkspaceFilterId = resolveNoteListWorkspaceFilterIdAfterMerge(raw);
+
 		const nlo = this.settings.noteListOpenLocation;
 		if (
 			typeof nlo !== 'string' ||
@@ -436,12 +442,23 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 	}
 
+	/** 校正便笺列表「工作区」筛选 id；无效或已删除的工作区则清空为不选。 */
+	private async syncNoteListWorkspaceFiltersAfterWorkspacesLoad(): Promise<void> {
+		const valid = new Set(this.stickies.workspaces.workspaces.map(w => w.id));
+		const next = pruneNoteListWorkspaceFilterId(this.settings.noteListWorkspaceFilterId, valid);
+		if (next !== this.settings.noteListWorkspaceFilterId) {
+			this.settings.noteListWorkspaceFilterId = next;
+			await this.saveSettings();
+		}
+	}
+
 	/** 写入 `data.json` 时去掉便笺列表字段（列表状态在 `note-list.json`）。 */
 	private async persistPluginSettingsWithoutNoteListKeys(): Promise<void> {
 		const payload = JSON.parse(JSON.stringify(this.settings)) as Record<string, unknown>;
 		for (const k of NOTE_LIST_DATA_JSON_KEYS) {
 			delete payload[k];
 		}
+		delete payload.noteListWorkspaceFilterIds;
 		await this.saveData(payload);
 	}
 

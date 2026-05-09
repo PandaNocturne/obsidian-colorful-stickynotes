@@ -1,5 +1,10 @@
 import type { Plugin } from 'obsidian';
 import { normalizePath } from 'obsidian';
+
+/** 便笺工作区快照 JSON 在库内的路径（与 `loadWorkspacesFile` / `saveWorkspacesFile` 一致）。 */
+export function stickyWorkspacesJsonVaultPath(plugin: Plugin): string {
+	return normalizePath(`${plugin.manifest.dir}/${plugin.manifest.id}-workspaces.json`);
+}
 import { t } from './lang/helpers';
 import type { WorkspacesFile } from './types';
 

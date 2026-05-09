@@ -159,7 +159,6 @@ export const en = {
 	CLEAR_SEARCH_ARIA: 'Clear search',
 	NEW_STICKY_ARIA: 'New sticky note',
 	LIST_EDIT_CARDS_TOGGLE_ARIA: 'Edit archive',
-	REFRESH_TITLE: 'Refresh list and embedded previews',
 	PREV_PAGE: 'Previous page',
 	NEXT_PAGE: 'Next page',
 	LIST_PAGINATION_META: 'This page {pageCount} · total {totalCount}',
@@ -184,6 +183,8 @@ export const en = {
 	LIST_TOOLBAR_SORT_PREFIX: 'Sort: {title}',
 	LIST_TOOLBAR_ARCHIVE_PREFIX: 'Archive filter: {title}',
 	LIST_TOOLBAR_WINDOW_PREFIX: 'Floating: {title}',
+	LIST_TOOLBAR_WORKSPACE_PREFIX: 'Workspaces: {title}',
+	LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_NONE: 'All in folder',
 	LIST_COLOR_FILTER_SUMMARY_ALL: 'Color filter (none selected = show all)',
 	LIST_COLOR_FILTER_SUMMARY_SOME: 'Color filter: {n} selected (multi-select)',
 	LIST_COLOR_SWATCH_FILTER_HINT:

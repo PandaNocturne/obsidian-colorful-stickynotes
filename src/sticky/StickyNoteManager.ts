@@ -342,6 +342,24 @@ export class StickyNoteManager {
 		return this.workspaces.workspaces.find(w => w.id === this.workspaces.activeWorkspaceId);
 	}
 
+	/**
+	 * 所选工作区快照中已保存窗口对应的便笺路径（归一化）并集，供便笺列表筛选。
+	 * 仅处理仍存在于 `workspaces` 列表中的 id。
+	 */
+	collectStickyPathsInWorkspaceSnapshotUnion(workspaceIds: readonly string[]): Set<string> {
+		const want = new Set(workspaceIds);
+		const paths = new Set<string>();
+		for (const ws of this.workspaces.workspaces) {
+			if (!want.has(ws.id)) continue;
+			for (const win of ws.windows) {
+				if (typeof win.path === 'string' && win.path.length > 0) {
+					paths.add(normalizePath(win.path));
+				}
+			}
+		}
+		return paths;
+	}
+
 	private readStickyIdFromCache(file: TFile): string | null {
 		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
 		const v = fm?.[FM_ID_KEY];
@@ -629,6 +647,11 @@ export class StickyNoteManager {
 				this.saveTimer = null;
 			}
 			await this.flushWorkspacesToDisk();
+			if (this.plugin.settings.noteListWorkspaceFilterId === wsId) {
+				this.plugin.settings.noteListWorkspaceFilterId = null;
+				void this.plugin.saveSettings();
+			}
+			this.plugin.refreshStickyListIfOpen();
 		});
 		this.workspaceSwitchTail = job.catch(() => undefined);
 		await job;

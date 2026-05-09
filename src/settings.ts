@@ -68,6 +68,8 @@ export interface ColorfulStickyNotesSettings {
 	noteListPinnedPaths: string[];
 	/** 便笺列表按背景色多选筛选（空数组表示显示全部）。 */
 	noteListColorFilters: StickyColorId[];
+	/** 便笺列表按单个工作区快照筛选；`null` = 不选，显示便笺目录下全部。 */
+	noteListWorkspaceFilterId: string | null;
 	/** 便笺列表：仅显示已打开浮动窗口 / 未打开 / 全部。 */
 	noteListFloatOpenFilter: NoteListFloatOpenFilter;
 	/** 便笺列表：按归档属性筛选（`colorful-sticky-archived`）。 */
@@ -109,6 +111,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	noteListSort: 'ctime-desc',
 	noteListPinnedPaths: [],
 	noteListColorFilters: [],
+	noteListWorkspaceFilterId: null,
 	noteListFloatOpenFilter: 'all',
 	noteListArchiveFilter: 'all',
 	noteListOpenLocation: 'right-sidebar',
@@ -440,19 +443,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					.onChange(async v => {
 						this.plugin.settings.noteListOpenLocation = v as NoteListOpenLocation;
 						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t('SETTINGS_LIST_CARD_OVERFLOW_NAME'))
-			.setDesc(t('SETTINGS_LIST_CARD_OVERFLOW_DESC'))
-			.addToggle(toggle =>
-				toggle
-					.setValue(this.plugin.settings.noteListCardOverflowHidden)
-					.onChange(async v => {
-						this.plugin.settings.noteListCardOverflowHidden = v;
-						await this.plugin.saveSettings();
-						this.plugin.syncNoteListGridMetricsToOpenViews();
 					})
 			);
 
