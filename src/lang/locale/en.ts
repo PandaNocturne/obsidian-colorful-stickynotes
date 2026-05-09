@@ -34,8 +34,7 @@ export const en = {
 		'Could not run “Delete current file” command',
 	NOTICE_CANNOT_AUTO_DELETE_BLANK_STICKY: 'Could not auto-delete empty sticky',
 
-	SETTINGS_PLUGIN_TITLE: 'Colorful sticky notes',
-	SETTINGS_HEADING_GENERAL: 'General',
+	SETTINGS_HEADING_BASIC: 'Basic settings',
 	SETTINGS_STICKY_FOLDER_NAME: 'Sticky notes folder',
 	SETTINGS_STICKY_FOLDER_DESC: 'New stickies are created under this path.',
 	SETTINGS_CHOOSE_FOLDER: 'Choose…',
@@ -43,25 +42,22 @@ export const en = {
 		'Same as the Core Daily notes plugin: the whole template is a Moment format string (https://momentjs.com/docs/#/displaying/format/)—no {{date}} wrapper. Slashes (/) create subfolders under the sticky folder (e.g. YYYY/YYYY-MM-DD). Legacy templates using {{date:…}} still work.',
 	SETTINGS_FILENAME_SAMPLE_INTRO: 'Sample path using the current format:',
 	SETTINGS_FILENAME_INVALID: '(invalid format)',
-	SETTINGS_FILENAME_FORMAT_NAME: 'Sticky filename format',
+	SETTINGS_FILENAME_FORMAT_NAME: 'Filename format',
 
-	SETTINGS_DEFAULT_TEMPLATE_NAME: 'Default template note',
+	SETTINGS_DEFAULT_TEMPLATE_NAME: 'Template path',
 	SETTINGS_DEFAULT_TEMPLATE_DESC:
 		'When creating a sticky, insert this note’s contents (empty = blank). Path in the vault.',
 	SETTINGS_DEFAULT_TEMPLATE_PLACEHOLDER: 'e.g. Templates/sticky-template.md',
+	SETTINGS_CHOOSE_TEMPLATE_NOTE: 'Choose file…',
 
-	SETTINGS_HEADING_WINDOW: 'Window',
-	SETTINGS_RESTORE_ON_STARTUP_NAME: 'Restore last stickies on startup',
+	SETTINGS_HEADING_STICKY_WINDOW: 'Sticky window',
+	SETTINGS_RESTORE_ON_STARTUP_NAME: 'Restore stickies on startup',
 	SETTINGS_RESTORE_ON_STARTUP_DESC:
 		'After Obsidian finishes layout, restore sticky windows from the last session (same as the restore command).',
-	SETTINGS_RESTORE_DELAY_NAME: 'Restore delay',
+	SETTINGS_RESTORE_DELAY_NAME: 'Startup delay',
 	SETTINGS_RESTORE_DELAY_DESC:
 		'Wait a few seconds after layout before opening stickies; only applies when restore on startup is enabled.',
 	SETTINGS_RESTORE_DELAY_RESET_TOOLTIP: 'Reset to default 3 seconds',
-
-	SETTINGS_CONFIRM_BLANK_TRASH_NAME: 'Confirm before trashing empty sticky',
-	SETTINGS_CONFIRM_BLANK_TRASH_DESC:
-		'When closing an empty Markdown sticky under the sticky folder, confirm before moving to trash; turn off to delete without asking.',
 
 	SETTINGS_EDGE_STRETCH_NAME: 'Auto-stretch when docked to edge',
 	SETTINGS_EDGE_STRETCH_DESC:
@@ -70,37 +66,41 @@ export const en = {
 	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC:
 		'Double-click header to stretch full height; double-click again to restore.',
 
-	SETTINGS_HEADING_ASSIST: 'Assist alignment',
-	SETTINGS_SNAP_TRIGGER_NAME: 'Snap trigger',
+	SETTINGS_HEADING_ASSIST_FEATURES: 'Assistive features',
+	SETTINGS_AUTO_DELETE_BLANK_NAME: 'Auto-delete empty stickies',
+	SETTINGS_AUTO_DELETE_BLANK_DESC:
+		'When closing an empty Markdown sticky under the sticky folder, move it to trash without confirmation.',
+
+	SETTINGS_HEADING_ASSIST: 'Snap alignment',
+	SETTINGS_SNAP_TRIGGER_NAME: 'Snap trigger mode',
 	SETTINGS_SNAP_TRIGGER_DESC:
 		'None: no snap. Auto: snap while dragging; hold Ctrl to detach from the group and move without snap. Ctrl: snap only while holding Ctrl when not bound; if bound, hold Ctrl or Alt to drag this sticky alone—on release, bindings clear only if it is outside (snap threshold × unbind range multiplier) of every bound peer; otherwise bindings stay and the grid layout runs; normal drag has no snap.',
 	SETTINGS_SNAP_TRIGGER_NONE: 'None',
 	SETTINGS_SNAP_TRIGGER_AUTO: 'Automatic',
 	SETTINGS_SNAP_TRIGGER_CTRL: 'Ctrl (hold to snap)',
-	SETTINGS_SNAP_THRESHOLD_NAME: 'Snap threshold',
+	SETTINGS_SNAP_THRESHOLD_NAME: 'Snap distance threshold',
 	SETTINGS_SNAP_THRESHOLD_DESC: 'Snaps when distance is below this many pixels.',
-	SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME: 'Unbind range multiplier (Ctrl mode)',
+	SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME: 'Snap release range',
 	SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC:
 		'When deciding whether to keep or clear bindings after a Ctrl/Alt solo drag, the “still snapped” band uses snap threshold × this value (default 2). Larger = you must move farther away before bindings clear. Range 1–8, step 0.1.',
 	SETTINGS_BIND_AFTER_SNAP_NAME: 'Bind windows after snap',
 	SETTINGS_BIND_AFTER_SNAP_DESC:
 		'After snapping, linked windows move together and tidy into a grid (equal width per column, equal height per row, driven by the largest sticky in that track). Detach while dragging: hold Ctrl in Automatic mode; hold Alt when snap is None; when snap is Ctrl-triggered, hold Ctrl or Alt if already bound, otherwise hold Alt. Hold Ctrl while resizing to resize alone without pushing neighbors; on release, the sticky expands to cover the grid cells it overlaps.',
 
-	SETTINGS_DEFAULT_VIEW_NAME: 'Default view',
+	SETTINGS_DEFAULT_VIEW_NAME: 'Default sticky view',
 	SETTINGS_MODE_SOURCE: 'Edit',
 	SETTINGS_MODE_PREVIEW: 'Read',
-	SETTINGS_STICKY_ZOOM_NAME: 'Sticky body zoom',
+	SETTINGS_STICKY_ZOOM_NAME: 'Content zoom',
 	SETTINGS_STICKY_ZOOM_DESC: 'Floating sticky body scale ({min}%–{max}%).',
 	SETTINGS_LIST_PREVIEW_ZOOM_DESC:
 		'Markdown preview scale in list cards ({min}%–{max}%), independent from floating stickies.',
 	SETTINGS_RESET_ZOOM_TOOLTIP: 'Reset to default {value}',
 
-	SETTINGS_HEADING_NEW_STICKY: 'New sticky',
-	SETTINGS_HEADER_NEW_SIDE_NAME: 'New sticky beside header +',
+	SETTINGS_HEADER_NEW_SIDE_NAME: 'New sticky position',
 	SETTINGS_HEADER_NEW_SIDE_DESC:
 		'When clicking + in the header, prefer new window to the left or right of current; switches side if off-screen.',
-	SETTINGS_ADJACENT_LEFT: 'Adjacent left',
-	SETTINGS_ADJACENT_RIGHT: 'Adjacent right',
+	SETTINGS_ADJACENT_LEFT: 'Prefer left',
+	SETTINGS_ADJACENT_RIGHT: 'Prefer right',
 	SETTINGS_DEFAULT_WIDTH_NAME: 'Default width',
 	SETTINGS_DEFAULT_WIDTH_DESC:
 		'Initial width for new floating stickies (px). New beside existing inherits current size.',
@@ -111,7 +111,7 @@ export const en = {
 		'When no template or no colorful-sticky-bg, write this background (matches bottom color strip).',
 
 	SETTINGS_HEADING_LIST: 'Sticky list',
-	SETTINGS_LIST_OPEN_LOCATION_NAME: 'Open location',
+	SETTINGS_LIST_OPEN_LOCATION_NAME: 'List open location',
 	SETTINGS_LIST_OPEN_LOCATION_DESC:
 		'When command or ribbon opens the list and no view exists yet, create here; otherwise focus the existing list.',
 	SETTINGS_LIST_LEFT_SIDEBAR: 'Left sidebar',
@@ -121,16 +121,16 @@ export const en = {
 	SETTINGS_LIST_CARD_OVERFLOW_DESC:
 		'When on, card preview uses overflow:auto and scrolls inside fixed height; when off, overflow:visible (outer card may still clip).',
 	SETTINGS_LIST_CARD_HEIGHT_NAME: 'List card height',
-	SETTINGS_LIST_CARD_HEIGHT_DESC: 'Height of each card in the list grid (px).',
+	SETTINGS_LIST_CARD_HEIGHT_DESC:
+		'Height of each card in the list grid. Use px (clamped 120–600) or another CSS length (e.g. rem, %).',
 	SETTINGS_LIST_GRID_MIN_WIDTH_NAME: 'Grid minimum column width',
 	SETTINGS_LIST_GRID_MIN_WIDTH_DESC:
-		'Minimum width per column in the adaptive grid; fewer columns when sidebar is narrow.',
+		'Minimum width per column in the adaptive grid. Use px (clamped 180–800) or another CSS length.',
 	SETTINGS_LIST_PAGE_SIZE_NAME: 'Cards per page',
 	SETTINGS_LIST_PAGE_SIZE_DESC:
 		'Maximum cards per page (4–48); higher values load more per page and may scroll heavier.',
-	SETTINGS_LIST_PREVIEW_ZOOM_NAME: 'List preview zoom',
+	SETTINGS_LIST_PREVIEW_ZOOM_NAME: 'Content zoom',
 
-	SETTINGS_HEADING_BOTTOM_BAR: 'Bottom toolbar',
 	SETTINGS_BOTTOM_BAR_AUTO_HIDE_NAME: 'Auto-hide',
 	SETTINGS_BOTTOM_BAR_AUTO_HIDE_DESC:
 		'Hide bottom bar when pointer leaves (file name and sticky settings); stays visible while settings sheet is open.',

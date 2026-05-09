@@ -382,10 +382,10 @@ export class StickyNoteListView extends ItemView {
 	/** 从设置写入根节点 CSS 变量（网格列宽、卡片高度）及预览区 overflow（`.csn-list-card-body--rendered`）。 */
 	syncListGridMetricsFromSettings(): void {
 		if (!this.contentEl.hasClass('csn-list-view')) return;
-		const h = this.plugin.settings.noteListCardHeight;
-		const w = this.plugin.settings.noteListGridMinWidth;
-		this.contentEl.style.setProperty('--csn-list-card-height', `${h}px`);
-		this.contentEl.style.setProperty('--csn-list-grid-min-width', `${w}px`);
+		const h = this.plugin.settings.noteListCardHeight.trim();
+		const w = this.plugin.settings.noteListGridMinWidth.trim();
+		this.contentEl.style.setProperty('--csn-list-card-height', h);
+		this.contentEl.style.setProperty('--csn-list-grid-min-width', w);
 		this.contentEl.toggleClass(
 			'csn-list-view--card-overflow-visible',
 			!this.plugin.settings.noteListCardOverflowHidden

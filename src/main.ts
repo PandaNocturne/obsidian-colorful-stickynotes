@@ -2,6 +2,7 @@ import { Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from 'ob
 import { t } from './lang/helpers';
 import {
 	clampViewContentZoom,
+	normalizeNoteListDimensionCss,
 	ColorfulStickyNotesSettingTab,
 	DEFAULT_SETTINGS,
 	type ColorfulStickyNotesSettings
@@ -321,17 +322,21 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		);
 
 		delete st.noteListLayout;
-		let listH = this.settings.noteListCardHeight;
-		if (typeof listH !== 'number' || !Number.isFinite(listH)) {
-			listH = DEFAULT_SETTINGS.noteListCardHeight;
-		}
-		this.settings.noteListCardHeight = Math.max(120, Math.min(600, Math.round(listH)));
-
-		let listMinW = this.settings.noteListGridMinWidth;
-		if (typeof listMinW !== 'number' || !Number.isFinite(listMinW)) {
-			listMinW = DEFAULT_SETTINGS.noteListGridMinWidth;
-		}
-		this.settings.noteListGridMinWidth = Math.max(180, Math.min(800, Math.round(listMinW)));
+		const rawH = 'noteListCardHeight' in raw ? raw.noteListCardHeight : this.settings.noteListCardHeight;
+		this.settings.noteListCardHeight = normalizeNoteListDimensionCss(
+			rawH,
+			DEFAULT_SETTINGS.noteListCardHeight,
+			120,
+			600
+		);
+		const rawW =
+			'noteListGridMinWidth' in raw ? raw.noteListGridMinWidth : this.settings.noteListGridMinWidth;
+		this.settings.noteListGridMinWidth = normalizeNoteListDimensionCss(
+			rawW,
+			DEFAULT_SETTINGS.noteListGridMinWidth,
+			180,
+			800
+		);
 
 		let listPs = this.settings.noteListPageSize;
 		if (typeof listPs !== 'number' || !Number.isFinite(listPs)) {

@@ -33,8 +33,7 @@ export const zhCn: Record<MessageKey, string> = {
 	NOTICE_CANNOT_DELETE_ACTIVE_NOTE_COMMAND: '无法执行「删除当前笔记」命令',
 	NOTICE_CANNOT_AUTO_DELETE_BLANK_STICKY: '无法自动删除空白便笺',
 
-	SETTINGS_PLUGIN_TITLE: '多彩便笺',
-	SETTINGS_HEADING_GENERAL: '基本',
+	SETTINGS_HEADING_BASIC: '基本设置',
 	SETTINGS_STICKY_FOLDER_NAME: '便笺文件夹',
 	SETTINGS_STICKY_FOLDER_DESC: '新便笺将创建于此路径下。',
 	SETTINGS_CHOOSE_FOLDER: '选择…',
@@ -42,68 +41,69 @@ export const zhCn: Record<MessageKey, string> = {
 		'与「核心插件 → 日记」一致：整段模板为 Moment 格式（说明见 https://momentjs.com/docs/#/displaying/format/），无需再包一层 {{date}}。格式中的 / 会在「便笺文件夹」下创建子目录（例如 YYYY/YYYY-MM-DD）。旧版含 {{date:…}} 的模板仍可使用。',
 	SETTINGS_FILENAME_SAMPLE_INTRO: '这是当前所用格式的样例：',
 	SETTINGS_FILENAME_INVALID: '（格式无效）',
-	SETTINGS_FILENAME_FORMAT_NAME: '便笺文件名格式',
+	SETTINGS_FILENAME_FORMAT_NAME: '文件名格式',
 
-	SETTINGS_DEFAULT_TEMPLATE_NAME: '默认 Template 模板',
+	SETTINGS_DEFAULT_TEMPLATE_NAME: '模板路径',
 	SETTINGS_DEFAULT_TEMPLATE_DESC: '新建便笺时写入模板文件内容（留空为新建空白）。填写库内笔记路径。',
 	SETTINGS_DEFAULT_TEMPLATE_PLACEHOLDER: '例如 Templates/便笺模板.md',
+	SETTINGS_CHOOSE_TEMPLATE_NOTE: '选择文件…',
 
-	SETTINGS_HEADING_WINDOW: '窗口',
-	SETTINGS_RESTORE_ON_STARTUP_NAME: '启动时打开上次便笺',
+	SETTINGS_HEADING_STICKY_WINDOW: '便笺窗口',
+	SETTINGS_RESTORE_ON_STARTUP_NAME: '开机自启动',
 	SETTINGS_RESTORE_ON_STARTUP_DESC:
 		'Obsidian 启动并完成布局后，自动恢复上次会话中的便笺窗口（与命令「打开便笺窗口（恢复上次会话）」相同）。',
-	SETTINGS_RESTORE_DELAY_NAME: '启动恢复延迟',
-	SETTINGS_RESTORE_DELAY_DESC: '布局就绪后再等待若干秒再打开便笺；仅在「启动时打开上次便笺」开启时生效。',
+	SETTINGS_RESTORE_DELAY_NAME: '启动延迟时间',
+	SETTINGS_RESTORE_DELAY_DESC: '布局就绪后再等待若干秒再打开便笺；仅在「开机自启动」开启时生效。',
 	SETTINGS_RESTORE_DELAY_RESET_TOOLTIP: '重置为默认 3 秒',
-
-	SETTINGS_CONFIRM_BLANK_TRASH_NAME: '关闭空白便笺前确认删除',
-	SETTINGS_CONFIRM_BLANK_TRASH_DESC:
-		'关闭位于「便笺文件夹」下的空白 Markdown 便笺时，会先弹出确认再移入回收站。关闭本项则不再询问并直接删除。',
 
 	SETTINGS_EDGE_STRETCH_NAME: '贴边自动拉伸',
 	SETTINGS_EDGE_STRETCH_DESC: '便笺左右贴边时自动拉伸高度；移开贴边后恢复原高度。',
 	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_NAME: '双击头部拉伸',
 	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC: '双击便笺头部可拉伸到全高；再次双击恢复原高度。',
 
+	SETTINGS_HEADING_ASSIST_FEATURES: '辅助功能',
+	SETTINGS_AUTO_DELETE_BLANK_NAME: '自动删除空白便笺',
+	SETTINGS_AUTO_DELETE_BLANK_DESC:
+		'关闭位于「便笺文件夹」下的空白 Markdown 便笺时，直接移入回收站，不再弹出确认。',
+
 	SETTINGS_HEADING_ASSIST: '辅助对齐',
-	SETTINGS_SNAP_TRIGGER_NAME: '吸附触发方式',
+	SETTINGS_SNAP_TRIGGER_NAME: '触发吸附方式',
 	SETTINGS_SNAP_TRIGGER_DESC:
-		'无：不吸附。自动：拖动即吸附；按住 Ctrl 拖动可临时解绑并关闭吸附。Ctrl：未绑定时按住 Ctrl 才吸附；已处于绑定组时按住 Ctrl 或 Alt 可先单独拖动当前便笺，松手时若相对所有绑定邻窗均已超出「吸附阈值×解除绑定倍数」则解绑，否则保持绑定并由网格整理；普通拖动不吸附。',
+		'无：不吸附。自动：拖动即吸附；按住 Ctrl 拖动可临时解绑并关闭吸附。Ctrl：未绑定时按住 Ctrl 才吸附；已处于绑定组时按住 Ctrl 或 Alt 可先单独拖动当前便笺，松手时若相对所有绑定邻窗均已超出「吸附效果阈值 × 移除吸附范围倍数」则解绑，否则保持绑定并由网格整理；普通拖动不吸附。',
 	SETTINGS_SNAP_TRIGGER_NONE: '无',
 	SETTINGS_SNAP_TRIGGER_AUTO: '自动触发',
 	SETTINGS_SNAP_TRIGGER_CTRL: 'Ctrl 触发',
-	SETTINGS_SNAP_THRESHOLD_NAME: '吸附阈值',
+	SETTINGS_SNAP_THRESHOLD_NAME: '吸附效果阈值',
 	SETTINGS_SNAP_THRESHOLD_DESC: '距离小于该像素值时触发吸附。',
-	SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME: '解除绑定范围倍数（Ctrl 模式）',
+	SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME: '移除吸附范围',
 	SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC:
-		'在 Ctrl 模式下，用 Ctrl/Alt 单独拖动后松手时，是否保留绑定取决于与绑定邻窗的距离是否仍在「吸附阈值 × 本倍数」内；默认 2 即解除判定范围约为吸附范围的 2 倍。数值越大需拖得越远才会解绑。可调范围 1–8，步进 0.1。',
+		'用于「移除吸附范围」：在 Ctrl 模式下单独拖动后松手时，是否保留绑定取决于与绑定邻窗的距离是否仍在「吸附效果阈值 × 本倍数」内；默认 2 表示约为吸附范围的 2 倍。数值越大需拖得越远才会解绑。可调范围 1–8，步进 0.1。',
 	SETTINGS_BIND_AFTER_SNAP_NAME: '吸附后绑定窗口',
 	SETTINGS_BIND_AFTER_SNAP_DESC:
 		'吸附对齐后建立绑定；成组窗口会按网格整理（同列等宽、同行等高，尺寸由该行/列最大便笺决定）。移动其中一个窗口会连带移动整组。解绑拖动：在「自动触发」下按住 Ctrl；在「无」下按住 Alt；在「Ctrl 触发」下，成组时按住 Ctrl 或 Alt，未成组时按住 Alt。缩放时按住 Ctrl 可单独改尺寸而不推挤邻窗，松手后按与网格相交范围铺满多格。',
 
-	SETTINGS_DEFAULT_VIEW_NAME: '默认视图',
+	SETTINGS_DEFAULT_VIEW_NAME: '便笺默认视图',
 	SETTINGS_MODE_SOURCE: '编辑',
 	SETTINGS_MODE_PREVIEW: '阅读',
-	SETTINGS_STICKY_ZOOM_NAME: '便笺窗口内容缩放',
+	SETTINGS_STICKY_ZOOM_NAME: '内容缩放比例',
 	SETTINGS_STICKY_ZOOM_DESC: '浮动便笺正文显示比例（{min}%–{max}%）。',
 	SETTINGS_LIST_PREVIEW_ZOOM_DESC: '列表卡片内 Markdown 预览比例（{min}%–{max}%），与浮动便笺窗口独立。',
 	SETTINGS_RESET_ZOOM_TOOLTIP: '重置为默认 {value}',
 
-	SETTINGS_HEADING_NEW_STICKY: '新建便笺',
-	SETTINGS_HEADER_NEW_SIDE_NAME: '头部 + 号旁新建位置',
+	SETTINGS_HEADER_NEW_SIDE_NAME: '新建便笺位置',
 	SETTINGS_HEADER_NEW_SIDE_DESC:
 		'点击便笺头部「+」时，新窗口优先出现在当前便笺的相邻左侧或相邻右侧；若该侧超出屏幕，会自动改到另一侧。',
-	SETTINGS_ADJACENT_LEFT: '相邻左侧',
-	SETTINGS_ADJACENT_RIGHT: '相邻右侧',
-	SETTINGS_DEFAULT_WIDTH_NAME: '默认宽度',
+	SETTINGS_ADJACENT_LEFT: '优先左侧',
+	SETTINGS_ADJACENT_RIGHT: '优先右侧',
+	SETTINGS_DEFAULT_WIDTH_NAME: '默认便笺宽度',
 	SETTINGS_DEFAULT_WIDTH_DESC: '新建便笺浮动窗口的初始宽度（像素）。从已有便笺旁新建时仍沿用当前窗口尺寸。',
-	SETTINGS_DEFAULT_HEIGHT_NAME: '默认高度',
+	SETTINGS_DEFAULT_HEIGHT_NAME: '默认便笺高度',
 	SETTINGS_DEFAULT_HEIGHT_DESC: '新建便笺浮动窗口的初始高度（像素）。',
-	SETTINGS_DEFAULT_BG_NAME: '默认背景',
+	SETTINGS_DEFAULT_BG_NAME: '默认便笺颜色',
 	SETTINGS_DEFAULT_BG_DESC: '无模板或模板未指定 colorful-sticky-bg 时，写入便笺的默认背景色（与便笺底部色条一致）。',
 
 	SETTINGS_HEADING_LIST: '便笺列表',
-	SETTINGS_LIST_OPEN_LOCATION_NAME: '打开位置',
+	SETTINGS_LIST_OPEN_LOCATION_NAME: '列表打开位置',
 	SETTINGS_LIST_OPEN_LOCATION_DESC:
 		'命令或功能区打开「便笺列表」时，若当前尚无该视图，则创建在指定位置；已固定或已打开的列表会切换到该视图。',
 	SETTINGS_LIST_LEFT_SIDEBAR: '左侧侧边栏',
@@ -113,14 +113,15 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_LIST_CARD_OVERFLOW_DESC:
 		'开启时列表卡片内预览区域使用 overflow: auto，超出固定高度时在区域内滚动；关闭后为 overflow: visible，预览可溢出（若外层卡片仍为 hidden，整体仍可能被裁切）。',
 	SETTINGS_LIST_CARD_HEIGHT_NAME: '列表卡片高度',
-	SETTINGS_LIST_CARD_HEIGHT_DESC: '便笺列表网格中每张卡片的高度（像素）。',
-	SETTINGS_LIST_GRID_MIN_WIDTH_NAME: '网格最小列宽',
-	SETTINGS_LIST_GRID_MIN_WIDTH_DESC: '自适应网格中每列的最小宽度（像素）；侧栏较窄时列数会随之减少。',
-	SETTINGS_LIST_PAGE_SIZE_NAME: '每页卡片数量',
+	SETTINGS_LIST_CARD_HEIGHT_DESC:
+		'列表网格中每张卡片的高度。默认 160px；填写纯数字时按 px 处理并限制在 120–600；也可使用 rem、% 等 CSS 长度。',
+	SETTINGS_LIST_GRID_MIN_WIDTH_NAME: '网格最小宽度',
+	SETTINGS_LIST_GRID_MIN_WIDTH_DESC:
+		'自适应网格每列的最小宽度。默认 320px；纯数字按 px 并限制在 180–800；也可使用其他单位。',
+	SETTINGS_LIST_PAGE_SIZE_NAME: '每页显示数量',
 	SETTINGS_LIST_PAGE_SIZE_DESC: '便笺列表分页时每一页最多显示的卡片数（4–48）；数值越大单页加载越多，滚动区可能略卡。',
-	SETTINGS_LIST_PREVIEW_ZOOM_NAME: '列表预览内容缩放',
+	SETTINGS_LIST_PREVIEW_ZOOM_NAME: '内容缩放比例',
 
-	SETTINGS_HEADING_BOTTOM_BAR: '底部工具栏',
 	SETTINGS_BOTTOM_BAR_AUTO_HIDE_NAME: '自动隐藏',
 	SETTINGS_BOTTOM_BAR_AUTO_HIDE_DESC: '鼠标离开底部区域时隐藏底栏（左侧文件名与便笺设置）；打开设置抽屉时也会保持显示。',
 

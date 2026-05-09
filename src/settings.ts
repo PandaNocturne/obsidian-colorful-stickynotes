@@ -3,6 +3,7 @@ import { formatStickyNoteRelativePath } from './filename-template';
 import { t } from './lang/helpers';
 import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
+import { MarkdownFilePickerModal } from './modals/MarkdownFilePickerModal';
 import { SHEET_COLOR_ORDER } from './sticky/sticky-color-order';
 import type {
 	HeaderNewStickyAdjacentSide,
@@ -23,6 +24,54 @@ export const VIEW_CONTENT_ZOOM_STEP = 0.05;
 export function clampViewContentZoom(value: number): number {
 	if (typeof value !== 'number' || !Number.isFinite(value)) return VIEW_CONTENT_ZOOM_DEFAULT;
 	return Math.max(VIEW_CONTENT_ZOOM_MIN, Math.min(VIEW_CONTENT_ZOOM_MAX, value));
+}
+
+/** 列表卡片高度 / 网格列宽：支持 `px`（会按范围钳制）或其它 CSS 长度单位。 */
+export function normalizeNoteListDimensionCss(
+	value: unknown,
+	fallback: string,
+	minPx: number,
+	maxPx: number
+): string {
+	const clampPx = (n: number) => `${Math.max(minPx, Math.min(maxPx, Math.round(n)))}px`;
+	const normalizeFallback = (): string => {
+		const t = fallback.trim();
+		const bare = /^(\d+(?:\.\d+)?)$/.exec(t);
+		if (bare) {
+			const n = parseFloat(bare[1] ?? '');
+			return Number.isFinite(n) ? clampPx(n) : t;
+		}
+		const pxM = /^(\d+(?:\.\d+)?)\s*px$/i.exec(t);
+		if (pxM) {
+			const n = parseFloat(pxM[1] ?? '');
+			return Number.isFinite(n) ? clampPx(n) : t;
+		}
+		return t || fallback;
+	};
+
+	if (typeof value === 'number' && Number.isFinite(value)) {
+		return clampPx(value);
+	}
+	if (typeof value !== 'string') return normalizeFallback();
+	const s = value.trim();
+	if (!s) return normalizeFallback();
+
+	const bare = /^(\d+(?:\.\d+)?)$/.exec(s);
+	if (bare) {
+		const n = parseFloat(bare[1] ?? '');
+		return Number.isFinite(n) ? clampPx(n) : normalizeFallback();
+	}
+	const pxM = /^(\d+(?:\.\d+)?)\s*px$/i.exec(s);
+	if (pxM) {
+		const n = parseFloat(pxM[1] ?? '');
+		return Number.isFinite(n) ? clampPx(n) : normalizeFallback();
+	}
+
+	const compact = s.replace(/\s+/g, '');
+	if (/^[\d.]+[a-z%]+$/i.test(compact) && compact.length <= 24) {
+		return s;
+	}
+	return normalizeFallback();
 }
 
 export interface ColorfulStickyNotesSettings {
@@ -56,10 +105,10 @@ export interface ColorfulStickyNotesSettings {
 	restoreStickySessionDelaySec: number;
 	/** 便笺列表卡片预览区（`.csn-list-card-body--rendered`）是否使用 `overflow: auto` 在区域内滚动（默认开启）。关闭后为 `overflow: visible`。 */
 	noteListCardOverflowHidden: boolean;
-	/** 便笺列表卡片高度（像素，预览区所在整卡高度）。 */
-	noteListCardHeight: number;
-	/** 便笺列表网格单列最小宽度（像素，`minmax` 下限）。 */
-	noteListGridMinWidth: number;
+	/** 便笺列表卡片高度（CSS 长度，默认 `160px`；可用 rem、% 等）。 */
+	noteListCardHeight: string;
+	/** 便笺列表网格单列最小宽度（CSS 长度，默认 `320px`）。 */
+	noteListGridMinWidth: string;
 	/** 便笺列表分页：每页显示的卡片数量。 */
 	noteListPageSize: number;
 	/** 便笺列表排序（默认：创建时间新在前）。 */
@@ -105,8 +154,8 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	restoreStickySessionOnStartup: false,
 	restoreStickySessionDelaySec: 3,
 	noteListCardOverflowHidden: true,
-	noteListCardHeight: 160,
-	noteListGridMinWidth: 320,
+	noteListCardHeight: '160px',
+	noteListGridMinWidth: '320px',
 	noteListPageSize: 12,
 	noteListSort: 'ctime-desc',
 	noteListPinnedPaths: [],
@@ -133,9 +182,8 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		containerEl.createEl('h2', { text: t('SETTINGS_PLUGIN_TITLE') });
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_GENERAL') });
+		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_BASIC') });
 		new Setting(containerEl)
 			.setName(t('SETTINGS_STICKY_FOLDER_NAME'))
 			.setDesc(t('SETTINGS_STICKY_FOLDER_DESC'))
@@ -195,6 +243,17 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName(t('SETTINGS_DEFAULT_TEMPLATE_NAME'))
 			.setDesc(t('SETTINGS_DEFAULT_TEMPLATE_DESC'))
+			.addButton(btn => {
+				btn.setButtonText(t('SETTINGS_CHOOSE_TEMPLATE_NOTE')).onClick(() => {
+					const m = new MarkdownFilePickerModal(this.app, async path => {
+						this.plugin.settings.defaultTemplatePath = path;
+						await this.plugin.saveSettings();
+						m.close();
+						this.display();
+					});
+					m.open();
+				});
+			})
 			.addText(text =>
 				text
 					.setPlaceholder(t('SETTINGS_DEFAULT_TEMPLATE_PLACEHOLDER'))
@@ -205,7 +264,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_WINDOW') });
+		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_STICKY_WINDOW') });
 		new Setting(containerEl)
 			.setName(t('SETTINGS_RESTORE_ON_STARTUP_NAME'))
 			.setDesc(t('SETTINGS_RESTORE_ON_STARTUP_DESC'))
@@ -243,88 +302,17 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName(t('SETTINGS_CONFIRM_BLANK_TRASH_NAME'))
-			.setDesc(t('SETTINGS_CONFIRM_BLANK_TRASH_DESC'))
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.confirmBlankStickyTrashOnClose).onChange(async v => {
-					this.plugin.settings.confirmBlankStickyTrashOnClose = v;
-					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName(t('SETTINGS_EDGE_STRETCH_NAME'))
-			.setDesc(t('SETTINGS_EDGE_STRETCH_DESC'))
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.stickyEdgeAutoStretchHeight).onChange(async v => {
-					this.plugin.settings.stickyEdgeAutoStretchHeight = v;
-					await this.plugin.saveSettings();
-					this.plugin.syncStickyEdgeAutoStretchToOpenViews();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName(t('SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_NAME'))
-			.setDesc(t('SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC'))
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.stickyHeaderDoubleClickStretch).onChange(async v => {
-					this.plugin.settings.stickyHeaderDoubleClickStretch = v;
-					await this.plugin.saveSettings();
-					this.plugin.syncStickyHeaderDoubleClickStretchToOpenViews();
-				})
-			);
-
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_ASSIST') });
-		new Setting(containerEl)
-			.setName(t('SETTINGS_SNAP_TRIGGER_NAME'))
-			.setDesc(t('SETTINGS_SNAP_TRIGGER_DESC'))
+			.setName(t('SETTINGS_HEADER_NEW_SIDE_NAME'))
+			.setDesc(t('SETTINGS_HEADER_NEW_SIDE_DESC'))
 			.addDropdown(dd =>
 				dd
-					.addOption('none', t('SETTINGS_SNAP_TRIGGER_NONE'))
-					.addOption('auto', t('SETTINGS_SNAP_TRIGGER_AUTO'))
-					.addOption('ctrl', t('SETTINGS_SNAP_TRIGGER_CTRL'))
-					.setValue(this.plugin.settings.stickyAssistAlignSnapMode)
+					.addOption('left', t('SETTINGS_ADJACENT_LEFT'))
+					.addOption('right', t('SETTINGS_ADJACENT_RIGHT'))
+					.setValue(this.plugin.settings.headerNewStickyAdjacentSide)
 					.onChange(async v => {
-						this.plugin.settings.stickyAssistAlignSnapMode = v as StickyAssistAlignSnapMode;
+						this.plugin.settings.headerNewStickyAdjacentSide = v as HeaderNewStickyAdjacentSide;
 						await this.plugin.saveSettings();
 					})
-			);
-		new Setting(containerEl)
-			.setName(t('SETTINGS_SNAP_THRESHOLD_NAME'))
-			.setDesc(t('SETTINGS_SNAP_THRESHOLD_DESC'))
-			.addText(text =>
-				text
-					.setValue(String(this.plugin.settings.stickyAssistAlignSnapThresholdPx))
-					.onChange(async v => {
-						const n = parseInt(v, 10);
-						this.plugin.settings.stickyAssistAlignSnapThresholdPx = Number.isFinite(n)
-							? Math.max(1, Math.min(50, n))
-							: DEFAULT_SETTINGS.stickyAssistAlignSnapThresholdPx;
-						await this.plugin.saveSettings();
-					})
-			);
-		new Setting(containerEl)
-			.setName(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME'))
-			.setDesc(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC'))
-			.addText(text =>
-				text
-					.setValue(String(this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier))
-					.onChange(async v => {
-						const n = parseFloat(v.replace(/,/g, '.'));
-						this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier = Number.isFinite(n)
-							? Math.max(1, Math.min(8, Math.round(n * 10) / 10))
-							: DEFAULT_SETTINGS.stickyAssistAlignSnapUnbindRangeMultiplier;
-						await this.plugin.saveSettings();
-					})
-			);
-		new Setting(containerEl)
-			.setName(t('SETTINGS_BIND_AFTER_SNAP_NAME'))
-			.setDesc(t('SETTINGS_BIND_AFTER_SNAP_DESC'))
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.stickyAssistAlignBind).onChange(async v => {
-					this.plugin.settings.stickyAssistAlignBind = v;
-					await this.plugin.saveSettings();
-				})
 			);
 
 		new Setting(containerEl)
@@ -372,21 +360,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_NEW_STICKY') });
-		new Setting(containerEl)
-			.setName(t('SETTINGS_HEADER_NEW_SIDE_NAME'))
-			.setDesc(t('SETTINGS_HEADER_NEW_SIDE_DESC'))
-			.addDropdown(dd =>
-				dd
-					.addOption('left', t('SETTINGS_ADJACENT_LEFT'))
-					.addOption('right', t('SETTINGS_ADJACENT_RIGHT'))
-					.setValue(this.plugin.settings.headerNewStickyAdjacentSide)
-					.onChange(async v => {
-						this.plugin.settings.headerNewStickyAdjacentSide = v as HeaderNewStickyAdjacentSide;
-						await this.plugin.saveSettings();
-					})
-			);
-
 		new Setting(containerEl)
 			.setName(t('SETTINGS_DEFAULT_WIDTH_NAME'))
 			.setDesc(t('SETTINGS_DEFAULT_WIDTH_DESC'))
@@ -430,6 +403,17 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					});
 			});
 
+		new Setting(containerEl)
+			.setName(t('SETTINGS_BOTTOM_BAR_AUTO_HIDE_NAME'))
+			.setDesc(t('SETTINGS_BOTTOM_BAR_AUTO_HIDE_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.bottomBarAutoHide).onChange(async v => {
+					this.plugin.settings.bottomBarAutoHide = v;
+					await this.plugin.saveSettings();
+					this.plugin.stickies.updateBottomBarsFromSettings();
+				})
+			);
+
 		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_LIST') });
 		new Setting(containerEl)
 			.setName(t('SETTINGS_LIST_OPEN_LOCATION_NAME'))
@@ -451,12 +435,15 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			.setDesc(t('SETTINGS_LIST_CARD_HEIGHT_DESC'))
 			.addText(text =>
 				text
-					.setValue(String(this.plugin.settings.noteListCardHeight))
+					.setPlaceholder('160px')
+					.setValue(this.plugin.settings.noteListCardHeight)
 					.onChange(async v => {
-						const n = parseInt(v, 10);
-						this.plugin.settings.noteListCardHeight = Number.isFinite(n)
-							? Math.max(120, Math.min(600, n))
-							: DEFAULT_SETTINGS.noteListCardHeight;
+						this.plugin.settings.noteListCardHeight = normalizeNoteListDimensionCss(
+							v,
+							DEFAULT_SETTINGS.noteListCardHeight,
+							120,
+							600
+						);
 						await this.plugin.saveSettings();
 						this.plugin.syncNoteListGridMetricsToOpenViews();
 					})
@@ -467,12 +454,15 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			.setDesc(t('SETTINGS_LIST_GRID_MIN_WIDTH_DESC'))
 			.addText(text =>
 				text
-					.setValue(String(this.plugin.settings.noteListGridMinWidth))
+					.setPlaceholder('320px')
+					.setValue(this.plugin.settings.noteListGridMinWidth)
 					.onChange(async v => {
-						const n = parseInt(v, 10);
-						this.plugin.settings.noteListGridMinWidth = Number.isFinite(n)
-							? Math.max(180, Math.min(800, n))
-							: DEFAULT_SETTINGS.noteListGridMinWidth;
+						this.plugin.settings.noteListGridMinWidth = normalizeNoteListDimensionCss(
+							v,
+							DEFAULT_SETTINGS.noteListGridMinWidth,
+							180,
+							800
+						);
 						await this.plugin.saveSettings();
 						this.plugin.syncNoteListGridMetricsToOpenViews();
 					})
@@ -483,6 +473,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			.setDesc(t('SETTINGS_LIST_PAGE_SIZE_DESC'))
 			.addText(text =>
 				text
+					.setPlaceholder('12')
 					.setValue(String(this.plugin.settings.noteListPageSize))
 					.onChange(async v => {
 						const n = parseInt(v, 10);
@@ -526,16 +517,90 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_BOTTOM_BAR') });
+		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_ASSIST_FEATURES') });
 		new Setting(containerEl)
-			.setName(t('SETTINGS_BOTTOM_BAR_AUTO_HIDE_NAME'))
-			.setDesc(t('SETTINGS_BOTTOM_BAR_AUTO_HIDE_DESC'))
+			.setName(t('SETTINGS_EDGE_STRETCH_NAME'))
+			.setDesc(t('SETTINGS_EDGE_STRETCH_DESC'))
 			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.bottomBarAutoHide).onChange(async v => {
-					this.plugin.settings.bottomBarAutoHide = v;
+				toggle.setValue(this.plugin.settings.stickyEdgeAutoStretchHeight).onChange(async v => {
+					this.plugin.settings.stickyEdgeAutoStretchHeight = v;
 					await this.plugin.saveSettings();
-					this.plugin.stickies.updateBottomBarsFromSettings();
+					this.plugin.syncStickyEdgeAutoStretchToOpenViews();
 				})
+			);
+
+		new Setting(containerEl)
+			.setName(t('SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_NAME'))
+			.setDesc(t('SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.stickyHeaderDoubleClickStretch).onChange(async v => {
+					this.plugin.settings.stickyHeaderDoubleClickStretch = v;
+					await this.plugin.saveSettings();
+					this.plugin.syncStickyHeaderDoubleClickStretchToOpenViews();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName(t('SETTINGS_AUTO_DELETE_BLANK_NAME'))
+			.setDesc(t('SETTINGS_AUTO_DELETE_BLANK_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(!this.plugin.settings.confirmBlankStickyTrashOnClose).onChange(async v => {
+					this.plugin.settings.confirmBlankStickyTrashOnClose = !v;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		containerEl.createEl('h3', { text: t('SETTINGS_HEADING_ASSIST') });
+		new Setting(containerEl)
+			.setName(t('SETTINGS_SNAP_TRIGGER_NAME'))
+			.setDesc(t('SETTINGS_SNAP_TRIGGER_DESC'))
+			.addDropdown(dd =>
+				dd
+					.addOption('none', t('SETTINGS_SNAP_TRIGGER_NONE'))
+					.addOption('auto', t('SETTINGS_SNAP_TRIGGER_AUTO'))
+					.addOption('ctrl', t('SETTINGS_SNAP_TRIGGER_CTRL'))
+					.setValue(this.plugin.settings.stickyAssistAlignSnapMode)
+					.onChange(async v => {
+						this.plugin.settings.stickyAssistAlignSnapMode = v as StickyAssistAlignSnapMode;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_SNAP_THRESHOLD_NAME'))
+			.setDesc(t('SETTINGS_SNAP_THRESHOLD_DESC'))
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.stickyAssistAlignSnapThresholdPx))
+					.onChange(async v => {
+						const n = parseInt(v, 10);
+						this.plugin.settings.stickyAssistAlignSnapThresholdPx = Number.isFinite(n)
+							? Math.max(1, Math.min(50, n))
+							: DEFAULT_SETTINGS.stickyAssistAlignSnapThresholdPx;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_BIND_AFTER_SNAP_NAME'))
+			.setDesc(t('SETTINGS_BIND_AFTER_SNAP_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.stickyAssistAlignBind).onChange(async v => {
+					this.plugin.settings.stickyAssistAlignBind = v;
+					await this.plugin.saveSettings();
+				})
+			);
+		new Setting(containerEl)
+			.setName(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME'))
+			.setDesc(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC'))
+			.addText(text =>
+				text
+					.setValue(String(this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier))
+					.onChange(async v => {
+						const n = parseFloat(v.replace(/,/g, '.'));
+						this.plugin.settings.stickyAssistAlignSnapUnbindRangeMultiplier = Number.isFinite(n)
+							? Math.max(1, Math.min(8, Math.round(n * 10) / 10))
+							: DEFAULT_SETTINGS.stickyAssistAlignSnapUnbindRangeMultiplier;
+						await this.plugin.saveSettings();
+					})
 			);
 	}
 }
