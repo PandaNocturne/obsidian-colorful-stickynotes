@@ -1,9 +1,9 @@
 {
-	"id": "colorful-sticky-notes",
-	"name": "Colorful Sticky Notes",
+	"id": "colorful-stickynotes",
+	"name": "Colorful StickyNotes",
 	"version": "1.0.0",
 	"minAppVersion": "1.4.0",
-	"description": "多彩便笺小窗口：浮动编辑、工作区、吸附、便笺列表与可配置工具栏。",
+	"description": "Floating colorful sticky notes in Vault",
 	"author": "PandaNocturne",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }

@@ -19,6 +19,7 @@
 	--file-line-width: calc(100% - 16px);
 
 	.view-header,
+	.inline-title,
 	.embedded-backlinks,
 	.cg-note-toolbar-container {
 		display: none;
@@ -30,10 +31,41 @@
 		height: 100%;
 	}
 
-	.view-content>.markdown-reading-view>.markdown-preview-view,
-	.view-content>.markdown-source-view.mod-cm6>.cm-editor>.cm-scroller {
-		padding: 15px !important;
+	.view-content {
+		word-break: break-all;
 	}
+
+	/* !阅读和编辑模式下边框间距的调整 */
+	.view-content>.markdown-source-view.mod-cm6>.cm-editor>.cm-scroller,
+	.markdown-preview-view {
+		padding: 10px !important;
+	}
+
+	.view-content>.markdown-source-view.mod-cm6>.cm-editor>.cm-scroller {
+		padding-left: 5px !important;
+		padding-right: 5px !important;
+	}
+
+	.markdown-source-view.mod-cm6.is-readable-line-width .cm-content {
+		max-width: unset;
+		width: 100%;
+	}
+
+	/* ! 阅读和编辑模式下边框间距的调整 */
+
+	.markdown-source-view.mod-cm6 .cm-contentContainer {
+		display: flex;
+		flex: 1 1 auto;
+		width: 100% !important;
+		justify-content: space-around !important;
+	}
+
+	/*! 缩减笔记下方空白大小 */
+	.markdown-preview-view .markdown-preview-sizer,
+	.cm-s-obsidian .cm-content {
+		padding-bottom: 0px !important;
+	}
+
 }
 
 // .csn-sticky-body>.workspace-split {

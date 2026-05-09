@@ -98,8 +98,12 @@
 /* 打补丁 */
 .csn-sticky-body {
   --file-line-width: calc(100% - 16px);
+  /* !阅读和编辑模式下边框间距的调整 */
+  /* ! 阅读和编辑模式下边框间距的调整 */
+  /*! 缩减笔记下方空白大小 */
 }
 .csn-sticky-body .view-header,
+.csn-sticky-body .inline-title,
 .csn-sticky-body .embedded-backlinks,
 .csn-sticky-body .cg-note-toolbar-container {
   display: none;
@@ -109,9 +113,30 @@
   width: 100%;
   height: 100%;
 }
-.csn-sticky-body .view-content > .markdown-reading-view > .markdown-preview-view,
+.csn-sticky-body .view-content {
+  word-break: break-all;
+}
+.csn-sticky-body .view-content > .markdown-source-view.mod-cm6 > .cm-editor > .cm-scroller,
+.csn-sticky-body .markdown-preview-view {
+  padding: 10px !important;
+}
 .csn-sticky-body .view-content > .markdown-source-view.mod-cm6 > .cm-editor > .cm-scroller {
-  padding: 15px !important;
+  padding-left: 5px !important;
+  padding-right: 5px !important;
+}
+.csn-sticky-body .markdown-source-view.mod-cm6.is-readable-line-width .cm-content {
+  max-width: unset;
+  width: 100%;
+}
+.csn-sticky-body .markdown-source-view.mod-cm6 .cm-contentContainer {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100% !important;
+  justify-content: space-around !important;
+}
+.csn-sticky-body .markdown-preview-view .markdown-preview-sizer,
+.csn-sticky-body .cm-s-obsidian .cm-content {
+  padding-bottom: 0px !important;
 }
 /* 正文区：与便笺纸面同色；缩放由 StickyNotePopover#setViewContentZoom 写入 --csn-sticky-view-content-zoom */
 .csn-sticky .workspace-leaf-content > .view-content {
