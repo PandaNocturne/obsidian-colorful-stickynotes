@@ -6,7 +6,7 @@ export function stickyWorkspacesJsonVaultPath(plugin: Plugin): string {
 	return normalizePath(`${plugin.manifest.dir}/${plugin.manifest.id}-workspaces.json`);
 }
 import { t } from './lang/helpers';
-import type { WorkspacesFile } from './types';
+import type { StickyWorkspace, WorkspacesFile } from './types';
 
 /** 新便笺工作区条目的 id（与创建/复制/空白区逻辑一致）。 */
 export function newStickyWorkspaceId(): string {
@@ -48,7 +48,8 @@ export function defaultWorkspacesFile(): WorkspacesFile {
 				windows: [],
 				updatedAt: now
 			}
-		]
+		],
+		trash: []
 	};
 }
 
@@ -81,25 +82,30 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 			);
 			active = first?.id ?? null;
 		}
+		const mapWorkspace = (w: (typeof parsed.workspaces)[number]): StickyWorkspace => {
+			const rawRemark = (w as { remark?: unknown }).remark;
+			const remark = typeof rawRemark === 'string' ? rawRemark : undefined;
+			return {
+				id: w.id,
+				name: w.name,
+				...(remark !== undefined ? { remark } : {}),
+				windows: Array.isArray(w.windows) ? w.windows : [],
+				updatedAt:
+					typeof (w as { updatedAt?: unknown }).updatedAt === 'number' &&
+					Number.isFinite((w as { updatedAt: number }).updatedAt)
+						? (w as { updatedAt: number }).updatedAt
+						: undefined
+			};
+		};
+		const rawTrash = (parsed as { trash?: unknown }).trash;
+		const trash = Array.isArray(rawTrash)
+			? (rawTrash as typeof parsed.workspaces).map(mapWorkspace)
+			: [];
 		return {
 			version: 1,
 			activeWorkspaceId: active,
-			workspaces: parsed.workspaces.map(w => {
-				const rawRemark = (w as { remark?: unknown }).remark;
-				const remark =
-					typeof rawRemark === 'string' ? rawRemark : undefined;
-				return {
-					id: w.id,
-					name: w.name,
-					...(remark !== undefined ? { remark } : {}),
-					windows: Array.isArray(w.windows) ? w.windows : [],
-					updatedAt:
-						typeof (w as { updatedAt?: unknown }).updatedAt === 'number' &&
-						Number.isFinite((w as { updatedAt: number }).updatedAt)
-							? (w as { updatedAt: number }).updatedAt
-							: undefined
-				};
-			})
+			workspaces: parsed.workspaces.map(mapWorkspace),
+			trash
 		};
 	} catch {
 		return defaultWorkspacesFile();

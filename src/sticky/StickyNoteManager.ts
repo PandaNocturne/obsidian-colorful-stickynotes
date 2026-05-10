@@ -610,15 +610,24 @@ export class StickyNoteManager {
 	}
 
 	/**
-	 * 从列表移除工作区并落盘。删除当前活动区时：不自动选中其它区（避免当前浮动布局误写入另一区快照），关闭浮动便笺且不向任何区 persist。
-	 * 删除后列表为空时恢复内置默认工作区。
+	 * 从主列表移除并落盘。有窗口快照的工作区移入 `trash`；**空白工作区**（`windows` 为空）不入回收站，等同直接删除。
+	 * 删除当前活动区时：不自动选中其它区（避免当前浮动布局误写入另一区快照），关闭浮动便笺且不向任何区 persist。
+	 * 主列表为空时恢复内置默认工作区（保留 `trash` 中条目）。
 	 */
 	async deleteStickyWorkspace(wsId: string): Promise<void> {
 		const job = this.workspaceSwitchTail.then(async () => {
 			if (this.isWorkspacePersistFrozen()) return;
 			this.workspaceSwitchGeneration++;
+			const idx = this.workspaces.workspaces.findIndex(x => x.id === wsId);
+			if (idx < 0) return;
+			const [removed] = this.workspaces.workspaces.splice(idx, 1);
+			if (!removed) return;
+			const isBlank = !removed.windows || removed.windows.length === 0;
+			if (!isBlank) {
+				removed.updatedAt = Date.now();
+				this.workspaces.trash.unshift(removed);
+			}
 			const wasActive = this.workspaces.activeWorkspaceId === wsId;
-			this.workspaces.workspaces = this.workspaces.workspaces.filter(x => x.id !== wsId);
 			if (this.workspaces.workspaces.length === 0) {
 				const fresh = defaultWorkspacesFile();
 				this.workspaces.workspaces = fresh.workspaces;
@@ -638,9 +647,42 @@ export class StickyNoteManager {
 				void this.plugin.saveSettings();
 			}
 			this.plugin.refreshStickyListIfOpen();
+			new Notice(
+				isBlank ? t('NOTICE_BLANK_WORKSPACE_DELETED') : t('NOTICE_WORKSPACE_MOVED_TO_TRASH')
+			);
 		});
 		this.workspaceSwitchTail = job.catch(() => undefined);
 		await job;
+	}
+
+	/** 从回收站还原到主列表末尾。 */
+	async restoreStickyWorkspaceFromTrash(wsId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		const tIdx = this.workspaces.trash.findIndex(w => w.id === wsId);
+		if (tIdx < 0) return;
+		const [w] = this.workspaces.trash.splice(tIdx, 1);
+		if (!w) return;
+		if (this.workspaces.workspaces.some(x => x.id === w.id)) return;
+		w.updatedAt = Date.now();
+		this.workspaces.workspaces.push(w);
+		await this.flushWorkspacesToDisk();
+		new Notice(t('NOTICE_WORKSPACE_RESTORED'));
+		this.plugin.refreshStickyListIfOpen();
+	}
+
+	/** 从回收站永久删除快照。 */
+	async permanentlyDeleteStickyWorkspaceFromTrash(wsId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		const before = this.workspaces.trash.length;
+		this.workspaces.trash = this.workspaces.trash.filter(x => x.id !== wsId);
+		if (this.workspaces.trash.length === before) return;
+		await this.flushWorkspacesToDisk();
+		if (this.plugin.settings.noteListWorkspaceFilterId === wsId) {
+			this.plugin.settings.noteListWorkspaceFilterId = null;
+			void this.plugin.saveSettings();
+		}
+		new Notice(t('NOTICE_WORKSPACE_PERMANENTLY_DELETED'));
+		this.plugin.refreshStickyListIfOpen();
 	}
 
 	/** 将工作区拖到另一张卡片前时：插入到 `beforeId` 之前。 */

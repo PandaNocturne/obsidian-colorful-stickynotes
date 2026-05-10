@@ -59,6 +59,8 @@ export interface StickyWorkspace {
 export interface WorkspacesFile {
 	version: 1;
 	workspaces: StickyWorkspace[];
+	/** 从面板删除的工作区快照，可还原或彻底删除（持久化在 `*-workspaces.json` 的 `trash` 字段）。 */
+	trash: StickyWorkspace[];
 	/** 当前选中的便笺工作区；为 null 表示未选中（删除当前区后不应默认落到其它区，以免把当前浮动布局误写入该区快照）。 */
 	activeWorkspaceId: string | null;
 }

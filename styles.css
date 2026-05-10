@@ -1361,18 +1361,95 @@ body .csn-sticky-window-body .view-content {
   width: 100%;
   max-width: min(80vw, 800px);
   min-height: 200px;
-  overflow-y: auto;
+  max-height: min(85vh, 880px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* 内容区占满剩余高度，仅中间列表滚动，底部工具栏固定 */
 }
-.modal.csn-workspace-panel-modal .modal-header {
-  margin-bottom: 1rem;
+.modal.csn-workspace-panel-modal > .modal-title {
+  flex-shrink: 0;
+}
+.modal.csn-workspace-panel-modal > .modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .csn-workspace-panel {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 2px 2px 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 2px 2px 0;
+}
+/* 工作区网格区域：单独滚动 */
+.csn-ws-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+/* 底部工具栏：操作按钮靠右（不随网格滚动） */
+.csn-ws-panel-toolbar {
+  padding-top: 12px;
+  padding-bottom: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  background: var(--background-primary);
+}
+.csn-ws-panel-toolbar-inner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.csn-ws-panel-toolbar-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.csn-ws-panel-toolbar-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.csn-ws-panel-empty {
+  grid-column: 1 / -1;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 16px;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+/* 回收站卡片：不可点击切换工作区 */
+.csn-ws-panel-item--trash {
+  cursor: default;
 }
 .csn-ws-panel-grid {
+  max-height: min(60vh, 500px);
+  overflow: auto;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
@@ -1459,14 +1536,11 @@ body .csn-sticky-window-body .view-content {
   border-radius: var(--radius-m);
   border: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
-  box-shadow: var(--shadow-s);
   box-sizing: border-box;
   overflow: visible;
 }
 .csn-ws-panel-item--active {
   border-color: var(--interactive-accent);
-  /* 与普通卡片相同的 elevation，选中态仅强调边框色 */
-  box-shadow: var(--shadow-s);
 }
 .csn-ws-panel-item--clickable {
   cursor: pointer;
@@ -1488,9 +1562,8 @@ body .csn-sticky-window-body .view-content {
   padding: 12px;
   border-radius: var(--radius-m);
   border: 1px dashed var(--background-modifier-border);
-  /* 与 .csn-ws-panel-item 相同的底色与柔和阴影，四边视觉一致 */
+  /* 与 .csn-ws-panel-item 相同的底色，四边视觉一致 */
   background: var(--background-secondary);
-  box-shadow: var(--shadow-s);
   box-sizing: border-box;
   color: var(--text-muted);
   cursor: pointer;

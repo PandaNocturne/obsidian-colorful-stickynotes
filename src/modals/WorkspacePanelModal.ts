@@ -175,6 +175,46 @@ class DeleteStickyWorkspaceConfirmModal extends Modal {
 			.addButton(btn => btn.setButtonText(t('MODAL_CANCEL')).onClick(() => this.close()))
 			.addButton(btn =>
 				btn
+					.setButtonText(t('WS_CONFIRM_MOVE_TO_TRASH'))
+					.setWarning()
+					.onClick(async () => {
+						btn.setDisabled(true);
+						try {
+							await Promise.resolve(this.onConfirm());
+							this.close();
+						} finally {
+							btn.setDisabled(false);
+						}
+					})
+			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+class PermanentlyDeleteStickyWorkspaceConfirmModal extends Modal {
+	constructor(
+		app: App,
+		private readonly workspaceName: string,
+		private readonly onConfirm: () => void | Promise<void>
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.titleEl.setText(t('WS_PERMANENT_DELETE_TITLE'));
+		contentEl.createEl('p', {
+			text: t('WS_PERMANENT_DELETE_BODY', { name: this.workspaceName })
+		});
+		new Setting(contentEl)
+			.setName('')
+			.addButton(btn => btn.setButtonText(t('MODAL_CANCEL')).onClick(() => this.close()))
+			.addButton(btn =>
+				btn
 					.setButtonText(t('MODAL_DELETE'))
 					.setWarning()
 					.onClick(async () => {
@@ -202,6 +242,7 @@ export class WorkspacePanelModal extends Modal {
 	 * 仅在本次打开后的首次 render 结束时 blur 一次，避免「额外紫框」；后续 refresh 不干扰键盘导航。
 	 */
 	private clearInitialWorkspaceTileFocusPending = false;
+	private panelMode: 'workspaces' | 'trash' = 'workspaces';
 
 	constructor(
 		app: App,
@@ -226,69 +267,116 @@ export class WorkspacePanelModal extends Modal {
 		const mgr = this.plugin.stickies;
 		const data = mgr.workspaces;
 
-		const gridEl = this.contentEl.createDiv({ cls: 'csn-ws-panel-grid' });
-		for (const ws of data.workspaces) {
-			this.renderWorkspaceTile(
-				gridEl,
-				ws,
-				data.activeWorkspaceId,
-				this.openingWorkspaceId,
-				() => this.render()
-			);
+		this.titleEl.setText(
+			this.panelMode === 'trash' ? t('WS_TRASH_PANEL_TITLE') : t('WS_PANEL_TITLE')
+		);
+
+		const bodyEl = this.contentEl.createDiv({ cls: 'csn-ws-panel-body' });
+		const gridEl = bodyEl.createDiv({ cls: 'csn-ws-panel-grid' });
+
+		if (this.panelMode === 'workspaces') {
+			for (const ws of data.workspaces) {
+				this.renderWorkspaceTile(
+					gridEl,
+					ws,
+					data.activeWorkspaceId,
+					this.openingWorkspaceId,
+					() => this.render()
+				);
+			}
+
+			const addTile = gridEl.createDiv({
+				cls: 'csn-ws-panel-add-tile',
+				attr: {
+					role: 'button',
+					tabindex: '0',
+					'aria-label': t('WS_NEW_BLANK_ARIA')
+				}
+			});
+			const addIconWrap = addTile.createSpan({ cls: 'csn-ws-panel-add-tile-icon' });
+			setIcon(addIconWrap, 'plus');
+			const openNewBlankWorkspace = (): void => {
+				const nextN = data.workspaces.length + 1;
+				const autoPreview = t('WS_NEW_WORKSPACE_AUTO_NAME', { n: nextN });
+				new NewBlankWorkspaceModal(this.app, autoPreview, async ({ name, remark }) => {
+					await mgr.createBlankWorkspace({
+						name: name.trim() ? name : undefined,
+						remark
+					});
+					new Notice(t('NOTICE_NEW_BLANK_WORKSPACE'));
+					this.render();
+				}).open();
+			};
+			addTile.addEventListener('click', openNewBlankWorkspace);
+			addTile.addEventListener('keydown', (e: KeyboardEvent) => {
+				if (e.key !== 'Enter' && e.key !== ' ') return;
+				e.preventDefault();
+				openNewBlankWorkspace();
+			});
+
+			const clearAddDropStyle = (): void => {
+				addTile.classList.remove('csn-ws-panel-add-tile--drop-target');
+			};
+			addTile.addEventListener('dragover', (e: DragEvent) => {
+				if (!e.dataTransfer?.types.includes(WORKSPACE_DND_MIME)) return;
+				e.preventDefault();
+				e.dataTransfer.dropEffect = 'move';
+				addTile.classList.add('csn-ws-panel-add-tile--drop-target');
+			});
+			addTile.addEventListener('dragleave', (e: DragEvent) => {
+				const r = e.relatedTarget as Node | null;
+				if (r && addTile.contains(r)) return;
+				clearAddDropStyle();
+			});
+			addTile.addEventListener('drop', (e: DragEvent) => {
+				e.preventDefault();
+				clearAddDropStyle();
+				const fromId = e.dataTransfer?.getData(WORKSPACE_DND_MIME);
+				if (!fromId) return;
+				void mgr.reorderWorkspaceToEnd(fromId).then(() => this.render());
+			});
+		} else if (data.trash.length === 0) {
+			gridEl.createDiv({
+				cls: 'csn-ws-panel-empty',
+				text: t('WS_TRASH_EMPTY')
+			});
+		} else {
+			for (const ws of data.trash) {
+				this.renderTrashTile(gridEl, ws, () => this.render());
+			}
 		}
 
-		const addTile = gridEl.createDiv({
-			cls: 'csn-ws-panel-add-tile',
-			attr: {
-				role: 'button',
-				tabindex: '0',
-				'aria-label': t('WS_NEW_BLANK_ARIA')
-			}
-		});
-		const addIconWrap = addTile.createSpan({ cls: 'csn-ws-panel-add-tile-icon' });
-		setIcon(addIconWrap, 'plus');
-		const openNewBlankWorkspace = (): void => {
-			const nextN = data.workspaces.length + 1;
-			const autoPreview = t('WS_NEW_WORKSPACE_AUTO_NAME', { n: nextN });
-			new NewBlankWorkspaceModal(this.app, autoPreview, async ({ name, remark }) => {
-				await mgr.createBlankWorkspace({
-					name: name.trim() ? name : undefined,
-					remark
+		const toolbar = this.contentEl.createDiv({ cls: 'csn-ws-panel-toolbar' });
+		const inner = toolbar.createDiv({ cls: 'csn-ws-panel-toolbar-inner' });
+		if (this.panelMode === 'workspaces') {
+			const btnTrash = inner.createEl('button', {
+				cls: 'csn-ws-panel-toolbar-btn csn-ws-panel-icon-btn--bordered',
+				attr: { 'aria-label': t('WS_TOOLBAR_TRASH_ARIA'), type: 'button' }
+			});
+			setIcon(btnTrash, 'archive');
+			if (data.trash.length > 0) {
+				btnTrash.createSpan({
+					cls: 'csn-ws-panel-toolbar-badge',
+					text: String(data.trash.length)
 				});
-				new Notice(t('NOTICE_NEW_BLANK_WORKSPACE'));
+			}
+			btnTrash.addEventListener('click', () => {
+				this.panelMode = 'trash';
 				this.render();
-			}).open();
-		};
-		addTile.addEventListener('click', openNewBlankWorkspace);
-		addTile.addEventListener('keydown', (e: KeyboardEvent) => {
-			if (e.key !== 'Enter' && e.key !== ' ') return;
-			e.preventDefault();
-			openNewBlankWorkspace();
-		});
+			});
+		} else {
+			const btnBack = inner.createEl('button', {
+				cls: 'csn-ws-panel-toolbar-btn csn-ws-panel-icon-btn--bordered',
+				attr: { 'aria-label': t('WS_TOOLBAR_BACK_ARIA'), type: 'button' }
+			});
+			setIcon(btnBack, 'arrow-left');
+			btnBack.addEventListener('click', () => {
+				this.panelMode = 'workspaces';
+				this.render();
+			});
+		}
 
-		const clearAddDropStyle = (): void => {
-			addTile.classList.remove('csn-ws-panel-add-tile--drop-target');
-		};
-		addTile.addEventListener('dragover', (e: DragEvent) => {
-			if (!e.dataTransfer?.types.includes(WORKSPACE_DND_MIME)) return;
-			e.preventDefault();
-			e.dataTransfer.dropEffect = 'move';
-			addTile.classList.add('csn-ws-panel-add-tile--drop-target');
-		});
-		addTile.addEventListener('dragleave', (e: DragEvent) => {
-			const r = e.relatedTarget as Node | null;
-			if (r && addTile.contains(r)) return;
-			clearAddDropStyle();
-		});
-		addTile.addEventListener('drop', (e: DragEvent) => {
-			e.preventDefault();
-			clearAddDropStyle();
-			const fromId = e.dataTransfer?.getData(WORKSPACE_DND_MIME);
-			if (!fromId) return;
-			void mgr.reorderWorkspaceToEnd(fromId).then(() => this.render());
-		});
-
-		if (this.clearInitialWorkspaceTileFocusPending) {
+		if (this.panelMode === 'workspaces' && this.clearInitialWorkspaceTileFocusPending) {
 			this.clearInitialWorkspaceTileFocusPending = false;
 			window.requestAnimationFrame(() => {
 				window.requestAnimationFrame(() => {
@@ -446,8 +534,16 @@ export class WorkspacePanelModal extends Modal {
 			attr: { 'aria-label': t('WS_DELETE_ARIA') }
 		});
 		setIcon(btnDel, 'trash-2');
+		const isBlankWorkspace = !ws.windows || ws.windows.length === 0;
 		btnDel.addEventListener('click', e => {
 			e.stopPropagation();
+			if (isBlankWorkspace) {
+				void (async () => {
+					await mgr.deleteStickyWorkspace(ws.id);
+					refresh();
+				})();
+				return;
+			}
 			new DeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
 				await mgr.deleteStickyWorkspace(ws.id);
 				refresh();
@@ -488,7 +584,70 @@ export class WorkspacePanelModal extends Modal {
 		});
 	}
 
+	private renderTrashTile(
+		gridEl: HTMLDivElement,
+		ws: StickyWorkspace,
+		refresh: () => void
+	): void {
+		const mgr = this.plugin.stickies;
+		const row = gridEl.createDiv({
+			cls: 'csn-ws-panel-item csn-ws-panel-item--trash'
+		});
+
+		const main = row.createDiv({ cls: 'csn-ws-panel-item-main' });
+		const titleRow = main.createDiv({ cls: 'csn-ws-panel-item-title-row' });
+		titleRow.createSpan({ text: ws.name, cls: 'csn-ws-panel-item-name' });
+
+		const remarkText = ws.remark?.trim();
+		if (remarkText) {
+			main.createDiv({
+				text: remarkText,
+				cls: 'csn-ws-panel-item-remark'
+			});
+		} else {
+			main.createDiv({
+				text: t('WS_REMARK_EMPTY_PLACEHOLDER'),
+				cls: 'csn-ws-panel-item-remark csn-ws-panel-item-remark--placeholder'
+			});
+		}
+
+		const footer = row.createDiv({ cls: 'csn-ws-panel-item-footer' });
+		const footLeft = footer.createDiv({ cls: 'csn-ws-panel-item-footer-left' });
+		footLeft.createDiv({
+			text: formatWorkspaceRelativeTime(ws.updatedAt),
+			cls: 'csn-ws-panel-item-meta'
+		});
+
+		const actions = footer.createDiv({ cls: 'csn-ws-panel-item-float-actions' });
+		const btnRestore = actions.createEl('button', {
+			cls: 'csn-ws-panel-icon-btn',
+			attr: { 'aria-label': t('WS_RESTORE_ARIA') }
+		});
+		setIcon(btnRestore, 'rotate-ccw');
+		btnRestore.addEventListener('click', e => {
+			e.stopPropagation();
+			void (async () => {
+				await mgr.restoreStickyWorkspaceFromTrash(ws.id);
+				refresh();
+			})();
+		});
+
+		const btnForever = actions.createEl('button', {
+			cls: 'csn-ws-panel-icon-btn',
+			attr: { 'aria-label': t('WS_PERMANENT_DELETE_ARIA') }
+		});
+		setIcon(btnForever, 'trash');
+		btnForever.addEventListener('click', e => {
+			e.stopPropagation();
+			new PermanentlyDeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
+				await mgr.permanentlyDeleteStickyWorkspaceFromTrash(ws.id);
+				refresh();
+			}).open();
+		});
+	}
+
 	onClose(): void {
+		this.panelMode = 'workspaces';
 		this.contentEl.empty();
 	}
 }
