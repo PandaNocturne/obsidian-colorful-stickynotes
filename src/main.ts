@@ -284,6 +284,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.stickyHeaderDoubleClickStretch !== 'boolean') {
 			this.settings.stickyHeaderDoubleClickStretch = DEFAULT_SETTINGS.stickyHeaderDoubleClickStretch;
 		}
+		if (typeof this.settings.stickyMainDoubleClickToEdit !== 'boolean') {
+			this.settings.stickyMainDoubleClickToEdit = DEFAULT_SETTINGS.stickyMainDoubleClickToEdit;
+		}
 		const VALID_SNAP_MODES = new Set(['none', 'auto', 'ctrl']);
 		const rawSnapMode = raw.stickyAssistAlignSnapMode;
 		const legacySnapBool = raw.stickyAssistAlignSnap;

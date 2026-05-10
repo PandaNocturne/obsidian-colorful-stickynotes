@@ -65,6 +65,9 @@ export const en = {
 	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_NAME: 'Double-click header to stretch',
 	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC:
 		'Double-click header to stretch full height; double-click again to restore.',
+	SETTINGS_MAIN_DBLCLICK_TO_SOURCE_NAME: 'Double-click main area to edit',
+	SETTINGS_MAIN_DBLCLICK_TO_SOURCE_DESC:
+		'In Read (preview) mode, double-click the sticky body area (.csn-sticky-main) to switch to edit mode. Ignores the settings sheet, bottom bar, and links in preview.',
 
 	SETTINGS_HEADING_ASSIST_FEATURES: 'Assistive features',
 	SETTINGS_AUTO_DELETE_BLANK_NAME: 'Auto-delete empty stickies',

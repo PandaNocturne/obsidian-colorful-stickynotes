@@ -244,6 +244,8 @@ export class StickyNotePopover {
 		this.bottomBarResizeObserver.observe(this.bottomBarEl);
 		this.syncBottomBarHeightCss();
 
+		this.wireMainDoubleClickPreviewToSource();
+
 		this.attachLeaf();
 		this.wireLeafModeSync();
 
@@ -515,6 +517,38 @@ export class StickyNotePopover {
 
 	private applyBottomBarAutoHideClass(): void {
 		this.rootEl.toggleClass('csn-sticky--bar-autohide', this.bottomBarAutoHide);
+	}
+
+	/** 避免 StickyNotePopover 直接 import main 造成循环依赖 */
+	private isStickyMainDoubleClickToEditEnabled(): boolean {
+		const s = (this.plugin as unknown as { settings?: { stickyMainDoubleClickToEdit?: boolean } }).settings;
+		return !!s?.stickyMainDoubleClickToEdit;
+	}
+
+	/**
+	 * 设置项「双击主区域切换编辑模式」：阅读（预览）下在 .csn-sticky-main 内双击进入 source。
+	 */
+	private wireMainDoubleClickPreviewToSource(): void {
+		this.plugin.registerDomEvent(this.mainColumnEl, 'dblclick', (evt: MouseEvent) => {
+			if (this.disposed || this.collapsed) return;
+			if (evt.button !== 0) return;
+			if (!this.isStickyMainDoubleClickToEditEnabled()) return;
+			const el = evt.target;
+			if (!(el instanceof HTMLElement)) return;
+			if (el.closest('.csn-sticky-sheet-layer')) return;
+			if (el.closest('.csn-sticky-bottombar')) return;
+			if (el.closest('a[href]')) return;
+			if (el.closest('button')) return;
+			if (el.closest('input, textarea, select')) return;
+			if (el.closest('img, video, audio, canvas')) return;
+			const leaf = this.leaf;
+			const view = leaf?.view;
+			if (!(view instanceof MarkdownView) || !view.file || view.file.extension !== 'md') return;
+			if (view.getMode() !== 'preview') return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			void this.setMarkdownMode('source');
+		});
 	}
 
 	private syncBottomBarHeightCss(): void {

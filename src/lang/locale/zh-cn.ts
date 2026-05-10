@@ -60,6 +60,9 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_EDGE_STRETCH_DESC: '便笺左右贴边时自动拉伸高度；移开贴边后恢复原高度。',
 	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_NAME: '双击头部拉伸',
 	SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC: '双击便笺头部可拉伸到全高；再次双击恢复原高度。',
+	SETTINGS_MAIN_DBLCLICK_TO_SOURCE_NAME: '双击主区域切换编辑模式',
+	SETTINGS_MAIN_DBLCLICK_TO_SOURCE_DESC:
+		'阅读（预览）模式下，双击便笺主体区域（.csn-sticky-main）进入编辑模式。不作用于设置抽屉、底栏与预览内链接。',
 
 	SETTINGS_HEADING_ASSIST_FEATURES: '辅助功能',
 	SETTINGS_AUTO_DELETE_BLANK_NAME: '自动删除空白便笺',

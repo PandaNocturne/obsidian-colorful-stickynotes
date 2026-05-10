@@ -88,6 +88,8 @@ export interface ColorfulStickyNotesSettings {
 	stickyEdgeAutoStretchHeight: boolean;
 	/** 双击便笺头部切换拉伸/恢复。 */
 	stickyHeaderDoubleClickStretch: boolean;
+	/** 阅读（预览）模式下，双击便笺主体区域（.csn-sticky-main）切换到编辑模式。 */
+	stickyMainDoubleClickToEdit: boolean;
 	/** 辅助对齐吸附的触发方式：`none` 关闭；`auto` 拖动即吸附；`ctrl` 未绑定时按住 Ctrl 吸附，已在绑定组时按住 Ctrl 解绑。 */
 	stickyAssistAlignSnapMode: StickyAssistAlignSnapMode;
 	/** 吸附阈值（px）。 */
@@ -168,6 +170,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	bottomBarAutoHide: false,
 	stickyEdgeAutoStretchHeight: false,
 	stickyHeaderDoubleClickStretch: false,
+	stickyMainDoubleClickToEdit: true,
 	stickyAssistAlignSnapMode: 'ctrl',
 	stickyAssistAlignSnapThresholdPx: 10,
 	stickyAssistAlignSnapUnbindRangeMultiplier: 2,
@@ -578,6 +581,16 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					this.plugin.settings.stickyHeaderDoubleClickStretch = v;
 					await this.plugin.saveSettings();
 					this.plugin.syncStickyHeaderDoubleClickStretchToOpenViews();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName(t('SETTINGS_MAIN_DBLCLICK_TO_SOURCE_NAME'))
+			.setDesc(t('SETTINGS_MAIN_DBLCLICK_TO_SOURCE_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.stickyMainDoubleClickToEdit).onChange(async v => {
+					this.plugin.settings.stickyMainDoubleClickToEdit = v;
+					await this.plugin.saveSettings();
 				})
 			);
 
