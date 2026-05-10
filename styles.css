@@ -191,8 +191,12 @@
   overflow: auto !important;
   padding: 0 !important;
 }
+.csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-content {
+  max-width: none !important;
+  width: 100% !important;
+}
 .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-contentContainer {
-  padding: 10px;
+  padding: 0px;
   box-sizing: border-box;
 }
 .csn-sticky-window-body .view-content .markdown-reading-view {

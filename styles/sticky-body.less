@@ -38,7 +38,7 @@
 		display: none !important;
 	}
 
-	> .workspace-split {
+	>.workspace-split {
 		flex: 1 1 auto;
 		min-height: 0;
 		height: auto;
@@ -108,17 +108,24 @@
 				flex-direction: column;
 			}
 
-			.cm-editor > .cm-scroller {
+			.cm-editor>.cm-scroller {
 				flex: 1 1 auto !important;
 				min-height: 0 !important;
 				overflow: auto !important;
 				padding: 0 !important;
 			}
 
+			.cm-content {
+				max-width: none !important;
+				width: 100% !important;
+			}
+
 			.cm-contentContainer {
-				padding: 10px;
+				padding: 0px;
 				box-sizing: border-box;
 			}
+
+
 		}
 
 		/* !阅读模式 */
