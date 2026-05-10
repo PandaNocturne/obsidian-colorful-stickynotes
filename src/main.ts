@@ -287,6 +287,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.stickyMainDoubleClickToEdit !== 'boolean') {
 			this.settings.stickyMainDoubleClickToEdit = DEFAULT_SETTINGS.stickyMainDoubleClickToEdit;
 		}
+		if (typeof this.settings.stickyLeafPinned !== 'boolean') {
+			this.settings.stickyLeafPinned = DEFAULT_SETTINGS.stickyLeafPinned;
+		}
 		const VALID_SNAP_MODES = new Set(['none', 'auto', 'ctrl']);
 		const rawSnapMode = raw.stickyAssistAlignSnapMode;
 		const legacySnapBool = raw.stickyAssistAlignSnap;
@@ -592,6 +595,11 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 将「双击头部拉伸」同步到已打开的浮动便笺。 */
 	syncStickyHeaderDoubleClickStretchToOpenViews(): void {
 		this.stickies.updateHeaderDoubleClickStretchFromSettings();
+	}
+
+	/** 将「锁定便笺内标签页」同步到已打开的浮动便笺。 */
+	syncStickyLeafPinnedToOpenViews(): void {
+		this.stickies.updateLeafPinnedFromSettings();
 	}
 
 	/** 将列表预览缩放同步到已打开的便笺列表（不重渲 Markdown）。 */

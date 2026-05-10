@@ -36,6 +36,8 @@ export interface StickyNotePopoverOptions {
 	mountEl: HTMLElement;
 	bounds?: FloatingBounds | null;
 	defaultMarkdownMode: 'preview' | 'source';
+	/** 是否将内嵌叶标签固定（对应 Obsidian「锁定」标签）。 */
+	leafPinned: boolean;
 	/** `null`：无 `colorful-sticky-bg` 等来源时，不套便笺色板（界面主题底栏）。 */
 	initialColor: StickyColorId | null;
 	initialCollapsed: boolean;
@@ -125,6 +127,7 @@ export class StickyNotePopover {
 	private disposed = false;
 	private edgeAutoStretchHeight = false;
 	private headerDoubleClickStretch = false;
+	private leafPinned = false;
 	private manualHeaderStretchActive = false;
 	private edgeStretchRestoreState: { top: number; height: number } | null = null;
 	private collapsed: boolean;
@@ -142,6 +145,7 @@ export class StickyNotePopover {
 		this.yamlVisible = options.initialYamlVisible;
 		this.edgeAutoStretchHeight = options.edgeAutoStretchHeight;
 		this.headerDoubleClickStretch = options.headerDoubleClickStretch;
+		this.leafPinned = options.leafPinned;
 		this.markdownModeTogglePending = options.expectMarkdownOpen === true;
 
 		const mount = options.mountEl;
@@ -916,7 +920,8 @@ export class StickyNotePopover {
 			await leaf.setViewState({
 				type: 'markdown',
 				state: { file: file.path, mode: this.options.defaultMarkdownMode === 'source' ? 'source' : 'preview' },
-				active: workspaceActive
+				active: workspaceActive,
+				...(this.leafPinned ? { pinned: true } : {})
 			});
 		} else {
 			await leaf.openFile(file, { active: workspaceActive });
@@ -925,6 +930,7 @@ export class StickyNotePopover {
 		/* setViewState 后先交出一帧，让便笺窗口与叶视图占位先上屏，再跑 loadIfDeferred 的重排版。 */
 		await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 		await leaf.loadIfDeferred?.();
+		this.applyLeafPinnedToLeaf();
 		if (this.disposed) return;
 		this.rootEl.removeClass('csn-sticky--content-pending');
 		this.markdownModeTogglePending = false;
@@ -1007,7 +1013,8 @@ export class StickyNotePopover {
 		await leaf.setViewState({
 			type: 'markdown',
 			state: { ...cur.state, file: view.file.path, mode },
-			active: true
+			active: true,
+			...(this.leafPinned ? { pinned: true } : {})
 		});
 		await leaf.loadIfDeferred?.();
 		this.syncModeToggleUi();
@@ -1380,5 +1387,17 @@ export class StickyNotePopover {
 			leaf.onResize?.();
 			leaf.view?.onResize?.();
 		});
+	}
+
+	/** 与设置项同步：更新内嵌叶是否固定标签。 */
+	setLeafPinnedFromSettings(pinned: boolean): void {
+		this.leafPinned = pinned;
+		this.applyLeafPinnedToLeaf();
+	}
+
+	private applyLeafPinnedToLeaf(): void {
+		const leaf = this.leaf;
+		if (!leaf || this.disposed) return;
+		leaf.setPinned(this.leafPinned);
 	}
 }

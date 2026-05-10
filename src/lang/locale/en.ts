@@ -94,6 +94,9 @@ export const en = {
 	SETTINGS_DEFAULT_VIEW_NAME: 'Default sticky view',
 	SETTINGS_MODE_SOURCE: 'Edit',
 	SETTINGS_MODE_PREVIEW: 'Read',
+	SETTINGS_STICKY_LEAF_PINNED_NAME: 'Pin sticky tab',
+	SETTINGS_STICKY_LEAF_PINNED_DESC:
+		'Pin the tab inside each floating sticky (same as Obsidian’s pin), so navigation is less likely to replace the current note in that pane.',
 	SETTINGS_STICKY_ZOOM_NAME: 'Content zoom',
 	SETTINGS_STICKY_ZOOM_DESC: 'Floating sticky body scale ({min}%–{max}%).',
 	SETTINGS_LIST_PREVIEW_ZOOM_DESC:

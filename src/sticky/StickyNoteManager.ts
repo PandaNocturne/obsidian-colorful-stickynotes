@@ -1063,6 +1063,7 @@ export class StickyNoteManager {
 			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
 			edgeAutoStretchHeight: this.plugin.settings.stickyEdgeAutoStretchHeight,
 			headerDoubleClickStretch: this.plugin.settings.stickyHeaderDoubleClickStretch,
+			leafPinned: this.plugin.settings.stickyLeafPinned,
 			viewContentZoom: this.plugin.settings.stickyViewContentZoom,
 			onClose: () => void this.handleStickyCloseRequest(id),
 			onBoundsChange: () => this.persistOpenWindows(),
@@ -1440,6 +1441,13 @@ export class StickyNoteManager {
 		const enabled = this.plugin.settings.stickyHeaderDoubleClickStretch;
 		for (const p of this.popovers.values()) {
 			p.setHeaderDoubleClickStretch(enabled);
+		}
+	}
+
+	updateLeafPinnedFromSettings(): void {
+		const pinned = this.plugin.settings.stickyLeafPinned;
+		for (const p of this.popovers.values()) {
+			p.setLeafPinnedFromSettings(pinned);
 		}
 	}
 

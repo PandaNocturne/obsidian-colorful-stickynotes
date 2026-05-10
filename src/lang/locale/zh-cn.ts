@@ -89,6 +89,9 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_DEFAULT_VIEW_NAME: '便笺默认视图',
 	SETTINGS_MODE_SOURCE: '编辑',
 	SETTINGS_MODE_PREVIEW: '阅读',
+	SETTINGS_STICKY_LEAF_PINNED_NAME: '锁定便笺内标签页',
+	SETTINGS_STICKY_LEAF_PINNED_DESC:
+		'将浮动便笺内嵌的标签设为固定（与 Obsidian「锁定」标签相同），减少在便笺内打开链接或导航时替换当前笔记。',
 	SETTINGS_STICKY_ZOOM_NAME: '内容缩放比例',
 	SETTINGS_STICKY_ZOOM_DESC: '浮动便笺正文显示比例（{min}%–{max}%）。',
 	SETTINGS_LIST_PREVIEW_ZOOM_DESC: '列表卡片内 Markdown 预览比例（{min}%–{max}%），与浮动便笺窗口独立。',

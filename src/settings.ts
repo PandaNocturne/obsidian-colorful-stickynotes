@@ -79,6 +79,11 @@ export interface ColorfulStickyNotesSettings {
 	filenameTemplate: string;
 	defaultTemplatePath: string;
 	defaultViewMode: 'preview' | 'source';
+	/**
+	 * 浮动便笺内嵌工作区叶的标签是否固定（对应 Obsidian「锁定」标签），
+	 * 减少在便笺内导航时替换当前视图的行为。
+	 */
+	stickyLeafPinned: boolean;
 	/** 浮动便笺内 `.view-content` 的 `zoom`。 */
 	stickyViewContentZoom: number;
 	/** 便笺列表预览卡片正文的 `zoom`。 */
@@ -165,6 +170,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	filenameTemplate: 'YYYY/YYYY-MM-DD',
 	defaultTemplatePath: '',
 	defaultViewMode: 'source',
+	stickyLeafPinned: true,
 	stickyViewContentZoom: VIEW_CONTENT_ZOOM_DEFAULT,
 	noteListViewContentZoom: VIEW_CONTENT_ZOOM_DEFAULT,
 	bottomBarAutoHide: false,
@@ -370,6 +376,17 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						this.plugin.settings.defaultViewMode = v as 'preview' | 'source';
 						await this.plugin.saveSettings();
 					})
+			);
+
+		new Setting(containerEl)
+			.setName(t('SETTINGS_STICKY_LEAF_PINNED_NAME'))
+			.setDesc(t('SETTINGS_STICKY_LEAF_PINNED_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.stickyLeafPinned).onChange(async v => {
+					this.plugin.settings.stickyLeafPinned = v;
+					await this.plugin.saveSettings();
+					this.plugin.syncStickyLeafPinnedToOpenViews();
+				})
 			);
 
 		new Setting(containerEl)
