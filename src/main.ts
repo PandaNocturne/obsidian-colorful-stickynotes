@@ -22,6 +22,7 @@ import {
 	saveNoteListPersistedFile,
 	samePinnedPathsOrder
 } from './note-list-store';
+import { registerStickyWorkspacePatches } from './sticky/registerStickyWorkspacePatches';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
 import { registerSendToStickyMenus } from './register-send-to-sticky-menus';
@@ -80,6 +81,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+		registerStickyWorkspacePatches(this);
 		this.stickies = new StickyNoteManager(this, this.app);
 		await this.stickies.init();
 		await this.pruneNoteListWorkspaceFilterAfterWorkspacesLoad();

@@ -160,6 +160,28 @@ export class StickyNotePopover {
 				if (this.disposed) return;
 				if (e.pointerType === 'mouse' && e.button !== 0) return;
 				this.options.onActivate();
+				const leaf = this.leaf;
+				if (leaf) {
+					void this.plugin.app.workspace.setActiveLeaf(leaf, { focus: false });
+				}
+			},
+			{ capture: true }
+		);
+
+		this.plugin.registerDomEvent(
+			this.rootEl,
+			'focusin',
+			(evt: FocusEvent) => {
+				const leaf = this.leaf;
+				if (!leaf || this.disposed) return;
+				const t = evt.target;
+				const paneEl = leaf.view?.containerEl;
+				if (!(t instanceof Node) || !paneEl?.contains(t)) return;
+				const ws = this.plugin.app.workspace;
+				void ws.setActiveLeaf(leaf, { focus: false });
+				if (ws.activeLeaf === leaf) {
+					leaf.setEphemeralState({ focus: true });
+				}
 			},
 			{ capture: true }
 		);
