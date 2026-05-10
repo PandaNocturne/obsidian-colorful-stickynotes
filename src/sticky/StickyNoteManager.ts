@@ -779,7 +779,7 @@ export class StickyNoteManager {
 
 	async openStickyForFile(
 		file: TFile,
-		opts?: { markdownMode?: 'preview' | 'source' }
+		opts?: { markdownMode?: 'preview' | 'source'; skipStickyFrontmatterTouch?: boolean }
 	): Promise<void> {
 		for (const pop of this.popovers.values()) {
 			const vf =
@@ -793,13 +793,16 @@ export class StickyNoteManager {
 			}
 		}
 		/* `color: default` 仅表示壳层不设色，实际底色仍可由 YAML `colorful-sticky-bg` 决定。 */
-		await this.openExistingSticky({
-			id: this.newId(),
-			path: file.path,
-			stickyId: this.readStickyIdFromCache(file) ?? undefined,
-			bounds: this.getDefaultBounds(),
-			...(opts?.markdownMode ? { markdownMode: opts.markdownMode } : {})
-		});
+		await this.openExistingSticky(
+			{
+				id: this.newId(),
+				path: file.path,
+				stickyId: this.readStickyIdFromCache(file) ?? undefined,
+				bounds: this.getDefaultBounds(),
+				...(opts?.markdownMode ? { markdownMode: opts.markdownMode } : {})
+			},
+			opts?.skipStickyFrontmatterTouch ? { skipStickyFrontmatterTouch: true } : undefined
+		);
 	}
 
 	/** 关闭该笔记对应的浮动便笺窗口（与从窗口关闭一致，含空白便笺确认）。 */
@@ -820,7 +823,7 @@ export class StickyNoteManager {
 	 */
 	async moveFileToStickyWindow(
 		file: TFile,
-		opts?: { markdownMode?: 'preview' | 'source' }
+		opts?: { markdownMode?: 'preview' | 'source'; skipStickyFrontmatterTouch?: boolean }
 	): Promise<void> {
 		await this.openStickyForFile(file, opts);
 		const stickyLeaves = new Set<WorkspaceLeaf>();
@@ -1267,7 +1270,8 @@ export class StickyNoteManager {
 
 	/** 从快照准备便笺壳（DOM + leaf），暂不 finalize 打开；用于批量恢复时并行创建。 */
 	private async prepareExistingStickyShell(
-		serial: SerializedStickyWindow
+		serial: SerializedStickyWindow,
+		openOpts?: { skipStickyFrontmatterTouch?: boolean }
 	): Promise<PreparedExistingStickyOpen | null> {
 		const file = this.resolveStickyFileForSerialized(serial);
 		if (!(file instanceof TFile)) {
@@ -1306,7 +1310,9 @@ export class StickyNoteManager {
 			);
 		}
 		this.applyPendingBindingsForId(id);
-		await this.ensureStickyFrontmatterDefaults(file, { preferredId: serial.stickyId ?? id }).catch(() => undefined);
+		if (!openOpts?.skipStickyFrontmatterTouch) {
+			await this.ensureStickyFrontmatterDefaults(file, { preferredId: serial.stickyId ?? id }).catch(() => undefined);
+		}
 		return {
 			pop,
 			file,
@@ -1319,7 +1325,13 @@ export class StickyNoteManager {
 
 	private async finalizeExistingStickyOpen(
 		prepared: PreparedExistingStickyOpen,
-		opts: { workspaceActive: boolean; persistLayout?: boolean; switchToken?: number }
+		opts: {
+			workspaceActive: boolean;
+			persistLayout?: boolean;
+			switchToken?: number;
+			/** 为 true 时不因快照色向文件写入 `colorful-sticky-bg`（与 prepare 侧跳过 frontmatter 一致）。 */
+			skipStickyFrontmatterTouch?: boolean;
+		}
 	): Promise<void> {
 		if (opts.switchToken !== undefined && this.isStaleWorkspaceSwitch(opts.switchToken)) return;
 		const { pop, file, bounds: b, savedColor, hidden, stretched } = prepared;
@@ -1329,7 +1341,7 @@ export class StickyNoteManager {
 		/* 恢复布局：拉伸态不参与水平贴边吸附，避免绑定组互相打乱。 */
 		pop.setStretched(stretched, { snapHorizontalToViewport: false });
 		pop.setHidden(hidden);
-		if (savedColor !== undefined) {
+		if (savedColor !== undefined && !opts.skipStickyFrontmatterTouch) {
 			/* 若缓存与正文仍无 `colorful-sticky-bg`，用快照色补写 frontmatter。 */
 			const yamlColor =
 				getStickyBgColorFromMetadataCache(this.app, file) ??
@@ -1346,10 +1358,16 @@ export class StickyNoteManager {
 		this.notifyStickyListOpenIndicators();
 	}
 
-	async openExistingSticky(serial: SerializedStickyWindow): Promise<void> {
-		const prepared = await this.prepareExistingStickyShell(serial);
+	async openExistingSticky(
+		serial: SerializedStickyWindow,
+		openOpts?: { skipStickyFrontmatterTouch?: boolean }
+	): Promise<void> {
+		const prepared = await this.prepareExistingStickyShell(serial, openOpts);
 		if (!prepared) return;
-		await this.finalizeExistingStickyOpen(prepared, { workspaceActive: true });
+		await this.finalizeExistingStickyOpen(prepared, {
+			workspaceActive: true,
+			skipStickyFrontmatterTouch: openOpts?.skipStickyFrontmatterTouch
+		});
 	}
 
 	/** 按当前活动工作区快照恢复窗口；快照为空时不自动新建便笺。switchToken 与 begin 返回的世代一致时才会完整执行；中途过期会关闭已创建的壳并中止。 */

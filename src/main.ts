@@ -173,7 +173,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				const f = this.app.workspace.getActiveFile();
 				if (!f) return false;
 				if (checking) return true;
-				void this.openStickyForFile(f, { markdownMode: 'preview' });
+				void this.openStickyForFile(f, { markdownMode: 'preview', skipStickyFrontmatterTouch: true });
 				return true;
 			}
 		});
@@ -185,7 +185,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				const f = this.app.workspace.getActiveFile();
 				if (!f) return false;
 				if (checking) return true;
-				void this.moveFileToStickyWindow(f, { markdownMode: 'preview' });
+				void this.moveFileToStickyWindow(f, { markdownMode: 'preview', skipStickyFrontmatterTouch: true });
 				return true;
 			}
 		});
@@ -648,7 +648,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 打开或聚焦指定文件的便笺窗口 */
 	async openStickyForFile(
 		file: TFile,
-		opts?: { markdownMode?: 'preview' | 'source' }
+		opts?: { markdownMode?: 'preview' | 'source'; skipStickyFrontmatterTouch?: boolean }
 	): Promise<void> {
 		await this.stickies.openStickyForFile(file, opts);
 	}
@@ -656,7 +656,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 在便笺中打开并关闭主工作区中该文件的标签（不含便笺浮动叶）。 */
 	async moveFileToStickyWindow(
 		file: TFile,
-		opts?: { markdownMode?: 'preview' | 'source' }
+		opts?: { markdownMode?: 'preview' | 'source'; skipStickyFrontmatterTouch?: boolean }
 	): Promise<void> {
 		await this.stickies.moveFileToStickyWindow(file, opts);
 	}

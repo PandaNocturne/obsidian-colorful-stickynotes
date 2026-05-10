@@ -3,7 +3,8 @@ import { around } from 'monkey-around';
 import { t } from './lang/helpers';
 import type ColorfulStickyNotesPlugin from './main';
 
-const sendStickyOpts = { markdownMode: 'preview' as const };
+/** 发送/移动：不在库内笔记中自动写入便笺 frontmatter（id / archived / 背景等）。 */
+const sendStickyOpts = { markdownMode: 'preview' as const, skipStickyFrontmatterTouch: true as const };
 
 function addSendToStickyMenuItem(menu: Menu, plugin: ColorfulStickyNotesPlugin, file: TFile): void {
 	menu.addItem(item => {
