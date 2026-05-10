@@ -1,6 +1,13 @@
+/* 脱离 flex 流：贴 main 底部叠放，避免自动隐藏时 max-height 动画挤占正文高度导致跳动（尤其便笺贴近屏幕下沿时） */
 .csn-sticky-bottombar {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	box-sizing: border-box;
 	display: flex;
-	flex: 0 0 auto;
+	flex: none;
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
@@ -8,8 +15,8 @@
 	padding: 4px 8px 6px;
 	background: var(--csn-b);
 	border-top: 1px solid var(--csn-border);
-	position: relative;
-	z-index: 20;
+	/* 高于 .csn-sticky-sheet-layer(12)，设置抽屉与蒙版之上，可始终点到标题/齿轮 */
+	z-index: 30;
 }
 
 .csn-sticky-bottombar-title {
@@ -40,31 +47,22 @@
 	background-color: var(--background-modifier-hover) !important;
 }
 
+/* 自动隐藏：仅淡入淡出，不改变占位高度（正文区用 padding-bottom 恒预留底栏高度，见 sticky-body.less） */
 .csn-sticky--bar-autohide .csn-sticky-bottombar {
 	opacity: 0;
-	min-height: 0 !important;
-	max-height: 0;
-	padding-top: 0;
-	padding-bottom: 0;
-	border-top-color: transparent;
+	visibility: hidden;
 	pointer-events: none;
-	overflow: hidden;
-	flex-shrink: 1;
 	transition:
 		opacity 0.15s ease,
-		max-height 0.2s ease;
+		visibility 0.15s ease;
 }
 
 .csn-sticky--bar-autohide:hover .csn-sticky-bottombar,
 .csn-sticky--bar-autohide .csn-sticky-bottombar:focus-within,
 .csn-sticky--bar-autohide.csn-sticky--sheet-open .csn-sticky-bottombar {
 	opacity: 1;
-	min-height: unset;
-	max-height: 56px;
-	padding: 4px 8px 6px;
-	border-top: 1px solid var(--csn-border);
+	visibility: visible;
 	pointer-events: auto;
-	flex-shrink: 0;
 }
 
 .csn-sticky--collapsed .csn-sticky-body,

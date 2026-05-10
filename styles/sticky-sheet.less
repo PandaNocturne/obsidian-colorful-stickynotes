@@ -1,10 +1,10 @@
-/* 便笺内设置抽屉：贴在底部工具栏上方，无圆角 */
+/* 便笺内设置抽屉：铺满 main；底栏另叠在其上（z-index 更高），不再为底栏让出 bottom */
 .csn-sticky-sheet-layer {
 	position: absolute;
 	left: 0;
 	right: 0;
 	top: 0;
-	bottom: var(--csn-sticky-bottombar-height, 38px);
+	bottom: 0;
 	z-index: 12;
 	display: flex;
 	flex-direction: column;
@@ -45,7 +45,8 @@
 	max-height: 70%;
 	display: flex;
 	flex-direction: column;
-	padding: 10px 0 0;
+	/* 底栏叠在 sheet-layer 之上，底部操作区需让出底栏高度以免被挡 */
+	padding: 10px 0 var(--csn-sticky-bottombar-height, 38px);
 	border-radius: 0;
 	background: var(--background-primary);
 	border: solid var(--background-modifier-border);
