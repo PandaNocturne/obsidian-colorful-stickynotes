@@ -163,6 +163,22 @@ function collectMarkdownUnderFolder(folder: TFolder): TFile[] {
 	return out;
 }
 
+/** 工作区快照中、实际存在于便笺目录下的唯一 .md 路径数（与列表「按工作区筛选」一致）。 */
+function countWorkspaceStickyPathsInFolder(
+	ws: { windows: readonly { path: string }[] },
+	stickyMdPathSet: ReadonlySet<string>
+): number {
+	const seen = new Set<string>();
+	let n = 0;
+	for (const w of ws.windows) {
+		const p = normalizePath(w.path);
+		if (seen.has(p)) continue;
+		seen.add(p);
+		if (stickyMdPathSet.has(p)) n++;
+	}
+	return n;
+}
+
 /** 多个关键词为「且」关系；在标题、路径与全文（cachedRead，不区分大小写子串）中匹配。 */
 async function filterStickyFilesByKeywords(
 	app: App,
@@ -1383,9 +1399,19 @@ export class StickyNoteListView extends ItemView {
 	private openWorkspaceFilterMenu(evt: MouseEvent): void {
 		const menu = new Menu();
 		const cur = this.plugin.settings.noteListWorkspaceFilterId;
+
+		let stickyMdPathSet = new Set<string>();
+		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+		const folderAbs = this.app.vault.getAbstractFileByPath(folder);
+		if (folderAbs instanceof TFolder) {
+			stickyMdPathSet = new Set(collectMarkdownUnderFolder(folderAbs).map(f => normalizePath(f.path)));
+		}
+
+		const titleWithCount = (label: string, count: number) => `${label} (${count})`;
+
 		menu.addItem(item => {
 			item
-				.setTitle(t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_NONE'))
+				.setTitle(titleWithCount(t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_NONE'), stickyMdPathSet.size))
 				.setIcon('layout-grid')
 				.setChecked(cur === null)
 				.onClick(() => {
@@ -1393,9 +1419,10 @@ export class StickyNoteListView extends ItemView {
 				});
 		});
 		for (const ws of this.plugin.stickies.workspaces.workspaces) {
+			const n = countWorkspaceStickyPathsInFolder(ws, stickyMdPathSet);
 			menu.addItem(item => {
 				item
-					.setTitle(ws.name)
+					.setTitle(titleWithCount(ws.name, n))
 					.setIcon('layers')
 					.setChecked(cur === ws.id)
 					.onClick(() => {
