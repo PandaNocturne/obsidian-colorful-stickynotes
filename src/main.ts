@@ -16,6 +16,7 @@ import {
 	normalizeNoteListColorFilters,
 	normalizeNoteListPinnedPathsStorage,
 	pruneNoteListPinnedPathsAfterDelete,
+	pruneNoteListWorkspaceFilterId,
 	resolveNoteListWorkspaceFilterIdAfterMerge,
 	rawPluginDataHasNoteListKeys,
 	saveNoteListPersistedFile,
@@ -81,7 +82,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		await this.loadSettings();
 		this.stickies = new StickyNoteManager(this, this.app);
 		await this.stickies.init();
-		await this.syncNoteListWorkspaceFiltersAfterWorkspacesLoad();
+		await this.pruneNoteListWorkspaceFilterAfterWorkspacesLoad();
 
 		this.registerView(VIEW_STICKY_NOTE_LIST, leaf => new StickyNoteListView(leaf, this));
 		this.syncNoteListGridMetricsToOpenViews();
@@ -483,10 +484,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 	}
 
-	/** 便笺列表已不再提供工作区筛选：清空遗留的持久化值。 */
-	private async syncNoteListWorkspaceFiltersAfterWorkspacesLoad(): Promise<void> {
-		if (this.settings.noteListWorkspaceFilterId !== null) {
-			this.settings.noteListWorkspaceFilterId = null;
+	/** 工作区列表加载后：若持久化的筛选 id 已不存在，则置空并落盘。 */
+	private async pruneNoteListWorkspaceFilterAfterWorkspacesLoad(): Promise<void> {
+		const valid = new Set(this.stickies.workspaces.workspaces.map(w => w.id));
+		const next = pruneNoteListWorkspaceFilterId(this.settings.noteListWorkspaceFilterId, valid);
+		if (next !== this.settings.noteListWorkspaceFilterId) {
+			this.settings.noteListWorkspaceFilterId = next;
 			await this.saveSettings();
 		}
 	}

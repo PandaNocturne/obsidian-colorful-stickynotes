@@ -242,6 +242,7 @@ export class StickyNoteListView extends ItemView {
 	private listToolRegionEl: HTMLElement | null = null;
 	private readonly colorFilterBtnById = new Map<StickyColorId, HTMLButtonElement>();
 	private floatFilterDropdownBtn: HTMLButtonElement | null = null;
+	private workspaceFilterDropdownBtn: HTMLButtonElement | null = null;
 	private archiveFilterDropdownBtn: HTMLButtonElement | null = null;
 	private sortDropdownBtn: HTMLButtonElement | null = null;
 	/** 颜色筛选：调色板按钮 + 右侧展开的色条 */
@@ -499,6 +500,7 @@ export class StickyNoteListView extends ItemView {
 		colorFilters: readonly StickyColorId[],
 		floatOpen: NoteListFloatOpenFilter,
 		archiveFilter: NoteListArchiveFilter,
+		workspaceFilterId: string | null,
 		pageSize: number,
 		prioPath: string | null,
 		filtered: TFile[],
@@ -510,6 +512,7 @@ export class StickyNoteListView extends ItemView {
 			colors: [...colorFilters].sort(),
 			floatOpen,
 			archive: archiveFilter,
+			workspaceFilter: workspaceFilterId ?? '',
 			pageSize,
 			prio: prioPath ?? '',
 			paths: filtered.map(f => f.path),
@@ -1099,6 +1102,17 @@ export class StickyNoteListView extends ItemView {
 			this.openFloatFilterMenu(evt);
 		});
 
+		const workspaceGroup = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-dropdown-group' });
+		this.workspaceFilterDropdownBtn = workspaceGroup.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn',
+			attr: { 'aria-haspopup': 'menu' }
+		});
+		this.registerDomEvent(this.workspaceFilterDropdownBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openWorkspaceFilterMenu(evt);
+		});
+
 		const archiveGroup = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-dropdown-group' });
 		this.archiveFilterDropdownBtn = archiveGroup.createEl('button', {
 			type: 'button',
@@ -1313,6 +1327,23 @@ export class StickyNoteListView extends ItemView {
 				t('LIST_TOOLBAR_WINDOW_PREFIX', { title: floatTitle })
 			);
 		}
+
+		const wfId = this.plugin.settings.noteListWorkspaceFilterId;
+		const titleNone = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_NONE');
+		let wfTitle = titleNone;
+		if (wfId) {
+			const ws = this.plugin.stickies.workspaces.workspaces.find(w => w.id === wfId);
+			wfTitle = ws?.name ?? titleNone;
+		}
+		if (this.workspaceFilterDropdownBtn) {
+			this.workspaceFilterDropdownBtn.empty();
+			setIcon(this.workspaceFilterDropdownBtn, 'layers');
+			this.workspaceFilterDropdownBtn.setAttr(
+				'aria-label',
+				t('LIST_TOOLBAR_WORKSPACE_PREFIX', { title: wfTitle })
+			);
+			this.workspaceFilterDropdownBtn.toggleClass('is-active', wfId !== null);
+		}
 	}
 
 	private openSortDropdownMenu(evt: MouseEvent): void {
@@ -1347,6 +1378,42 @@ export class StickyNoteListView extends ItemView {
 			});
 		}
 		menu.showAtMouseEvent(evt);
+	}
+
+	private openWorkspaceFilterMenu(evt: MouseEvent): void {
+		const menu = new Menu();
+		const cur = this.plugin.settings.noteListWorkspaceFilterId;
+		menu.addItem(item => {
+			item
+				.setTitle(t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_NONE'))
+				.setIcon('layout-grid')
+				.setChecked(cur === null)
+				.onClick(() => {
+					void this.setListWorkspaceFilterId(null);
+				});
+		});
+		for (const ws of this.plugin.stickies.workspaces.workspaces) {
+			menu.addItem(item => {
+				item
+					.setTitle(ws.name)
+					.setIcon('layers')
+					.setChecked(cur === ws.id)
+					.onClick(() => {
+						void this.setListWorkspaceFilterId(ws.id);
+					});
+			});
+		}
+		menu.showAtMouseEvent(evt);
+	}
+
+	private async setListWorkspaceFilterId(id: string | null): Promise<void> {
+		const next = id?.trim() || null;
+		if (this.plugin.settings.noteListWorkspaceFilterId === next) return;
+		this.plugin.settings.noteListWorkspaceFilterId = next;
+		await this.plugin.saveSettings();
+		this.syncToolbarDropdownHints();
+		this.listPageIndex = 0;
+		void this.renderList();
 	}
 
 	private syncSortToolbarActive(): void {
@@ -1706,7 +1773,15 @@ export class StickyNoteListView extends ItemView {
 				.filter(Boolean)
 				.map(k => k.toLowerCase());
 
-			const files = collectMarkdownUnderFolder(folderAbs);
+			let files = collectMarkdownUnderFolder(folderAbs);
+			const wsFilterId = this.plugin.settings.noteListWorkspaceFilterId;
+			if (wsFilterId) {
+				const ws = this.plugin.stickies.workspaces.workspaces.find(w => w.id === wsFilterId);
+				if (ws) {
+					const inWs = new Set(ws.windows.map(w => normalizePath(w.path)));
+					files = files.filter(f => inWs.has(normalizePath(f.path)));
+				}
+			}
 			let filtered =
 				keywords.length === 0 ? files : await filterStickyFilesByKeywords(this.app, files, keywords);
 			filtered = await filterStickyFilesByColors(this.app, filtered, this.plugin.settings.noteListColorFilters);
@@ -1767,6 +1842,7 @@ export class StickyNoteListView extends ItemView {
 				this.plugin.settings.noteListColorFilters,
 				floatMode,
 				archiveMode,
+				wsFilterId,
 				pageSize,
 				prio,
 				filtered,
