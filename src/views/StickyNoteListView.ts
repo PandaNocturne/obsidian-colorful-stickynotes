@@ -138,7 +138,6 @@ function buildStickyBgSubmenuTitle(
 	const row = doc.createElement('span');
 	row.className = 'csn-list-bg-menu-row';
 	row.dataset.csnBg = colorId;
-	if (selected) row.classList.add('csn-list-bg-menu-row--selected');
 
 	const lab = doc.createElement('span');
 	lab.className = 'csn-list-bg-menu-label';
@@ -618,6 +617,10 @@ export class StickyNoteListView extends ItemView {
 					sub.addItem(si => {
 						si.setTitle(buildStickyBgSubmenuTitle(document, c.id, t(c.labelKey), selected));
 						si.setIcon(null);
+						queueMicrotask(() => {
+							si.dom?.classList.add('csn-list-bg-menu-item', `csn-list-bg-menu-item--${c.id}`);
+							if (selected) si.dom?.classList.add('csn-list-bg-menu-item--selected');
+						});
 						si.onClick(() => {
 							void this.plugin.stickies.setStickyBackgroundColorForFile(f, c.id).then(() => {
 								(card as HTMLElement).setAttr('data-csn-list-color', c.id);

@@ -3,7 +3,7 @@
 	"name": "Colorful StickyNotes",
 	"version": "1.0.6",
 	"minAppVersion": "1.4.0",
-	"description": "Floating colorful sticky notes in Vault",
+	"description": "Floating colorful sticky notes in your vault.",
 	"author": "PandaNocturne",
 	"isDesktopOnly": true
 }

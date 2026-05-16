@@ -579,30 +579,30 @@
 	flex-shrink: 0;
 }
 
-/* 底部操作行内图标：无额外框线 */
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn {
+/* 底部操作行内图标：无额外框线（收窄到工作区管理弹窗，避免与全域按钮样式拉锯） */
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn {
 	width: calc(var(--input-height) - 4px);
 	min-width: calc(var(--input-height) - 4px);
 	height: calc(var(--input-height) - 4px);
-	background: transparent !important;
-	box-shadow: none !important;
-	border: none !important;
+	background: transparent;
+	box-shadow: none;
+	border: none;
 	-webkit-appearance: none;
 	appearance: none;
 }
 
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:hover:not(:disabled),
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:active:not(:disabled),
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus:not(:disabled),
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus-visible {
-	background: var(--background-modifier-hover) !important;
-	box-shadow: none !important;
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:hover:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:active:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus-visible {
+	background: var(--background-modifier-hover);
+	box-shadow: none;
 	outline: none;
 	color: var(--text-normal);
 }
 
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:disabled {
-	background: transparent !important;
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:disabled {
+	background: transparent;
 }
 
 .csn-ws-new-blank-modal-desc {

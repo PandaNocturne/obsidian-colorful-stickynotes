@@ -1,62 +1,50 @@
-**Colorful StickyNotes（彩色便笺）** 是面向 [Obsidian](https://obsidian.md) 的插件：在库内打开**可拖拽、可叠放的彩色便笺窗口**，每个便笺背后都是一篇普通 Markdown 笔记。适合速记、并排对照、临时备忘，把零碎内容从主编辑器里「拎出去」，又不和正文抢版面。
+中文说明：[README.zh-CN.md](README.zh-CN.md)
 
-![效果演示](assets/PixPin_2026-05-16_09-32-36.jpg)
+**Colorful Sticky Notes** is an [Obsidian](https://obsidian.md) plugin that opens **draggable, stackable sticker-style windows** over your vault. Each sticky is backed by a normal Markdown note (default folder `StickyNotes`, configurable).
 
-### 主要功能
+### Features
 
-- **浮动便笺窗口** — 小窗口叠在界面上方，内容来自库内笔记（默认目录 `StickyNotes`，可在设置中修改）。
-- **多种背景色** — 亮黄、粉、薄荷、天蓝、薰衣草、浅灰等主题，样式通过笔记 frontmatter 记录。
-- **便笺列表** — 网格浏览便笺，支持按打开状态、归档、颜色等筛选，排序、置顶、分页与卡片高度/列宽等可调。
-- **便笺工作区** — 保存、切换便笺窗口布局（工作区快照），适配不同使用场景。
-- **辅助能力** — 贴边自动拉高、拖动时对齐吸附与窗口编组、启动时恢复上次便笺会话、新建文件名模板（支持 Moment 风格与子目录）、可选默认模板笔记等。
+- **Floating sticky windows** — Small windows above the UI; content comes from vault notes.
+- **Background colors** — Palettes such as yellow, pink, mint, blue, lavender, and gray (stored in note frontmatter).
+- **Sticky list** — Grid view with filters (open state, archive, color), sorting, pinning, pagination, and adjustable card size/columns.
+- **Sticky workspaces** — Save and switch window layouts (snapshots) for different setups.
+- **Extras** — Edge snap / auto-resize, drag snapping and grouping, restore session on startup, filename templates (Moment-style + subfolders), optional default template note.
 
-### Canvas 联动
+### Canvas integration
 
-在 **便笺列表** 中按住卡片**拖拽手柄**，可将一张或多张便笺拖到 Obsidian **Canvas** 上松手，在落点创建节点；多张时按设置中的间距与「每行最多」排成网格。
+From the **sticky list**, drag one or more stickies via the **drag handle** onto **Canvas** to create nodes. Batch drops follow spacing and “max per row” from settings.
 
-拖入 Canvas 时的操作：
+- Plain drag → embed content
+- **Ctrl** drag → link to file (**⌘** on macOS)
+- **Shift** drag → embed and move original to trash (use with care)
 
-- 直接拖拽 > 内容导入
-- 按住 **Ctrl** 拖拽 > 文件引用（macOS 为 **⌘**）
-- 按住 **Shift** 拖拽 > 内容导入并删除原文件（移入回收站，请谨慎使用）
+Optional behavior lives under **Canvas link** in settings (default node size, auto-fit height, color sync, zoom-to-selection, drag hints, etc.).
 
-可选能力在设置 **「Canvas 联动」** 中调整：新建节点默认宽高、拖入后自动贴合高度、节点颜色与便笺颜色同步、拖入后缩放画布以框选新建节点、拖拽时显示按键说明等。
+### Installation
 
-<video controls src="assets/PixPin_2026-05-10_01-32-43.mp4" title="Canvas 联动"></video>
+**Via BRAT (beta)**
 
-## 安装方法
+1. Install **BRAT** from Community Plugins.
+2. Settings → **BRAT** → **Add Beta plugin**.
+3. Repo URL: `https://github.com/PandaNocturne/obsidian-colorful-stickynotes`.
+4. Add the plugin, then enable it under Community Plugins.
 
-### 通过 BRAT 安装（推荐）
+**Manual**
 
-1. 在 Obsidian 社区插件市场安装 **BRAT** 插件。
-2. 前往 **设置** → **BRAT**。
-3. 点击 **Add Beta plugin**（添加测试插件）。
-4. 输入本仓库地址：`https://github.com/PandaNocturne/obsidian-colorful-stickynotes`。
-5. 点击 **Add Plugin**。
-6. 在 **社区插件** 中启用该插件。
+1. Download `main.js`, `manifest.json`, and `styles.css` from [Releases](https://github.com/PandaNocturne/obsidian-colorful-stickynotes/releases).
+2. Create `.obsidian/plugins/colorful-stickynotes` in your vault and copy the files in.
+3. Restart Obsidian and enable the plugin.
 
-### 手动安装
+### Development
 
-1. 在 [Releases](https://github.com/PandaNocturne/obsidian-colorful-stickynotes/releases) 页面下载最新的 `main.js`、`manifest.json`、`styles.css`。
-2. 在你的库的 `.obsidian/plugins/` 目录下创建一个名为 `colorful-stickynotes` 的文件夹。
-3. 将下载的文件放入该文件夹。
-4. 重启 Obsidian 并在设置中启用。
+1. Clone this repo.
+2. `npm install`
+3. `npm run build`
 
-## 开发
+### Credits
 
-如果你想自行构建插件：
+Inspired in part by [**obsidian-card-note**](https://github.com/cycsd/obsidian-card-note) and [**obsidian-hover-editor**](https://github.com/nothingislost/obsidian-hover-editor).
 
-1. 克隆此仓库。
-2. 运行 `npm install` 安装依赖。
-3. 运行 `npm run build` 进行编译。
-
-## 致谢
-
-本插件在设计与实现上参考、借鉴了以下社区作品，在此致谢：
-
-- [**obsidian-card-note**](https://github.com/cycsd/obsidian-card-note) — 卡片化笔记与浮层交互方面的思路
-- [**obsidian-hover-editor**](https://github.com/nothingislost/obsidian-hover-editor) — 浮动编辑器与窗口行为的实现参考
-
-## 许可
+### License
 
 [MIT](LICENSE)

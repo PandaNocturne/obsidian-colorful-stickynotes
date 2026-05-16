@@ -620,18 +620,6 @@ body .csn-sticky-window-body .view-content {
 .csn-sticky.csn-metadata-on .metadata-container {
   display: block !important;
 }
-/*
- * 便笺列表 — 卡片级 CSS 变量（默认色等）。
- * 卡片整体高度由根 `.csn-list-view` 上的 `--csn-list-card-height` 控制（设置项「列表卡片高度」）。
- */
-.csn-list-card {
-  --csn-list-card-bg: var(--background-primary);
-  --csn-list-card-head-bg: var(--background-modifier-hover);
-  --csn-list-card-head-border: var(--background-modifier-border);
-  --csn-list-preview-bg: var(--background-primary);
-  --csn-list-preview-border: var(--background-modifier-border);
-  --csn-list-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
-}
 /* 渚跨鍒楄〃 */
 .workspace-leaf-content .view-content.csn-list-view {
   padding: 8px 10px;
@@ -682,7 +670,8 @@ body .csn-sticky-window-body .view-content {
 .csn-list-search-inner--has-clear .csn-list-search-input {
   padding-right: 34px;
 }
-.csn-list-search-clear {
+.csn-list-search-inner button.csn-list-search-clear:not(:disabled),
+.csn-list-view .csn-list-search-clear:not(:disabled) {
   position: absolute;
   top: 50%;
   right: 8px;
@@ -697,14 +686,15 @@ body .csn-sticky-window-body .view-content {
   border: none;
   border-radius: 50%;
   /* 鐏拌壊搴曘€佺櫧鑹?X锛堜笌甯歌娓呴櫎鎸夐挳涓€鑷达級 */
-  background-color: #8e8e93 !important;
-  color: #fff !important;
+  background-color: #8e8e93;
+  color: #ffffff;
   cursor: var(--cursor);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
-.theme-dark .csn-list-search-clear {
+.theme-dark .csn-list-search-inner button.csn-list-search-clear:not(:disabled),
+.theme-dark .csn-list-view .csn-list-search-clear:not(:disabled) {
   background-color: #6d6d72;
-  color: #fff;
+  color: #ffffff;
 }
 .csn-list-search-clear:hover {
   filter: brightness(1.06);
@@ -934,8 +924,15 @@ body .csn-sticky-window-body .view-content {
   opacity: 0.45;
   cursor: not-allowed;
 }
-/* 鈥斺€?鍗＄墖锛氬榻愭诞鍔ㄤ究绗鸿壊鏉匡紱浠ょ墝瑙?list-view-tokens.less 鈥斺€?*/
+/* —— 列表卡片：对齐浮动便笺色板 —— */
 .csn-list-card {
+  /* 便笺列表 — 卡片级变量（默认色等）；卡片高度由根 `.csn-list-view` 的 `--csn-list-card-height` 控制 */
+  --csn-list-card-bg: var(--background-primary);
+  --csn-list-card-head-bg: var(--background-modifier-hover);
+  --csn-list-card-head-border: var(--background-modifier-border);
+  --csn-list-preview-bg: var(--background-primary);
+  --csn-list-preview-border: var(--background-modifier-border);
+  --csn-list-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
   position: relative;
   border: 1px solid var(--background-modifier-border);
   border-radius: 10px;
@@ -1174,8 +1171,8 @@ body .csn-sticky-window-body .view-content {
   font-family: inherit;
   font-size: inherit;
 }
-.csn-list-card-body--rendered .markdown-preview-sizer {
-  min-height: 0 !important;
+.workspace-leaf-content .view-content.csn-list-view .csn-list-card-body--rendered .markdown-preview-sizer {
+  min-height: 0;
 }
 .csn-list-card-body--rendered p {
   margin: 0.35em 0;
@@ -1264,60 +1261,60 @@ body .csn-sticky-window-body .view-content {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }
-/* 銆屼慨鏀硅儗鏅€嶅瓙鑿滃崟锛氳儗鏅壊鐢诲湪 Obsidian `.menu-item` 涓婏紙涓庡垪琛?渚跨鑹蹭竴鑷达級 */
-.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='yellow']) {
+/* 「修改背景」子菜单：由 TS 在 `.menu-item` 上挂载 `csn-list-bg-menu-item--*` 类，避免 :has */
+.menu .menu-item.csn-list-bg-menu-item--yellow {
   background-color: #fff8d4;
   color: rgba(0, 0, 0, 0.88);
 }
-.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='yellow']) {
+.theme-dark .menu .menu-item.csn-list-bg-menu-item--yellow {
   background-color: #3d3820;
   color: rgba(255, 255, 255, 0.92);
 }
-.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='mint']) {
+.menu .menu-item.csn-list-bg-menu-item--mint {
   background-color: #e4fff4;
   color: rgba(0, 0, 0, 0.88);
 }
-.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='mint']) {
+.theme-dark .menu .menu-item.csn-list-bg-menu-item--mint {
   background-color: #1e3d30;
   color: rgba(255, 255, 255, 0.92);
 }
-.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='pink']) {
+.menu .menu-item.csn-list-bg-menu-item--pink {
   background-color: #ffe8f0;
   color: rgba(0, 0, 0, 0.88);
 }
-.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='pink']) {
+.theme-dark .menu .menu-item.csn-list-bg-menu-item--pink {
   background-color: #3d2028;
   color: rgba(255, 255, 255, 0.92);
 }
-.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='lavender']) {
+.menu .menu-item.csn-list-bg-menu-item--lavender {
   background-color: #f0e8ff;
   color: rgba(0, 0, 0, 0.88);
 }
-.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='lavender']) {
+.theme-dark .menu .menu-item.csn-list-bg-menu-item--lavender {
   background-color: #282040;
   color: rgba(255, 255, 255, 0.92);
 }
-.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='blue']) {
+.menu .menu-item.csn-list-bg-menu-item--blue {
   background-color: #e8f4ff;
   color: rgba(0, 0, 0, 0.88);
 }
-.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='blue']) {
+.theme-dark .menu .menu-item.csn-list-bg-menu-item--blue {
   background-color: #1e303d;
   color: rgba(255, 255, 255, 0.92);
 }
-.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='gray']) {
+.menu .menu-item.csn-list-bg-menu-item--gray {
   background-color: #f0f0f0;
   color: rgba(0, 0, 0, 0.88);
 }
-.theme-dark .menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='gray']) {
+.theme-dark .menu .menu-item.csn-list-bg-menu-item--gray {
   background-color: #2a2a2a;
   color: rgba(255, 255, 255, 0.92);
 }
-.menu .menu-item:has(.csn-list-bg-menu-row[data-csn-bg='default']) {
+.menu .menu-item.csn-list-bg-menu-item--default {
   background-color: var(--background-primary);
   color: var(--text-normal);
 }
-.menu .menu-item:has(.csn-list-bg-menu-row--selected) {
+.menu .menu-item.csn-list-bg-menu-item--selected {
   box-shadow: inset 0 0 0 2px var(--text-accent);
 }
 .menu .csn-list-bg-menu-row {
@@ -1855,28 +1852,28 @@ body .csn-sticky-window-body .view-content {
 .csn-ws-panel-icon-btn svg {
   flex-shrink: 0;
 }
-/* 底部操作行内图标：无额外框线 */
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn {
+/* 底部操作行内图标：无额外框线（收窄到工作区管理弹窗，避免与全域按钮样式拉锯） */
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn {
   width: calc(var(--input-height) - 4px);
   min-width: calc(var(--input-height) - 4px);
   height: calc(var(--input-height) - 4px);
-  background: transparent !important;
-  box-shadow: none !important;
-  border: none !important;
+  background: transparent;
+  box-shadow: none;
+  border: none;
   -webkit-appearance: none;
   appearance: none;
 }
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:hover:not(:disabled),
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:active:not(:disabled),
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus:not(:disabled),
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus-visible {
-  background: var(--background-modifier-hover) !important;
-  box-shadow: none !important;
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:hover:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:active:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus-visible {
+  background: var(--background-modifier-hover);
+  box-shadow: none;
   outline: none;
   color: var(--text-normal);
 }
-.csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:disabled {
-  background: transparent !important;
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:disabled {
+  background: transparent;
 }
 .csn-ws-new-blank-modal-desc {
   font-size: var(--font-ui-smaller);

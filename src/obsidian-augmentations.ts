@@ -7,6 +7,8 @@ declare module 'obsidian' {
 		 * 官方 typings 未收录，由应用运行时提供。
 		 */
 		setSubmenu(): Menu;
+		/** 菜单条目根节点（用于附加样式类等）。运行时存在， typings 未收录。 */
+		dom?: HTMLElement;
 	}
 }
 
