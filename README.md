@@ -1,4 +1,6 @@
-**Colorful StickyNotes（彩色便笺）** 是一款 [Obsidian](https://obsidian.md) 插件，在库中提供**可浮动的彩色便笺窗口**，每个便笺对应一篇普通 Markdown 笔记，方便随手记、对照阅读或当作轻量「便笺」，而不必打乱主编辑区布局。
+**Colorful StickyNotes（彩色便笺）** 是面向 [Obsidian](https://obsidian.md) 的插件：在库内打开**可拖拽、可叠放的彩色便笺窗口**，每个便笺背后都是一篇普通 Markdown 笔记。适合速记、并排对照、临时备忘，把零碎内容从主编辑器里「拎出去」，又不和正文抢版面。
+
+![效果演示](assets/PixPin_2026-05-16_09-32-36.jpg)
 
 ### 主要功能
 
@@ -8,6 +10,19 @@
 - **便笺工作区** — 保存、切换便笺窗口布局（工作区快照），适配不同使用场景。
 - **辅助能力** — 贴边自动拉高、拖动时对齐吸附与窗口编组、启动时恢复上次便笺会话、新建文件名模板（支持 Moment 风格与子目录）、可选默认模板笔记等。
 
+### Canvas 联动
+
+在 **便笺列表** 中按住卡片**拖拽手柄**，可将一张或多张便笺拖到 Obsidian **Canvas** 上松手，在落点创建节点；多张时按设置中的间距与「每行最多」排成网格。
+
+拖入 Canvas 时的操作：
+
+- 直接拖拽 > 内容导入
+- 按住 **Ctrl** 拖拽 > 文件引用（macOS 为 **⌘**）
+- 按住 **Shift** 拖拽 > 内容导入并删除原文件（移入回收站，请谨慎使用）
+
+可选能力在设置 **「Canvas 联动」** 中调整：新建节点默认宽高、拖入后自动贴合高度、节点颜色与便笺颜色同步、拖入后缩放画布以框选新建节点、拖拽时显示按键说明等。
+
+<video controls src="assets/PixPin_2026-05-10_01-32-43.mp4" title="Canvas 联动"></video>
 
 ## 安装方法
 
@@ -34,6 +49,13 @@
 1. 克隆此仓库。
 2. 运行 `npm install` 安装依赖。
 3. 运行 `npm run build` 进行编译。
+
+## 致谢
+
+本插件在设计与实现上参考、借鉴了以下社区作品，在此致谢：
+
+- [**obsidian-card-note**](https://github.com/cycsd/obsidian-card-note) — 卡片化笔记与浮层交互方面的思路
+- [**obsidian-hover-editor**](https://github.com/nothingislost/obsidian-hover-editor) — 浮动编辑器与窗口行为的实现参考
 
 ## 许可
 
