@@ -1830,17 +1830,6 @@ export class StickyNoteListView extends ItemView {
 		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 		const head = card.createDiv({ cls: 'csn-list-card-head' });
 		const headLeft = head.createDiv({ cls: 'csn-list-card-head-left' });
-		headLeft.createDiv(
-			{
-				cls: 'csn-list-card-drag-handle',
-				attr: {
-					draggable: 'true',
-					'aria-label': t('LIST_CARD_TITLE_DRAG_ARIA'),
-					title: t('LIST_CARD_TITLE_DRAG_TITLE')
-				}
-			},
-			(el: HTMLDivElement) => setIcon(el, 'grip-vertical')
-		);
 		const archiveWrap = headLeft.createEl('label', {
 			cls: `csn-list-card-archive-wrap${archived ? ' is-archived' : ''}`,
 			attr: { 'aria-hidden': 'false' }
@@ -1855,6 +1844,17 @@ export class StickyNoteListView extends ItemView {
 			}
 		});
 		archiveCb.checked = archived;
+		headLeft.createDiv(
+			{
+				cls: 'csn-list-card-drag-handle',
+				attr: {
+					draggable: 'true',
+					'aria-label': t('LIST_CARD_TITLE_DRAG_ARIA'),
+					title: t('LIST_CARD_TITLE_DRAG_TITLE')
+				}
+			},
+			(el: HTMLDivElement) => setIcon(el, 'grip-vertical')
+		);
 		headLeft.createDiv({
 			cls: 'csn-list-card-title',
 			text: f.basename,
