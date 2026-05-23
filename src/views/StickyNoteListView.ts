@@ -19,10 +19,12 @@ import type { MessageKey } from '../lang/locale/en';
 import { clampViewContentZoom } from '../settings';
 import {
 	VIEW_STICKY_NOTE_LIST,
+	NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID,
 	type NoteListArchiveFilter,
 	type NoteListFloatOpenFilter,
 	type NoteListSort,
-	type StickyColorId
+	type StickyColorId,
+	type StickyWorkspace
 } from '../types';
 import '../obsidian-augmentations';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
@@ -517,6 +519,7 @@ export class StickyNoteListView extends ItemView {
 		floatOpen: NoteListFloatOpenFilter,
 		archiveFilter: NoteListArchiveFilter,
 		workspaceFilterId: string | null,
+		activeWorkspaceId: string | null,
 		pageSize: number,
 		prioPath: string | null,
 		filtered: TFile[],
@@ -529,11 +532,21 @@ export class StickyNoteListView extends ItemView {
 			floatOpen,
 			archive: archiveFilter,
 			workspaceFilter: workspaceFilterId ?? '',
+			activeWorkspace:
+				workspaceFilterId === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID ? (activeWorkspaceId ?? '') : '',
 			pageSize,
 			prio: prioPath ?? '',
 			paths: filtered.map(f => f.path),
 			pinned: [...pinnedPaths]
 		});
+	}
+
+	private resolveListWorkspaceFilterWorkspace(wsFilterId: string | null): StickyWorkspace | undefined {
+		if (!wsFilterId) return undefined;
+		if (wsFilterId === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID) {
+			return this.plugin.stickies.activeWorkspace();
+		}
+		return this.plugin.stickies.workspaces.workspaces.find(w => w.id === wsFilterId);
 	}
 
 	private registerListItemsDelegatedEvents(): void {
@@ -1535,7 +1548,9 @@ export class StickyNoteListView extends ItemView {
 		const wfId = this.plugin.settings.noteListWorkspaceFilterId;
 		const titleNone = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_NONE');
 		let wfTitle = titleNone;
-		if (wfId) {
+		if (wfId === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID) {
+			wfTitle = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_ACTIVE');
+		} else if (wfId) {
 			const ws = this.plugin.stickies.workspaces.workspaces.find(w => w.id === wfId);
 			wfTitle = ws?.name ?? titleNone;
 		}
@@ -1604,6 +1619,19 @@ export class StickyNoteListView extends ItemView {
 				.setChecked(cur === null)
 				.onClick(() => {
 					void this.setListWorkspaceFilterId(null);
+				});
+		});
+		const activeWs = this.plugin.stickies.activeWorkspace();
+		const activeCount = activeWs
+			? countWorkspaceStickyPathsInFolder(activeWs, stickyMdPathSet)
+			: 0;
+		menu.addItem(item => {
+			item
+				.setTitle(titleWithCount(t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_ACTIVE'), activeCount))
+				.setIcon('locate')
+				.setChecked(cur === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID)
+				.onClick(() => {
+					void this.setListWorkspaceFilterId(NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID);
 				});
 		});
 		for (const ws of this.plugin.stickies.workspaces.workspaces) {
@@ -1991,10 +2019,12 @@ export class StickyNoteListView extends ItemView {
 			let files = collectMarkdownUnderFolder(folderAbs);
 			const wsFilterId = this.plugin.settings.noteListWorkspaceFilterId;
 			if (wsFilterId) {
-				const ws = this.plugin.stickies.workspaces.workspaces.find(w => w.id === wsFilterId);
+				const ws = this.resolveListWorkspaceFilterWorkspace(wsFilterId);
 				if (ws) {
 					const inWs = new Set(ws.windows.map(w => normalizePath(w.path)));
 					files = files.filter(f => inWs.has(normalizePath(f.path)));
+				} else {
+					files = [];
 				}
 			}
 			let filtered =
@@ -2058,6 +2088,7 @@ export class StickyNoteListView extends ItemView {
 				floatMode,
 				archiveMode,
 				wsFilterId,
+				this.plugin.stickies.workspaces.activeWorkspaceId,
 				pageSize,
 				prio,
 				filtered,

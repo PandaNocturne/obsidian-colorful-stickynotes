@@ -7,6 +7,7 @@ import type {
 	NoteListSort,
 	StickyColorId
 } from './types';
+import { NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID } from './types';
 
 /** `{manifest.id}-note-list.json`，与其它插件数据文件名区分。 */
 function noteListPrefixedPath(plugin: Plugin): string {
@@ -73,7 +74,7 @@ export interface NoteListPersistedFile {
 	noteListPinnedPaths: string[];
 	noteListSort: NoteListSort;
 	noteListColorFilters: StickyColorId[];
-	/** 便笺列表：按单个工作区快照筛选；`null` = 不选，显示便笺目录下全部。 */
+	/** 便笺列表：按单个工作区快照筛选；`null` = 不选，显示便笺目录下全部；`@active-workspace` = 跟随当前活动工作区。 */
 	noteListWorkspaceFilterId: string | null;
 	noteListFloatOpenFilter: NoteListFloatOpenFilter;
 	noteListArchiveFilter: NoteListArchiveFilter;
@@ -138,6 +139,7 @@ export function pruneNoteListWorkspaceFilterId(
 ): string | null {
 	const n = normalizeNoteListWorkspaceFilterIdStorage(id);
 	if (n === null) return null;
+	if (n === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID) return n;
 	return validIds.has(n) ? n : null;
 }
 

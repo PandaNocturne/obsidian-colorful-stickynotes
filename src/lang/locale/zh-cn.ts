@@ -204,6 +204,7 @@ export const zhCn: Record<MessageKey, string> = {
 	LIST_TOOLBAR_WINDOW_PREFIX: '浮动：{title}',
 	LIST_TOOLBAR_WORKSPACE_PREFIX: '工作区：{title}',
 	LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_NONE: '全部便笺',
+	LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_ACTIVE: '当前工作区',
 	LIST_COLOR_FILTER_SUMMARY_ALL: '颜色筛选（未选则显示全部）',
 	LIST_COLOR_FILTER_SUMMARY_SOME: '颜色筛选：已选 {n} 种（多选）',
 	LIST_COLOR_SWATCH_FILTER_HINT: '{label}，点击加入或移出筛选；未选任何色时显示全部',

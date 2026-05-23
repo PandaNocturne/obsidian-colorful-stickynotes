@@ -88,3 +88,6 @@ export type NoteListFloatOpenFilter = 'all' | 'open' | 'closed';
 /** 便笺列表：按 frontmatter `colorful-sticky-archived` 筛选。 */
 export type NoteListArchiveFilter = 'all' | 'unarchived' | 'archived';
 
+/** 便笺列表工作区筛选：跟随当前活动工作区（非具体工作区 id）。 */
+export const NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID = '@active-workspace';
+

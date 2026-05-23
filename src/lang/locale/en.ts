@@ -218,6 +218,7 @@ export const en = {
 	LIST_TOOLBAR_WINDOW_PREFIX: 'Floating: {title}',
 	LIST_TOOLBAR_WORKSPACE_PREFIX: 'Workspaces: {title}',
 	LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_NONE: 'All in folder',
+	LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_ACTIVE: 'Current workspace',
 	LIST_COLOR_FILTER_SUMMARY_ALL: 'Color filter (none selected = show all)',
 	LIST_COLOR_FILTER_SUMMARY_SOME: 'Color filter: {n} selected (multi-select)',
 	LIST_COLOR_SWATCH_FILTER_HINT:

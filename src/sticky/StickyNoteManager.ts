@@ -10,6 +10,7 @@ import type {
 	StickyWorkspace,
 	WorkspacesFile
 } from '../types';
+import { NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID } from '../types';
 import {
 	getStickyBgColorFromMetadataCache,
 	parseStickyBgColorFromMarkdownSource,
@@ -344,6 +345,12 @@ export class StickyNoteManager {
 		return this.workspaces.workspaces.find(w => w.id === this.workspaces.activeWorkspaceId);
 	}
 
+	private refreshStickyListIfActiveWorkspaceFilter(): void {
+		if (this.plugin.settings.noteListWorkspaceFilterId === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID) {
+			this.plugin.refreshStickyListIfOpen();
+		}
+	}
+
 	private readStickyIdFromCache(file: TFile): string | null {
 		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
 		const v = fm?.[FM_ID_KEY];
@@ -528,6 +535,7 @@ export class StickyNoteManager {
 		});
 		this.workspaceSwitchTail = job.catch(() => undefined);
 		await job;
+		this.refreshStickyListIfActiveWorkspaceFilter();
 	}
 
 	/**
@@ -567,6 +575,7 @@ export class StickyNoteManager {
 			() => undefined
 		);
 		await job.catch(() => undefined);
+		this.refreshStickyListIfActiveWorkspaceFilter();
 	}
 
 	async updateWorkspace(wsId: string, name: string, remark: string): Promise<void> {
