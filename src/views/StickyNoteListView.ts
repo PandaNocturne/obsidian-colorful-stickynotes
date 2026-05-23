@@ -28,6 +28,7 @@ import '../obsidian-augmentations';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
+import { ListBatchDeleteConfirmModal } from '../modals/ListBatchDeleteConfirmModal';
 
 /** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
 function listPreviewEmbedMarkdown(file: TFile): string {
@@ -604,79 +605,25 @@ export class StickyNoteListView extends ItemView {
 			if (!(f instanceof TFile)) return;
 			evt.preventDefault();
 			evt.stopPropagation();
-			const rawListColor = (card as HTMLElement).dataset.csnListColor;
-			const color: StickyColorId | null =
-				rawListColor && rawListColor.length > 0 ? (rawListColor as StickyColorId) : null;
-			const floatOpen = this.plugin.stickies.getOpenStickyNotePaths().has(f.path);
-			const menu = new Menu();
-			menu.addItem(item => {
-				item.setTitle(t('CHANGE_BG')).setIcon('palette');
-				const sub = item.setSubmenu();
-				for (const c of SHEET_COLOR_ORDER) {
-					const selected = color !== null && c.id === color;
-					sub.addItem(si => {
-						si.setTitle(buildStickyBgSubmenuTitle(document, c.id, t(c.labelKey), selected));
-						si.setIcon(null);
-						queueMicrotask(() => {
-							si.dom?.classList.add('csn-list-bg-menu-item', `csn-list-bg-menu-item--${c.id}`);
-							if (selected) si.dom?.classList.add('csn-list-bg-menu-item--selected');
-						});
-						si.onClick(() => {
-							void this.plugin.stickies.setStickyBackgroundColorForFile(f, c.id).then(() => {
-								(card as HTMLElement).setAttr('data-csn-list-color', c.id);
-							});
-						});
-					});
-				}
-			});
-			menu.addItem(item => {
-				item.setTitle(t('OPEN_STICKY_FLOAT'))
-					.setIcon('square-pen')
-					.onClick(() => {
-						void this.plugin.stickies.openStickyForFile(f);
-					});
-			});
-			menu.addItem(item => {
-				item.setTitle(t('OPEN_NOTE'))
-					.setIcon('file-text')
-					.onClick(() => {
-						void this.app.workspace.getLeaf('tab').openFile(f);
-					});
-			});
-			menu.addItem(item => {
-				item.setTitle(t('CLOSE_STICKY_FLOAT'))
-					.setIcon('x')
-					.setDisabled(!floatOpen)
-					.onClick(() => {
-						if (!floatOpen) return;
-						void this.plugin.stickies.closeStickyWindowForFile(f);
-					});
-			});
-			menu.addSeparator();
-			const archivedNow = (card as HTMLElement).dataset.csnArchived === 'true';
-			menu.addItem(item => {
-				item.setTitle(archivedNow ? t('LIST_UNARCHIVE_CARD') : t('LIST_ARCHIVE_CARD'))
-					.setIcon(archivedNow ? 'archive-restore' : 'archive')
-					.onClick(() => {
-						const next = !archivedNow;
-						void this.plugin.stickies.setStickyArchivedForFile(f, next).then(() => {
-							if (this.listShouldRerenderForArchiveState(next)) {
-								void this.renderList();
-							} else {
-								this.syncArchiveChromeOnCard(card as HTMLElement, next);
-							}
-						});
-					});
-			});
-			menu.addSeparator();
-			menu.addItem(item => {
-				item.setTitle(t('DELETE_NOTE'))
-					.setIcon('trash-2')
-					.onClick(() => {
-						void this.plugin.stickies.trashStickyNoteFile(f);
-					});
-			});
-			menu.showAtMouseEvent(evt);
+			void this.showListCardMoreMenu(evt, path, card as HTMLElement);
+		});
+
+		this.registerDomEvent(this.listItemsEl, 'contextmenu', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			if (this.isListCardHeadMenuHitExcluded(hit)) return;
+			const head = hit.closest('.csn-list-card-head');
+			if (!head || !this.listItemsEl?.contains(head)) return;
+			const card = head.closest('.csn-list-card');
+			if (!card) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.ensureListSelectionForContextMenu(path);
+			void this.showListCardMoreMenu(evt, path, card as HTMLElement);
 		});
 
 		this.registerDomEvent(this.listItemsEl, 'mousedown', (evt: MouseEvent) => {
@@ -993,6 +940,244 @@ export class StickyNoteListView extends ItemView {
 			if (!p) continue;
 			el.toggleClass('is-selected', this.selectedListNotePaths.has(normalizePath(p)));
 		}
+	}
+
+	private isListCardHeadMenuHitExcluded(hit: Element): boolean {
+		return !!(
+			hit.closest('.csn-list-card-pin-btn') ||
+			hit.closest('.csn-list-card-menu-btn') ||
+			hit.closest('.csn-list-card-archive-wrap') ||
+			hit.closest('.csn-list-card-drag-handle')
+		);
+	}
+
+	private getListCardElForPath(path: string): HTMLElement | null {
+		const norm = normalizePath(path);
+		const el = this.listItemsEl?.querySelector(
+			`.csn-list-card[data-csn-note-path="${CSS.escape(norm)}"]`
+		);
+		return el instanceof HTMLElement ? el : null;
+	}
+
+	private titleWithBatchCount(base: string, n: number): string {
+		return n > 1 ? `${base} (${n})` : base;
+	}
+
+	private resolveListMenuTargetFiles(anchorPath: string): TFile[] {
+		const norm = normalizePath(anchorPath);
+		const paths =
+			this.selectedListNotePaths.size > 0 && this.selectedListNotePaths.has(norm)
+				? [...this.selectedListNotePaths]
+				: [norm];
+		const files: TFile[] = [];
+		for (const p of paths) {
+			const abs = this.app.vault.getAbstractFileByPath(p);
+			if (abs instanceof TFile) files.push(abs);
+		}
+		return files;
+	}
+
+	private getListCardColorFromDom(file: TFile): StickyColorId | null {
+		const card = this.getListCardElForPath(file.path);
+		if (!card) return null;
+		const raw = card.dataset.csnListColor;
+		return raw && raw.length > 0 ? (raw as StickyColorId) : null;
+	}
+
+	private getListCardArchivedFromDom(file: TFile): boolean | null {
+		const card = this.getListCardElForPath(file.path);
+		if (!card) return null;
+		return card.dataset.csnArchived === 'true';
+	}
+
+	private ensureListSelectionForContextMenu(anchorPath: string): void {
+		const norm = normalizePath(anchorPath);
+		if (!this.selectedListNotePaths.has(norm)) {
+			this.selectedListNotePaths.clear();
+			this.selectedListNotePaths.add(norm);
+			this.lastSelectedListNotePath = norm;
+			this.syncListCardSelectionChrome();
+		}
+	}
+
+	private async trashListMenuTargetFiles(files: TFile[]): Promise<void> {
+		for (const f of files) {
+			this.selectedListNotePaths.delete(normalizePath(f.path));
+			await this.plugin.stickies.trashStickyNoteFile(f);
+		}
+	}
+
+	private async showListCardMoreMenu(
+		evt: MouseEvent,
+		anchorPath: string,
+		anchorCard: HTMLElement
+	): Promise<void> {
+		const files = this.resolveListMenuTargetFiles(anchorPath);
+		if (files.length === 0) return;
+		const n = files.length;
+		const isBatch = n > 1;
+		const openPaths = this.plugin.stickies.getOpenStickyNotePaths();
+
+		const colors = files.map(f => this.getListCardColorFromDom(f));
+		const allSameColor = colors.length > 0 && colors.every(c => c === colors[0]) && colors[0] !== null;
+		const sharedColor = allSameColor ? colors[0]! : null;
+
+		const archiveStates: boolean[] = [];
+		for (const f of files) {
+			if (files.length === 1) {
+				archiveStates.push(anchorCard.dataset.csnArchived === 'true');
+			} else {
+				const fromDom = this.getListCardArchivedFromDom(f);
+				archiveStates.push(
+					fromDom !== null ? fromDom : await resolveStickyArchivedForFile(this.app, f)
+				);
+			}
+		}
+		const archivedCount = archiveStates.filter(Boolean).length;
+		const allArchived = archivedCount === n;
+		const allUnarchived = archivedCount === 0;
+		const anyFloatOpen = files.some(f => openPaths.has(f.path));
+
+		const menu = new Menu();
+		menu.addItem(item => {
+			item.setTitle(this.titleWithBatchCount(t('CHANGE_BG'), n)).setIcon('palette');
+			const sub = item.setSubmenu();
+			for (const c of SHEET_COLOR_ORDER) {
+				const selected = sharedColor !== null && c.id === sharedColor;
+				sub.addItem(si => {
+					si.setTitle(buildStickyBgSubmenuTitle(document, c.id, t(c.labelKey), selected));
+					si.setIcon(null);
+					queueMicrotask(() => {
+						si.dom?.classList.add('csn-list-bg-menu-item', `csn-list-bg-menu-item--${c.id}`);
+						if (selected) si.dom?.classList.add('csn-list-bg-menu-item--selected');
+					});
+					si.onClick(() => {
+						void (async () => {
+							for (const f of files) {
+								await this.plugin.stickies.setStickyBackgroundColorForFile(f, c.id);
+								this.getListCardElForPath(f.path)?.setAttr('data-csn-list-color', c.id);
+							}
+						})();
+					});
+				});
+			}
+		});
+		menu.addItem(item => {
+			item
+				.setTitle(this.titleWithBatchCount(t('OPEN_STICKY_FLOAT'), n))
+				.setIcon('square-pen')
+				.onClick(() => {
+					void (async () => {
+						for (const f of files) await this.plugin.stickies.openStickyForFile(f);
+					})();
+				});
+		});
+		if (!isBatch) {
+			menu.addItem(item => {
+				item
+					.setTitle(t('OPEN_NOTE'))
+					.setIcon('file-text')
+					.onClick(() => {
+						void this.app.workspace.getLeaf('tab').openFile(files[0]!);
+					});
+			});
+		}
+		menu.addItem(item => {
+			item
+				.setTitle(this.titleWithBatchCount(t('CLOSE_STICKY_FLOAT'), n))
+				.setIcon('x')
+				.setDisabled(!anyFloatOpen)
+				.onClick(() => {
+					if (!anyFloatOpen) return;
+					void (async () => {
+						for (const f of files) {
+							if (this.plugin.stickies.getOpenStickyNotePaths().has(f.path)) {
+								await this.plugin.stickies.closeStickyWindowForFile(f);
+							}
+						}
+					})();
+				});
+		});
+		menu.addSeparator();
+
+		const applyArchive = (targets: TFile[], next: boolean) => {
+			void (async () => {
+				let needRerender = false;
+				for (const f of targets) {
+					await this.plugin.stickies.setStickyArchivedForFile(f, next);
+					if (this.listShouldRerenderForArchiveState(next)) needRerender = true;
+				}
+				if (needRerender) {
+					void this.renderList();
+				} else {
+					for (const f of targets) {
+						const cardEl = this.getListCardElForPath(f.path);
+						if (cardEl) this.syncArchiveChromeOnCard(cardEl, next);
+					}
+				}
+			})();
+		};
+
+		if (allArchived) {
+			menu.addItem(item => {
+				item
+					.setTitle(this.titleWithBatchCount(t('LIST_UNARCHIVE_CARD'), n))
+					.setIcon('archive-restore')
+					.onClick(() => applyArchive(files, false));
+			});
+		} else if (allUnarchived) {
+			menu.addItem(item => {
+				item
+					.setTitle(this.titleWithBatchCount(t('LIST_ARCHIVE_CARD'), n))
+					.setIcon('archive')
+					.onClick(() => applyArchive(files, true));
+			});
+		} else {
+			const unarchivedFiles = files.filter((_, i) => !archiveStates[i]);
+			const archivedFiles = files.filter((_, i) => archiveStates[i]);
+			menu.addItem(item => {
+				item
+					.setTitle(
+						this.titleWithBatchCount(
+							t('LIST_BATCH_ARCHIVE_UNARCHIVED'),
+							unarchivedFiles.length
+						)
+					)
+					.setIcon('archive')
+					.onClick(() => applyArchive(unarchivedFiles, true));
+			});
+			menu.addItem(item => {
+				item
+					.setTitle(
+						this.titleWithBatchCount(
+							t('LIST_BATCH_UNARCHIVE_ARCHIVED'),
+							archivedFiles.length
+						)
+					)
+					.setIcon('archive-restore')
+					.onClick(() => applyArchive(archivedFiles, false));
+			});
+		}
+
+		menu.addSeparator();
+		menu.addItem(item => {
+			item
+				.setTitle(this.titleWithBatchCount(t('DELETE_NOTE'), n))
+				.setIcon('trash-2')
+				.onClick(() => {
+					if (isBatch) {
+						new ListBatchDeleteConfirmModal(this.app, {
+							count: n,
+							onConfirm: () => {
+								void this.trashListMenuTargetFiles(files);
+							}
+						}).open();
+					} else {
+						void this.plugin.stickies.trashStickyNoteFile(files[0]!);
+					}
+				});
+		});
+		menu.showAtMouseEvent(evt);
 	}
 
 	private stickyFolderRoot(): string {
