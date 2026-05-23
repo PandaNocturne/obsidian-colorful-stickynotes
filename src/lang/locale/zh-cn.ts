@@ -192,6 +192,7 @@ export const zhCn: Record<MessageKey, string> = {
 	LIST_BATCH_DELETE_CONFIRM_BODY: '确定删除 {n} 张便笺？此操作不可撤销。',
 	LIST_BATCH_ARCHIVE_UNARCHIVED: '归档未归档项',
 	LIST_BATCH_UNARCHIVE_ARCHIVED: '取消归档已归档项',
+	REMOVE_FROM_WORKSPACE: '从工作区移除',
 	UNPIN_ARIA: '取消置顶',
 	PIN_ARIA: '置顶',
 	MORE_ACTIONS_ARIA: '更多操作',

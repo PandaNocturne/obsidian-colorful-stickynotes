@@ -206,6 +206,7 @@ export const en = {
 	LIST_BATCH_DELETE_CONFIRM_BODY: 'Delete {n} stickies? This cannot be undone.',
 	LIST_BATCH_ARCHIVE_UNARCHIVED: 'Archive not archived',
 	LIST_BATCH_UNARCHIVE_ARCHIVED: 'Unarchive archived',
+	REMOVE_FROM_WORKSPACE: 'Remove from workspace',
 	UNPIN_ARIA: 'Unpin',
 	PIN_ARIA: 'Pin',
 	MORE_ACTIONS_ARIA: 'More actions',

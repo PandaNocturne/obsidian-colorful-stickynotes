@@ -1,4 +1,4 @@
-import { normalizePath, Notice, TFile, WorkspaceLeaf, type App, type EventRef } from 'obsidian';
+import { normalizePath, Notice, TAbstractFile, TFile, WorkspaceLeaf, type App, type EventRef } from 'obsidian';
 import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
@@ -183,6 +183,15 @@ export class StickyNoteManager {
 				for (const p of this.popovers.values()) {
 					p.setActiveHighlight(false);
 				}
+			})
+		);
+		this.plugin.registerEvent(
+			this.app.vault.on('delete', (f: TAbstractFile) => {
+				if (!(f instanceof TFile) || f.extension !== 'md') return;
+				const root = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+				const p = normalizePath(f.path);
+				if (p !== root && !p.startsWith(`${root}/`)) return;
+				this.pruneStickyPathFromAllWorkspaces(f.path);
 			})
 		);
 	}
@@ -433,9 +442,85 @@ export class StickyNoteManager {
 			if (file.extension === 'md') {
 				row.markdownMode = pop.getMarkdownMode();
 			}
+			row.open = true;
 			ser.push(row);
 		}
 		return ser;
+	}
+
+	/** 合并工作区快照：已打开项更新布局并标记 `open`；未打开项保留成员信息并标记 `open: false`。 */
+	private mergeWorkspaceWindowsSnapshot(
+		existing: readonly SerializedStickyWindow[],
+		open: SerializedStickyWindow[]
+	): SerializedStickyWindow[] {
+		const byPath = new Map<string, SerializedStickyWindow>();
+		for (const w of existing) {
+			byPath.set(normalizePath(w.path), { ...w, open: false });
+		}
+		for (const w of open) {
+			byPath.set(normalizePath(w.path), { ...w, open: true });
+		}
+		return [...byPath.values()];
+	}
+
+	private isWorkspaceStickyRestoreTarget(w: SerializedStickyWindow): boolean {
+		return w.open !== false;
+	}
+
+	isStickyInActiveWorkspace(file: TFile): boolean {
+		const ws = this.activeWorkspace();
+		if (!ws) return false;
+		const norm = normalizePath(file.path);
+		return ws.windows.some(w => normalizePath(w.path) === norm);
+	}
+
+	/** 将便笺加入当前活动工作区成员（若尚无活动工作区则忽略）。 */
+	ensureStickyInActiveWorkspace(file: TFile): void {
+		const ws = this.activeWorkspace();
+		if (!ws) return;
+		const norm = normalizePath(file.path);
+		if (ws.windows.some(w => normalizePath(w.path) === norm)) return;
+		ws.windows.push({
+			id: this.newId(),
+			path: file.path,
+			stickyId: this.readStickyIdFromCache(file) ?? undefined,
+			bounds: this.getDefaultBounds(),
+			open: true
+		});
+		ws.updatedAt = Date.now();
+		this.scheduleSaveWorkspaces();
+	}
+
+	/** 从当前活动工作区移除便笺成员（不关闭浮动窗口）。 */
+	async removeStickyFromActiveWorkspace(file: TFile): Promise<boolean> {
+		const ws = this.activeWorkspace();
+		if (!ws) return false;
+		const norm = normalizePath(file.path);
+		const next = ws.windows.filter(w => normalizePath(w.path) !== norm);
+		if (next.length === ws.windows.length) return false;
+		ws.windows = next;
+		ws.updatedAt = Date.now();
+		await this.flushWorkspacesToDisk();
+		this.refreshStickyListIfActiveWorkspaceFilter();
+		this.plugin.refreshStickyListIfOpen();
+		return true;
+	}
+
+	/** 从所有工作区（含回收站快照）移除指定路径的便笺成员。 */
+	pruneStickyPathFromAllWorkspaces(path: string): void {
+		const norm = normalizePath(path);
+		let changed = false;
+		const prune = (ws: StickyWorkspace): void => {
+			const next = ws.windows.filter(w => normalizePath(w.path) !== norm);
+			if (next.length !== ws.windows.length) {
+				ws.windows = next;
+				ws.updatedAt = Date.now();
+				changed = true;
+			}
+		};
+		for (const ws of this.workspaces.workspaces) prune(ws);
+		for (const ws of this.workspaces.trash) prune(ws);
+		if (changed) this.scheduleSaveWorkspaces();
 	}
 
 	/**
@@ -730,7 +815,7 @@ export class StickyNoteManager {
 		if (!opts?.bypassFreeze && this.isWorkspacePersistFrozen()) return;
 		const ws = this.activeWorkspace();
 		if (!ws) return;
-		ws.windows = this.serializeOpenWindowsSnapshot();
+		ws.windows = this.mergeWorkspaceWindowsSnapshot(ws.windows, this.serializeOpenWindowsSnapshot());
 		ws.updatedAt = Date.now();
 		this.scheduleSaveWorkspaces();
 	}
@@ -798,6 +883,7 @@ export class StickyNoteManager {
 				if (file.extension === 'md' && opts?.markdownMode) {
 					await pop.setMarkdownViewMode(opts.markdownMode);
 				}
+				this.ensureStickyInActiveWorkspace(file);
 				return;
 			}
 		}
@@ -1089,6 +1175,16 @@ export class StickyNoteManager {
 			onShowOthersSticky: () => void this.showOthersSticky(),
 			onShowAllStickies: () => void this.showAllStickies(),
 			onToggleArchiveCurrentSticky: () => void this.toggleArchiveCurrentStickyForPopover(id),
+			onRemoveFromActiveWorkspace: () => void this.removeStickyFromActiveWorkspaceForPopover(id),
+			hasActiveStickyWorkspace: () => this.activeWorkspace() !== undefined,
+			canRemoveFromActiveWorkspace: () => {
+				const pop = this.popovers.get(id);
+				const file =
+					pop?.leaf?.view && 'file' in pop.leaf.view
+						? (pop.leaf.view as { file?: TFile }).file
+						: undefined;
+				return file instanceof TFile && this.isStickyInActiveWorkspace(file);
+			},
 			onActivate: () => this.bringStickyToFrontById(id),
 			onDragStart: e => this.handleDragStart(id, e),
 			onDragMove: (next, e) => this.handleDragMove(id, next, e),
@@ -1142,6 +1238,16 @@ export class StickyNoteManager {
 		const nextArchived = !cur;
 		await this.setStickyArchivedForFile(file, nextArchived);
 		if (nextArchived) this.closeSticky(popoverId);
+	}
+
+	private async removeStickyFromActiveWorkspaceForPopover(popoverId: string): Promise<void> {
+		const pop = this.popovers.get(popoverId);
+		const file =
+			pop?.leaf?.view && 'file' in pop.leaf.view
+				? (pop.leaf.view as { file?: TFile }).file
+				: undefined;
+		if (!(file instanceof TFile)) return;
+		await this.removeStickyFromActiveWorkspace(file);
 	}
 
 	/** 关闭所有展示该文件的便笺窗口并将文件移入回收站。 */
@@ -1393,7 +1499,9 @@ export class StickyNoteManager {
 		if (!ws || ws.windows.length === 0) {
 			return;
 		}
-		const pending = ws.windows.filter(w => !openPaths.has(w.path));
+		const pending = ws.windows.filter(
+			w => this.isWorkspaceStickyRestoreTarget(w) && !openPaths.has(w.path)
+		);
 		if (pending.length === 0) return;
 		const preparedList = (
 			await Promise.all(pending.map(w => this.prepareExistingStickyShell(w)))

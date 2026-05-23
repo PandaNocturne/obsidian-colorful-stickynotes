@@ -44,6 +44,11 @@ export interface SerializedStickyWindow {
 	yamlVisible?: boolean;
 	/** Markdown 便笺的阅读 / 编辑视图（`preview` | `source`）。 */
 	markdownMode?: 'preview' | 'source';
+	/**
+	 * 切换工作区时是否自动打开该便笺窗口。
+	 * `false` 表示仍属于工作区成员但已关闭；缺省为 `true`（兼容旧快照）。
+	 */
+	open?: boolean;
 }
 
 export interface StickyWorkspace {

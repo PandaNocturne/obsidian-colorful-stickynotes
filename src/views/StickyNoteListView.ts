@@ -1111,6 +1111,28 @@ export class StickyNoteListView extends ItemView {
 					})();
 				});
 		});
+		const activeWs = this.plugin.stickies.activeWorkspace();
+		const removableFromWs = activeWs
+			? files.filter(f => this.plugin.stickies.isStickyInActiveWorkspace(f))
+			: [];
+		if (activeWs) {
+			menu.addItem(item => {
+				const count = removableFromWs.length;
+				item
+					.setTitle(
+						this.titleWithBatchCount(t('REMOVE_FROM_WORKSPACE'), count > 0 ? count : n)
+					)
+					.setIcon('layers')
+					.setDisabled(count === 0)
+					.onClick(() => {
+						void (async () => {
+							for (const f of removableFromWs) {
+								await this.plugin.stickies.removeStickyFromActiveWorkspace(f);
+							}
+						})();
+					});
+			});
+		}
 		menu.addSeparator();
 
 		const applyArchive = (targets: TFile[], next: boolean) => {
