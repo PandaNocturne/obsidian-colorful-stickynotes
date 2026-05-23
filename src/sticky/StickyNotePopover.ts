@@ -42,7 +42,6 @@ export interface StickyNotePopoverOptions {
 	initialColor: StickyColorId | null;
 	initialCollapsed: boolean;
 	initialYamlVisible: boolean;
-	bottomBarAutoHide: boolean;
 	/** 左右贴边时自动拉伸高度；移开后恢复。 */
 	edgeAutoStretchHeight: boolean;
 	/** 双击头部切换拉伸/恢复。 */
@@ -90,10 +89,9 @@ export class StickyNotePopover {
 	readonly rootEl: HTMLElement;
 	private readonly bodyWrapEl: HTMLElement;
 	private readonly headerEl: HTMLElement;
+	private headerTitleEl!: HTMLElement;
 	private readonly mainColumnEl: HTMLElement;
-	private readonly bottomBarEl: HTMLElement;
-	private readonly bottomTitleEl: HTMLElement;
-	private readonly settingsBtn: HTMLButtonElement;
+	private settingsBtn!: HTMLButtonElement;
 	private readonly sheetLayerEl: HTMLElement;
 	private readonly sheetBackdropEl: HTMLElement;
 	private readonly sheetPanelEl: HTMLElement;
@@ -122,7 +120,6 @@ export class StickyNotePopover {
 	private resizeStartY = 0;
 	private resizeStartBounds: FloatingBounds | null = null;
 	private resizeObserver: ResizeObserver | null = null;
-	private bottomBarResizeObserver: ResizeObserver | null = null;
 	private resizeReflowRaf: number | null = null;
 	private leafModeSyncUninstall: (() => void) | null = null;
 	/** `getComputedStyle` 昂贵；`--layer-popover` 在会话内基本不变，按实例缓存。 */
@@ -144,7 +141,6 @@ export class StickyNotePopover {
 	constructor(private readonly options: StickyNotePopoverOptions) {
 		this.plugin = options.plugin;
 		this.onBoundsChange = options.onBoundsChange;
-		this.bottomBarAutoHide = options.bottomBarAutoHide;
 		this.collapsed = options.initialCollapsed;
 		this.yamlVisible = options.initialYamlVisible;
 		this.edgeAutoStretchHeight = options.edgeAutoStretchHeight;
@@ -230,27 +226,9 @@ export class StickyNotePopover {
 		});
 
 		this.sheetLayerEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-sheet-layer' });
-		this.sheetBackdropEl = this.sheetLayerEl.createDiv({ cls: 'csn-sticky-sheet-backdrop' });
 		this.sheetPanelEl = this.sheetLayerEl.createDiv({ cls: 'csn-sticky-sheet' });
+		this.sheetBackdropEl = this.sheetLayerEl.createDiv({ cls: 'csn-sticky-sheet-backdrop' });
 		this.wireSettingsSheet();
-
-		this.bottomBarEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-bottombar' });
-		this.bottomTitleEl = this.bottomBarEl.createSpan({ cls: 'csn-sticky-bottombar-title' });
-
-		this.settingsBtn = this.bottomBarEl.createEl('button', {
-			cls: 'clickable-icon csn-sticky-bottombar-btn csn-sticky-bottombar-settings',
-			attr: { type: 'button', 'aria-label': t('BOTTOM_SETTINGS_ARIA'), 'aria-expanded': 'false' }
-		});
-		setIcon(this.settingsBtn, 'settings');
-		this.plugin.registerDomEvent(this.settingsBtn, 'click', evt => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			this.toggleSettingsSheet();
-		});
-
-		this.bottomBarResizeObserver = new ResizeObserver(() => this.syncBottomBarHeightCss());
-		this.bottomBarResizeObserver.observe(this.bottomBarEl);
-		this.syncBottomBarHeightCss();
 
 		this.wireMainDoubleClickPreviewToSource();
 
@@ -330,7 +308,6 @@ export class StickyNotePopover {
 
 		this.applyCollapsedClass();
 		this.applyYamlClass();
-		this.applyBottomBarAutoHideClass();
 		this.syncEdgeAutoStretchFromCurrentBounds();
 	}
 
@@ -364,7 +341,6 @@ export class StickyNotePopover {
 			window.requestAnimationFrame(() => {
 				window.requestAnimationFrame(() => {
 					if (this.disposed) return;
-					this.syncBottomBarHeightCss();
 					this.requestLeafMeasure();
 					this.scheduleResizeReflow();
 				});
@@ -384,12 +360,6 @@ export class StickyNotePopover {
 			if (m === 'source' || m === 'preview') return m;
 		}
 		return this.options.defaultMarkdownMode;
-	}
-
-	setBottomBarSettings(autoHide: boolean): void {
-		this.bottomBarAutoHide = autoHide;
-		this.applyBottomBarAutoHideClass();
-		window.requestAnimationFrame(() => this.syncBottomBarHeightCss());
 	}
 
 	setEdgeAutoStretch(enabled: boolean): void {
@@ -537,12 +507,6 @@ export class StickyNotePopover {
 		this.rootEl.style.setProperty('--csn-sticky-view-content-zoom', String(s));
 	}
 
-	private bottomBarAutoHide = false;
-
-	private applyBottomBarAutoHideClass(): void {
-		this.rootEl.toggleClass('csn-sticky--bar-autohide', this.bottomBarAutoHide);
-	}
-
 	/** 避免 StickyNotePopover 直接 import main 造成循环依赖 */
 	private isStickyMainDoubleClickToEditEnabled(): boolean {
 		const s = (this.plugin as unknown as { settings?: { stickyMainDoubleClickToEdit?: boolean } }).settings;
@@ -560,7 +524,6 @@ export class StickyNotePopover {
 			const el = evt.target;
 			if (!(el instanceof HTMLElement)) return;
 			if (el.closest('.csn-sticky-sheet-layer')) return;
-			if (el.closest('.csn-sticky-bottombar')) return;
 			if (el.closest('a[href]')) return;
 			if (el.closest('button')) return;
 			if (el.closest('input, textarea, select')) return;
@@ -575,14 +538,6 @@ export class StickyNotePopover {
 		});
 	}
 
-	private syncBottomBarHeightCss(): void {
-		if (this.disposed) return;
-		let h = this.bottomBarEl.offsetHeight;
-		/* 底栏自动隐藏收起时 offsetHeight 可能为 0，仍预留一条带高度以便抽屉贴在「工具栏区域」之上 */
-		if (h < 4) h = 38;
-		this.mainColumnEl.style.setProperty('--csn-sticky-bottombar-height', `${h}px`);
-	}
-
 	private wireHeader(): void {
 		const left = this.headerEl.createDiv({ cls: 'csn-sticky-header-left' });
 		const addBtn = left.createEl('button', {
@@ -595,6 +550,8 @@ export class StickyNotePopover {
 			evt.stopPropagation();
 			this.options.onRequestNewSticky();
 		});
+
+		this.headerTitleEl = this.headerEl.createDiv({ cls: 'csn-sticky-header-title' });
 
 		this.headerEl.createDiv({ cls: 'csn-sticky-header-spacer' });
 
@@ -616,6 +573,17 @@ export class StickyNotePopover {
 		});
 
 		const right = this.headerEl.createDiv({ cls: 'csn-sticky-header-right' });
+
+		this.settingsBtn = right.createEl('button', {
+			cls: 'clickable-icon csn-sticky-header-btn csn-sticky-header-settings',
+			attr: { type: 'button', 'aria-label': t('BOTTOM_SETTINGS_ARIA'), 'aria-expanded': 'false' }
+		});
+		setIcon(this.settingsBtn, 'settings');
+		this.plugin.registerDomEvent(this.settingsBtn, 'click', evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleSettingsSheet();
+		});
 
 		this.foldBtn = right.createEl('button', {
 			cls: 'clickable-icon csn-sticky-header-btn',
@@ -655,37 +623,7 @@ export class StickyNotePopover {
 			evt.stopPropagation();
 		});
 
-		/* 自上而下：删除便笺 → 便笺列表；底部无缝颜色条 */
-		const actions = this.sheetPanelEl.createDiv({ cls: 'csn-sticky-sheet-actions' });
-
-		const deleteBtn = actions.createEl('button', {
-			cls: 'csn-sticky-sheet-action csn-sticky-sheet-action--danger',
-			type: 'button'
-		});
-		const delIc = deleteBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
-		setIcon(delIc, 'trash-2');
-		deleteBtn.createSpan({ text: t('DELETE_STICKY_ACTION') });
-		this.plugin.registerDomEvent(deleteBtn, 'click', evt => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			this.closeSettingsSheet();
-			this.options.onDeleteCurrentSticky();
-		});
-
-		const listBtn = actions.createEl('button', {
-			cls: 'csn-sticky-sheet-action',
-			type: 'button'
-		});
-		const listIc = listBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
-		setIcon(listIc, 'layout-list');
-		listBtn.createSpan({ text: t('STICKY_LIST_ACTION') });
-		this.plugin.registerDomEvent(listBtn, 'click', evt => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			this.closeSettingsSheet();
-			this.options.onOpenNoteList();
-		});
-
+		/* 自上而下：颜色条 → 便笺列表 → 删除便笺 */
 		const colorsRow = this.sheetPanelEl.createDiv({ cls: 'csn-sticky-sheet-colors' });
 		for (const c of SHEET_COLOR_ORDER) {
 			const sw = colorsRow.createEl('button', {
@@ -704,6 +642,36 @@ export class StickyNotePopover {
 			});
 		}
 		this.refreshSheetColorSelection();
+
+		const actions = this.sheetPanelEl.createDiv({ cls: 'csn-sticky-sheet-actions' });
+
+		const listBtn = actions.createEl('button', {
+			cls: 'csn-sticky-sheet-action',
+			type: 'button'
+		});
+		const listIc = listBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
+		setIcon(listIc, 'layout-list');
+		listBtn.createSpan({ text: t('STICKY_LIST_ACTION') });
+		this.plugin.registerDomEvent(listBtn, 'click', evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.closeSettingsSheet();
+			this.options.onOpenNoteList();
+		});
+
+		const deleteBtn = actions.createEl('button', {
+			cls: 'csn-sticky-sheet-action csn-sticky-sheet-action--danger',
+			type: 'button'
+		});
+		const delIc = deleteBtn.createSpan({ cls: 'csn-sticky-sheet-action-icon' });
+		setIcon(delIc, 'trash-2');
+		deleteBtn.createSpan({ text: t('DELETE_STICKY_ACTION') });
+		this.plugin.registerDomEvent(deleteBtn, 'click', evt => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.closeSettingsSheet();
+			this.options.onDeleteCurrentSticky();
+		});
 	}
 
 	private refreshSheetColorSelection(): void {
@@ -727,7 +695,6 @@ export class StickyNotePopover {
 
 	private openSettingsSheet(): void {
 		if (this.collapsed || this.disposed) return;
-		this.syncBottomBarHeightCss();
 		this.sheetOpen = true;
 		this.rootEl.addClass('csn-sticky--sheet-open');
 		this.settingsBtn.setAttr('aria-expanded', 'true');
@@ -741,15 +708,15 @@ export class StickyNotePopover {
 		this.settingsBtn.setAttr('aria-expanded', 'false');
 	}
 
-	private syncBottomBarTitle(): void {
+	private syncFileTitleText(): void {
 		const view = this.leaf?.view;
 		const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
 		if (file) {
-			this.bottomTitleEl.setText(file.name);
-			this.bottomTitleEl.setAttr('title', file.path);
+			this.headerTitleEl.setText(file.basename);
+			this.headerTitleEl.setAttr('title', file.path);
 		} else {
-			this.bottomTitleEl.setText('');
-			this.bottomTitleEl.removeAttribute('title');
+			this.headerTitleEl.setText('');
+			this.headerTitleEl.removeAttribute('title');
 		}
 	}
 
@@ -762,6 +729,12 @@ export class StickyNotePopover {
 			window.requestAnimationFrame(() => {
 				if (this.disposed) return;
 				this.fitExpandedStickyToViewport();
+			});
+		} else if (this.collapsed) {
+			/* 折叠后通知绑定组等按 getPhysicalBounds 重排（窗口实际高度已变） */
+			window.requestAnimationFrame(() => {
+				if (this.disposed) return;
+				this.onBoundsChange(this.getBounds());
 			});
 		}
 	}
@@ -866,11 +839,9 @@ export class StickyNotePopover {
 		this.applyBounds(this.getBounds(), false, {
 			clampToViewportMargin: !this.shouldUseEdgeStretchClamplessBounds()
 		});
-		/* 切换激活时与打开设置类似：同步底栏高度变量并触发叶视图测量，缓解嵌套 workspace 首帧高度链断裂 */
 		if (on) {
 			window.requestAnimationFrame(() => {
 				if (this.disposed) return;
-				this.syncBottomBarHeightCss();
 				this.requestLeafMeasure();
 			});
 		}
@@ -955,13 +926,10 @@ export class StickyNotePopover {
 		this.rootEl.removeClass('csn-sticky--content-pending');
 		this.markdownModeTogglePending = false;
 		this.syncModeToggleUi();
-		this.syncBottomBarHeightCss();
 		this.requestLeafMeasure();
-		/* 再延后两帧测量：偶发仅首帧高度未传导至嵌套 leaf，表现为正文整体上移、抬头似缺失；点底栏设置会触发同类同步从而恢复 */
 		window.requestAnimationFrame(() => {
 			window.requestAnimationFrame(() => {
 				if (this.disposed) return;
-				this.syncBottomBarHeightCss();
 				this.requestLeafMeasure();
 			});
 		});
@@ -985,9 +953,6 @@ export class StickyNotePopover {
 		this.resizeObserver?.disconnect();
 		this.resizeObserver = null;
 
-		this.bottomBarResizeObserver?.disconnect();
-		this.bottomBarResizeObserver = null;
-
 		this.leafModeSyncUninstall?.();
 		this.leafModeSyncUninstall = null;
 
@@ -1006,7 +971,7 @@ export class StickyNotePopover {
 		const show = hasMdFile || this.markdownModeTogglePending;
 		this.modeToggleWrap.style.display = show ? '' : 'none';
 		if (!show) {
-			this.syncBottomBarTitle();
+			this.syncFileTitleText();
 			return;
 		}
 		if (hasMdFile && md) {
@@ -1020,7 +985,7 @@ export class StickyNotePopover {
 			setIcon(this.markdownModeToggleBtn, 'book-open');
 			this.markdownModeToggleBtn.setAttr('aria-label', t('MODE_READ_CLICK_EDIT'));
 		}
-		this.syncBottomBarTitle();
+		this.syncFileTitleText();
 	}
 
 	private async setMarkdownMode(mode: 'source' | 'preview'): Promise<void> {
@@ -1051,7 +1016,7 @@ export class StickyNotePopover {
 			if (v instanceof MarkdownView && v.file?.extension === 'md') {
 				this.syncModeToggleUi();
 			} else {
-				this.syncBottomBarTitle();
+				this.syncFileTitleText();
 			}
 		});
 	}

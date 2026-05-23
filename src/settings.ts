@@ -88,7 +88,6 @@ export interface ColorfulStickyNotesSettings {
 	stickyViewContentZoom: number;
 	/** 便笺列表预览卡片正文的 `zoom`。 */
 	noteListViewContentZoom: number;
-	bottomBarAutoHide: boolean;
 	/** 左右贴边时自动拉伸窗口高度；移开贴边后恢复原高度。 */
 	stickyEdgeAutoStretchHeight: boolean;
 	/** 双击便笺头部切换拉伸/恢复。 */
@@ -173,7 +172,6 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	stickyLeafPinned: true,
 	stickyViewContentZoom: VIEW_CONTENT_ZOOM_DEFAULT,
 	noteListViewContentZoom: VIEW_CONTENT_ZOOM_DEFAULT,
-	bottomBarAutoHide: false,
 	stickyEdgeAutoStretchHeight: false,
 	stickyHeaderDoubleClickStretch: false,
 	stickyMainDoubleClickToEdit: true,
@@ -463,17 +461,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-
-		new Setting(containerEl)
-			.setName(t('SETTINGS_BOTTOM_BAR_AUTO_HIDE_NAME'))
-			.setDesc(t('SETTINGS_BOTTOM_BAR_AUTO_HIDE_DESC'))
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.bottomBarAutoHide).onChange(async v => {
-					this.plugin.settings.bottomBarAutoHide = v;
-					await this.plugin.saveSettings();
-					this.plugin.stickies.updateBottomBarsFromSettings();
-				})
-			);
 
 		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_LIST'));
 		new Setting(containerEl)

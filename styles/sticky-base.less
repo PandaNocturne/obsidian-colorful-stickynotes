@@ -77,9 +77,40 @@
 	gap: 2px;
 }
 
-.csn-sticky-header-spacer {
+.csn-sticky-header-title {
 	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	user-select: none;
+	cursor: default;
+}
+
+.csn-sticky-header-spacer {
+	flex: 0 0 8px;
 	min-width: 8px;
+}
+
+.csn-sticky--collapsed {
+	/* 覆盖 applyBounds 写入的固定高度，窗口缩至仅标题条 */
+	height: auto !important;
+	min-height: 0;
+}
+
+.csn-sticky--collapsed .csn-sticky-body {
+	display: none;
+}
+
+.csn-sticky--collapsed .csn-sticky-main {
+	flex: 0 0 auto;
+}
+
+.csn-sticky--collapsed .csn-sticky-resize {
+	display: none;
 }
 
 /* 阅读 ⇄ 编辑切换（与主界面 Markdown 叶视图一致，需避免叶内容高度为 0） */

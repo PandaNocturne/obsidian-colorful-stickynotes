@@ -54,9 +54,35 @@
   align-items: center;
   gap: 2px;
 }
-.csn-sticky-header-spacer {
+.csn-sticky-header-title {
   flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+}
+.csn-sticky-header-spacer {
+  flex: 0 0 8px;
   min-width: 8px;
+}
+.csn-sticky--collapsed {
+  /* 覆盖 applyBounds 写入的固定高度，窗口缩至仅标题条 */
+  height: auto !important;
+  min-height: 0;
+}
+.csn-sticky--collapsed .csn-sticky-body {
+  display: none;
+}
+.csn-sticky--collapsed .csn-sticky-main {
+  flex: 0 0 auto;
+}
+.csn-sticky--collapsed .csn-sticky-resize {
+  display: none;
 }
 /* 阅读 ⇄ 编辑切换（与主界面 Markdown 叶视图一致，需避免叶内容高度为 0） */
 .csn-sticky-mode-toggle {
@@ -99,15 +125,9 @@
   width: 100%;
   margin: 0;
   padding: 0;
-  /* 非自动隐藏：底栏 absolute 叠在底部，预留高度避免最后一行被挡 */
-  padding-bottom: var(--csn-sticky-bottombar-height, 38px);
   overflow: hidden;
   box-sizing: border-box;
   position: relative;
-}
-/* 底栏自动隐藏：不占正文底部空间，内容可铺满；底栏显隐时叠在正文与 sheet-layer 之上（见 sticky-bottombar / sticky-sheet） */
-.csn-sticky--bar-autohide .csn-sticky-body.csn-sticky-window-body {
-  padding-bottom: 0;
 }
 /* 首次 openFile / loadIfDeferred 完成前隐藏正文，避免空叶视图闪白 */
 .csn-sticky--content-pending .csn-sticky-body {
@@ -242,76 +262,7 @@ body .csn-sticky-window-body .view-content {
   flex-direction: column;
   box-sizing: border-box;
 }
-/* 脱离 flex 流：贴 main 底部叠放，避免自动隐藏时 max-height 动画挤占正文高度导致跳动（尤其便笺贴近屏幕下沿时） */
-.csn-sticky-bottombar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  box-sizing: border-box;
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 32px;
-  padding: 4px 8px 6px;
-  background: var(--csn-b);
-  border-top: 1px solid var(--csn-border);
-  /* 高于 .csn-sticky-sheet-layer(12)，设置抽屉与蒙版之上，可始终点到标题/齿轮 */
-  z-index: 30;
-}
-.csn-sticky-bottombar-title {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: var(--font-ui-small);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  user-select: none;
-}
-.csn-sticky-bottombar-settings {
-  flex: 0 0 auto;
-}
-.csn-sticky-bottombar-btn.clickable-icon {
-  background: transparent !important;
-  border: none !important;
-  border-radius: var(--radius-s);
-  box-shadow: none !important;
-  padding: 4px;
-  margin: 0;
-}
-.csn-sticky-bottombar-btn.clickable-icon:hover {
-  background-color: var(--background-modifier-hover) !important;
-}
-/* 自动隐藏：仅淡入淡出，不改变占位高度（正文区用 padding-bottom 恒预留底栏高度，见 sticky-body.less） */
-.csn-sticky--bar-autohide .csn-sticky-bottombar {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-}
-.csn-sticky--bar-autohide:hover .csn-sticky-bottombar,
-.csn-sticky--bar-autohide .csn-sticky-bottombar:focus-within,
-.csn-sticky--bar-autohide.csn-sticky--sheet-open .csn-sticky-bottombar {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-.csn-sticky--collapsed .csn-sticky-body,
-.csn-sticky--collapsed .csn-sticky-bottombar {
-  display: none;
-}
-.csn-sticky--collapsed {
-  height: auto !important;
-  min-height: 0;
-}
-.csn-sticky--collapsed .csn-sticky-main {
-  flex: 0 0 auto;
-}
-/* 便笺内设置抽屉：铺满 main；底栏另叠在其上（z-index 更高），不再为底栏让出 bottom */
+/* 便笺内设置抽屉：从主区域顶部滑入；蒙版占满抽屉下方 */
 .csn-sticky-sheet-layer {
   position: absolute;
   left: 0;
@@ -321,7 +272,7 @@ body .csn-sticky-window-body .view-content {
   z-index: 12;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
@@ -332,7 +283,27 @@ body .csn-sticky-window-body .view-content {
   opacity: 1;
   visibility: visible;
 }
-/* 蒙版：占满抽屉上方区域，半透明；点击由 TS 关闭抽屉 */
+.csn-sticky-sheet {
+  position: relative;
+  flex: 0 0 auto;
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 10px;
+  border-radius: 0;
+  background: var(--background-primary);
+  border: solid var(--background-modifier-border);
+  border-width: 0 0 1px;
+  box-shadow: none;
+  pointer-events: auto;
+  transform: translateY(-100%);
+  transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.csn-sticky--sheet-open .csn-sticky-sheet {
+  transform: translateY(0);
+}
+/* 蒙版：占满抽屉下方区域，半透明；点击由 TS 关闭抽屉 */
 .csn-sticky-sheet-backdrop {
   flex: 1 1 auto;
   min-height: 0;
@@ -346,32 +317,12 @@ body .csn-sticky-window-body .view-content {
   cursor: default;
   background: color-mix(in srgb, var(--background-modifier-cover) 55%, transparent);
 }
-.csn-sticky-sheet {
-  position: relative;
-  flex: 0 0 auto;
-  max-height: 70%;
-  display: flex;
-  flex-direction: column;
-  /* 底栏叠在 sheet-layer 之上，底部操作区需让出底栏高度以免被挡 */
-  padding: 10px 0 var(--csn-sticky-bottombar-height, 38px);
-  border-radius: 0;
-  background: var(--background-primary);
-  border: solid var(--background-modifier-border);
-  border-width: 1px 0 0;
-  box-shadow: none;
-  pointer-events: auto;
-  transform: translateY(100%);
-  transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
-}
-.csn-sticky--sheet-open .csn-sticky-sheet {
-  transform: translateY(0);
-}
 .csn-sticky-sheet-actions {
   display: flex;
   flex-flow: row nowrap;
   justify-content: space-between;
   gap: 10px;
-  padding: 0 12px 8px;
+  padding: 0 12px 10px;
 }
 .csn-sticky-sheet-action {
   display: flex;
@@ -389,11 +340,14 @@ body .csn-sticky-window-body .view-content {
 .csn-sticky-sheet-action:hover {
   background-color: var(--background-modifier-hover);
 }
-.csn-sticky-sheet-action--danger {
-  color: var(--text-error);
+.csn-sticky-sheet-action.csn-sticky-sheet-action--danger {
+  --csn-sheet-danger: var(--text-error, var(--color-red, #e93147));
+  color: var(--csn-sheet-danger) !important;
+  background: transparent;
 }
-.csn-sticky-sheet-action--danger:hover {
+.csn-sticky-sheet-action.csn-sticky-sheet-action--danger:hover {
   background-color: var(--background-modifier-hover);
+  color: var(--csn-sheet-danger) !important;
 }
 .csn-sticky-sheet-action .csn-sticky-sheet-action-icon {
   display: flex;
@@ -404,11 +358,15 @@ body .csn-sticky-window-body .view-content {
   justify-content: center;
   color: inherit;
 }
+.csn-sticky-sheet-action.csn-sticky-sheet-action--danger .csn-sticky-sheet-action-icon,
+.csn-sticky-sheet-action.csn-sticky-sheet-action--danger .csn-sticky-sheet-action-icon svg {
+  color: var(--csn-sheet-danger) !important;
+}
 .csn-sticky-sheet-action .csn-sticky-sheet-action-icon svg {
   width: 18px;
   height: 18px;
 }
-/* 底部紧贴抽屉下缘，色块横向无缝衔接 */
+/* 色块横向无缝衔接，位于抽屉顶部 */
 .csn-sticky-sheet-colors {
   display: flex;
   flex-direction: row;

@@ -1,4 +1,4 @@
-/* 便笺内设置抽屉：铺满 main；底栏另叠在其上（z-index 更高），不再为底栏让出 bottom */
+/* 便笺内设置抽屉：从主区域顶部滑入；蒙版占满抽屉下方 */
 .csn-sticky-sheet-layer {
 	position: absolute;
 	left: 0;
@@ -8,7 +8,7 @@
 	z-index: 12;
 	display: flex;
 	flex-direction: column;
-	justify-content: flex-end;
+	justify-content: flex-start;
 	pointer-events: none;
 	opacity: 0;
 	visibility: hidden;
@@ -23,7 +23,29 @@
 	visibility: visible;
 }
 
-/* 蒙版：占满抽屉上方区域，半透明；点击由 TS 关闭抽屉 */
+.csn-sticky-sheet {
+	position: relative;
+	flex: 0 0 auto;
+	max-height: 70%;
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	gap: 10px;
+	border-radius: 0;
+	background: var(--background-primary);
+	border: solid var(--background-modifier-border);
+	border-width: 0 0 1px;
+	box-shadow: none;
+	pointer-events: auto;
+	transform: translateY(-100%);
+	transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.csn-sticky--sheet-open .csn-sticky-sheet {
+	transform: translateY(0);
+}
+
+/* 蒙版：占满抽屉下方区域，半透明；点击由 TS 关闭抽屉 */
 .csn-sticky-sheet-backdrop {
 	flex: 1 1 auto;
 	min-height: 0;
@@ -39,35 +61,12 @@
 	background: color-mix(in srgb, var(--background-modifier-cover) 55%, transparent);
 }
 
-.csn-sticky-sheet {
-	position: relative;
-	flex: 0 0 auto;
-	max-height: 70%;
-	display: flex;
-	flex-direction: column;
-	/* 底栏叠在 sheet-layer 之上，底部操作区需让出底栏高度以免被挡 */
-	padding: 10px 0 var(--csn-sticky-bottombar-height, 38px);
-	border-radius: 0;
-	background: var(--background-primary);
-	border: solid var(--background-modifier-border);
-	border-width: 1px 0 0;
-	box-shadow: none;
-	pointer-events: auto;
-	transform: translateY(100%);
-	transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.csn-sticky--sheet-open .csn-sticky-sheet {
-	transform: translateY(0);
-}
-
 .csn-sticky-sheet-actions {
 	display: flex;
-	// flex-direction:row;
 	flex-flow: row nowrap;
 	justify-content: space-between;
 	gap: 10px;
-	padding: 0 12px 8px;
+	padding: 0 12px 10px;
 }
 
 .csn-sticky-sheet-action {
@@ -88,12 +87,15 @@
 	background-color: var(--background-modifier-hover);
 }
 
-.csn-sticky-sheet-action--danger {
-	color: var(--text-error);
+.csn-sticky-sheet-action.csn-sticky-sheet-action--danger {
+	--csn-sheet-danger: var(--text-error, var(--color-red, #e93147));
+	color: var(--csn-sheet-danger) !important;
+	background: transparent;
 }
 
-.csn-sticky-sheet-action--danger:hover {
+.csn-sticky-sheet-action.csn-sticky-sheet-action--danger:hover {
 	background-color: var(--background-modifier-hover);
+	color: var(--csn-sheet-danger) !important;
 }
 
 .csn-sticky-sheet-action .csn-sticky-sheet-action-icon {
@@ -106,12 +108,17 @@
 	color: inherit;
 }
 
+.csn-sticky-sheet-action.csn-sticky-sheet-action--danger .csn-sticky-sheet-action-icon,
+.csn-sticky-sheet-action.csn-sticky-sheet-action--danger .csn-sticky-sheet-action-icon svg {
+	color: var(--csn-sheet-danger) !important;
+}
+
 .csn-sticky-sheet-action .csn-sticky-sheet-action-icon svg {
 	width: 18px;
 	height: 18px;
 }
 
-/* 底部紧贴抽屉下缘，色块横向无缝衔接 */
+/* 色块横向无缝衔接，位于抽屉顶部 */
 .csn-sticky-sheet-colors {
 	display: flex;
 	flex-direction: row;
@@ -134,7 +141,7 @@
 	border-radius: 0;
 	cursor: pointer;
 	border: none;
-	box-shadow:none;
+	box-shadow: none;
 }
 
 

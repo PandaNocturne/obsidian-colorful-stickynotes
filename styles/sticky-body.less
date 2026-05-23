@@ -11,16 +11,9 @@
 	width: 100%;
 	margin: 0;
 	padding: 0;
-	/* 非自动隐藏：底栏 absolute 叠在底部，预留高度避免最后一行被挡 */
-	padding-bottom: var(--csn-sticky-bottombar-height, 38px);
 	overflow: hidden;
 	box-sizing: border-box;
 	position: relative;
-}
-
-/* 底栏自动隐藏：不占正文底部空间，内容可铺满；底栏显隐时叠在正文与 sheet-layer 之上（见 sticky-bottombar / sticky-sheet） */
-.csn-sticky--bar-autohide .csn-sticky-body.csn-sticky-window-body {
-	padding-bottom: 0;
 }
 
 /* 首次 openFile / loadIfDeferred 完成前隐藏正文，避免空叶视图闪白 */

@@ -1268,7 +1268,6 @@ export class StickyNoteManager {
 			initialCollapsed: extra.initialCollapsed,
 			initialYamlVisible: extra.initialYamlVisible,
 			expectMarkdownOpen: extra.expectMarkdownOpen,
-			bottomBarAutoHide: this.plugin.settings.bottomBarAutoHide,
 			edgeAutoStretchHeight: this.plugin.settings.stickyEdgeAutoStretchHeight,
 			headerDoubleClickStretch: this.plugin.settings.stickyHeaderDoubleClickStretch,
 			leafPinned: this.plugin.settings.stickyLeafPinned,
@@ -1650,12 +1649,6 @@ export class StickyNoteManager {
 			return;
 		}
 		this.persistOpenWindows({ bypassFreeze: true });
-	}
-
-	updateBottomBarsFromSettings(): void {
-		for (const p of this.popovers.values()) {
-			p.setBottomBarSettings(this.plugin.settings.bottomBarAutoHide);
-		}
 	}
 
 	updateViewContentZoomFromSettings(): void {
