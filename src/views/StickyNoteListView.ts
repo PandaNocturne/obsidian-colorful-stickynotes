@@ -1112,27 +1112,7 @@ export class StickyNoteListView extends ItemView {
 				});
 		});
 		const activeWs = this.plugin.stickies.activeWorkspace();
-		const removableFromWs = activeWs
-			? files.filter(f => this.plugin.stickies.isStickyInActiveWorkspace(f))
-			: [];
-		if (activeWs) {
-			menu.addItem(item => {
-				const count = removableFromWs.length;
-				item
-					.setTitle(
-						this.titleWithBatchCount(t('REMOVE_FROM_WORKSPACE'), count > 0 ? count : n)
-					)
-					.setIcon('layers')
-					.setDisabled(count === 0)
-					.onClick(() => {
-						void (async () => {
-							for (const f of removableFromWs) {
-								await this.plugin.stickies.removeStickyFromActiveWorkspace(f);
-							}
-						})();
-					});
-			});
-		}
+		this.appendListCardWorkspaceTransferMenus(menu, files, activeWs ?? null, n);
 		menu.addSeparator();
 
 		const applyArchive = (targets: TFile[], next: boolean) => {
@@ -1213,6 +1193,71 @@ export class StickyNoteListView extends ItemView {
 				});
 		});
 		menu.showAtMouseEvent(evt);
+	}
+
+	private appendListCardWorkspaceTransferMenus(
+		menu: Menu,
+		files: TFile[],
+		activeWs: { id: string; name: string } | null,
+		batchCount: number
+	): void {
+		const workspaces = this.plugin.stickies.workspaces.workspaces;
+		if (workspaces.length === 0) return;
+
+		menu.addItem(item => {
+			item.setTitle(this.titleWithBatchCount(t('LIST_ADD_TO_WORKSPACE'), batchCount)).setIcon('folder-plus');
+			const sub = item.setSubmenu();
+			for (const ws of workspaces) {
+				const allIn = files.every(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id));
+				sub.addItem(si => {
+					si.setTitle(ws.name)
+						.setIcon('layers')
+						.setChecked(allIn)
+						.setDisabled(allIn)
+						.onClick(() => {
+							void this.plugin.stickies.addFilesToWorkspace(ws.id, files);
+						});
+				});
+			}
+		});
+
+		const removeTargets = workspaces.filter(ws =>
+			files.some(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id))
+		);
+		if (removeTargets.length > 0) {
+			menu.addItem(item => {
+				item
+					.setTitle(this.titleWithBatchCount(t('REMOVE_FROM_WORKSPACE'), batchCount))
+					.setIcon('folder-minus');
+				const sub = item.setSubmenu();
+				for (const ws of removeTargets) {
+					const targets = files.filter(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id));
+					sub.addItem(si => {
+						si.setTitle(ws.name)
+							.setIcon('layers')
+							.onClick(() => {
+								void this.plugin.stickies.removeFilesFromWorkspace(ws.id, targets);
+							});
+					});
+				}
+			});
+		}
+
+		if (!activeWs) return;
+		const moveTargets = workspaces.filter(ws => ws.id !== activeWs.id);
+		if (moveTargets.length === 0) return;
+
+		menu.addItem(item => {
+			item.setTitle(this.titleWithBatchCount(t('LIST_MOVE_TO_WORKSPACE'), batchCount)).setIcon('folder-input');
+			const sub = item.setSubmenu();
+			for (const ws of moveTargets) {
+				sub.addItem(si => {
+					si.setTitle(ws.name).setIcon('layers').onClick(() => {
+						void this.plugin.stickies.moveFilesFromActiveWorkspaceTo(ws.id, files);
+					});
+				});
+			}
+		});
 	}
 
 	private stickyFolderRoot(): string {

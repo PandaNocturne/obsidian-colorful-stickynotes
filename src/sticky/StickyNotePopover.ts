@@ -70,12 +70,10 @@ export interface StickyNotePopoverOptions {
 	onShowAllStickies: () => void;
 	/** 切换当前便笺 frontmatter 归档状态（无 Markdown 文件时由实现侧忽略）。 */
 	onToggleArchiveCurrentSticky: () => void;
-	/** 从当前活动工作区移除该便笺成员（不关闭窗口）。 */
-	onRemoveFromActiveWorkspace: () => void;
-	/** 头部菜单：是否可执行「从工作区移除」（有活动工作区且该便笺为成员）。 */
-	canRemoveFromActiveWorkspace: () => boolean;
-	/** 是否存在活动便笺工作区（用于显示「从工作区移除」菜单项）。 */
-	hasActiveStickyWorkspace: () => boolean;
+	/** 便笺所属、可从中移除的工作区列表（头部菜单子项）。 */
+	getWorkspacesForRemoveMenu: () => Array<{ id: string; name: string }>;
+	/** 从指定工作区移除该便笺成员（不关闭窗口）。 */
+	onRemoveFromWorkspace: (wsId: string) => void;
 	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
 	onActivate: () => void;
 	onDragStart?: (e: PointerEvent) => void;
@@ -512,15 +510,20 @@ export class StickyNotePopover {
 						this.options.onToggleArchiveCurrentSticky();
 					});
 			});
-			if (this.options.hasActiveStickyWorkspace()) {
+			const removeTargets = this.options.getWorkspacesForRemoveMenu();
+			if (removeTargets.length > 0) {
 				menu.addItem(item => {
-					item
-						.setTitle(t('REMOVE_FROM_WORKSPACE'))
-						.setIcon('layers')
-						.setDisabled(!this.options.canRemoveFromActiveWorkspace())
-						.onClick(() => {
-							this.options.onRemoveFromActiveWorkspace();
+					item.setTitle(t('REMOVE_FROM_WORKSPACE')).setIcon('folder-minus');
+					const sub = item.setSubmenu();
+					for (const ws of removeTargets) {
+						sub.addItem(si => {
+							si.setTitle(ws.name)
+								.setIcon('layers')
+								.onClick(() => {
+									this.options.onRemoveFromWorkspace(ws.id);
+								});
 						});
+					}
 				});
 			}
 		}

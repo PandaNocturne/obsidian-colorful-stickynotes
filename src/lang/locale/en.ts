@@ -207,6 +207,8 @@ export const en = {
 	LIST_BATCH_ARCHIVE_UNARCHIVED: 'Archive not archived',
 	LIST_BATCH_UNARCHIVE_ARCHIVED: 'Unarchive archived',
 	REMOVE_FROM_WORKSPACE: 'Remove from workspace',
+	LIST_ADD_TO_WORKSPACE: 'Add to workspace',
+	LIST_MOVE_TO_WORKSPACE: 'Move to workspace',
 	UNPIN_ARIA: 'Unpin',
 	PIN_ARIA: 'Pin',
 	MORE_ACTIONS_ARIA: 'More actions',
