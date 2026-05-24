@@ -1,4 +1,4 @@
-import { normalizePath, Notice, TAbstractFile, TFile, WorkspaceLeaf, type App, type EventRef } from 'obsidian';
+import { normalizePath, Notice, TAbstractFile, TFile, TFolder, WorkspaceLeaf, type App, type EventRef } from 'obsidian';
 import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
 import { formatStickyNoteRelativePath } from '../filename-template';
@@ -16,6 +16,7 @@ import {
 	parseStickyBgColorFromMarkdownSource,
 	resolveStickyBgColorForFile
 } from '../utils/sticky-bg-from-file';
+import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-folder';
 import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
@@ -396,8 +397,11 @@ export class StickyNoteManager {
 	private resolveStickyFileByStickyId(stickyId: string): TFile | null {
 		const want = stickyId.trim();
 		if (!want) return null;
-		const files = this.app.vault.getMarkdownFiles();
-		for (const f of files) {
+		const folder = this.app.vault.getFolderByPath(
+			normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes')
+		);
+		if (!(folder instanceof TFolder)) return null;
+		for (const f of collectMarkdownUnderFolder(folder)) {
 			const got = this.readStickyIdFromCache(f);
 			if (got === want) return f;
 		}

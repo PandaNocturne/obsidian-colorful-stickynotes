@@ -291,7 +291,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			.setDesc(t('SETTINGS_DEFAULT_TEMPLATE_DESC'))
 			.addButton(btn => {
 				btn.setButtonText(t('SETTINGS_CHOOSE_TEMPLATE_NOTE')).onClick(() => {
-					const m = new MarkdownFilePickerModal(this.app, path => {
+					const m = new MarkdownFilePickerModal(this.app, this.plugin.settings.stickyFolder, path => {
 						void (async () => {
 							this.plugin.settings.defaultTemplatePath = path;
 							await this.plugin.saveSettings();

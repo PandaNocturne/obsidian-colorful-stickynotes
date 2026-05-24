@@ -96,8 +96,8 @@
 }
 
 .csn-sticky--collapsed {
-	/* 覆盖 applyBounds 写入的固定高度，窗口缩至仅标题条 */
-	height: auto !important;
+	/* 折叠时 inline height 由 TS 清除，此处用 auto 适配标题条高度 */
+	height: auto;
 	min-height: 0;
 }
 
@@ -120,22 +120,22 @@
 	flex: 0 0 auto;
 }
 
-.csn-sticky-header-btn.is-active {
-	background-color: var(--background-modifier-active-hover) !important;
+body .csn-sticky .csn-sticky-header .csn-sticky-header-btn.is-active {
+	background-color: var(--background-modifier-active-hover);
 	color: var(--text-accent);
 }
 
-.csn-sticky-header .csn-sticky-header-btn {
-	background: transparent !important;
-	border: none !important;
+body .csn-sticky .csn-sticky-header .csn-sticky-header-btn.clickable-icon {
+	background: transparent;
+	border: none;
 	border-radius: var(--radius-s);
-	box-shadow: none !important;
+	box-shadow: none;
 	padding: 4px;
 	margin: 0 1px;
 }
 
-.csn-sticky-header .csn-sticky-header-btn:hover {
-	background-color: var(--background-modifier-hover) !important;
+body .csn-sticky .csn-sticky-header .csn-sticky-header-btn.clickable-icon:hover {
+	background-color: var(--background-modifier-hover);
 }
 
 .csn-sticky-main {

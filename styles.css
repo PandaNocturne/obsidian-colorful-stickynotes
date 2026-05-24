@@ -71,8 +71,8 @@
   min-width: 8px;
 }
 .csn-sticky--collapsed {
-  /* 覆盖 applyBounds 写入的固定高度，窗口缩至仅标题条 */
-  height: auto !important;
+  /* 折叠时 inline height 由 TS 清除，此处用 auto 适配标题条高度 */
+  height: auto;
   min-height: 0;
 }
 .csn-sticky--collapsed .csn-sticky-body {
@@ -90,20 +90,20 @@
   align-items: center;
   flex: 0 0 auto;
 }
-.csn-sticky-header-btn.is-active {
-  background-color: var(--background-modifier-active-hover) !important;
+body .csn-sticky .csn-sticky-header .csn-sticky-header-btn.is-active {
+  background-color: var(--background-modifier-active-hover);
   color: var(--text-accent);
 }
-.csn-sticky-header .csn-sticky-header-btn {
-  background: transparent !important;
-  border: none !important;
+body .csn-sticky .csn-sticky-header .csn-sticky-header-btn.clickable-icon {
+  background: transparent;
+  border: none;
   border-radius: var(--radius-s);
-  box-shadow: none !important;
+  box-shadow: none;
   padding: 4px;
   margin: 0 1px;
 }
-.csn-sticky-header .csn-sticky-header-btn:hover {
-  background-color: var(--background-modifier-hover) !important;
+body .csn-sticky .csn-sticky-header .csn-sticky-header-btn.clickable-icon:hover {
+  background-color: var(--background-modifier-hover);
 }
 .csn-sticky-main {
   position: relative;
@@ -134,20 +134,20 @@
   visibility: hidden;
 }
 /* workspace 与笔记视图补丁（选择器与 ASUI 预览窗同级语义） */
-.csn-sticky-window-body {
+body .csn-sticky-window-body {
   --file-line-width: calc(100% - 16px);
   /* 单叶浮动窗口不应显示 workspace 标签栏，否则会占位并把正文挤偏 */
 }
-.csn-sticky-window-body .view-header,
-.csn-sticky-window-body .inline-title,
-.csn-sticky-window-body .embedded-backlinks,
-.csn-sticky-window-body .cg-note-toolbar-container {
+body .csn-sticky-window-body .view-header,
+body .csn-sticky-window-body .inline-title,
+body .csn-sticky-window-body .embedded-backlinks,
+body .csn-sticky-window-body .cg-note-toolbar-container {
   display: none;
 }
-.csn-sticky-window-body .workspace-tab-header-container {
-  display: none !important;
+body .csn-sticky-window-body .workspace-tab-header-container {
+  display: none;
 }
-.csn-sticky-window-body > .workspace-split {
+body .csn-sticky-window-body > .workspace-split {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
@@ -158,12 +158,12 @@
   flex-direction: column;
   box-sizing: border-box;
 }
-.csn-sticky-window-body .workspace-leaf,
-.csn-sticky-window-body .workspace-split {
+body .csn-sticky-window-body .workspace-leaf,
+body .csn-sticky-window-body .workspace-split {
   min-height: 0;
 }
-.csn-sticky-window-body .workspace-tabs,
-.csn-sticky-window-body .workspace-leaf {
+body .csn-sticky-window-body .workspace-tabs,
+body .csn-sticky-window-body .workspace-leaf {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -171,18 +171,18 @@
   height: auto;
   width: 100%;
 }
-.csn-sticky-window-body .workspace-leaf-content {
+body .csn-sticky-window-body .workspace-leaf-content {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 !important;
-  margin: 0 !important;
+  padding: 0;
+  margin: 0;
 }
-.csn-sticky-window-body .workspace-split .view-content {
+body .csn-sticky-window-body .workspace-split .view-content {
   background-color: var(--csn-b);
 }
-.csn-sticky-window-body .view-content {
+body .csn-sticky-window-body .view-content {
   word-break: break-all;
   background-color: var(--csn-b);
   /*
@@ -193,62 +193,62 @@
   /* !编辑模式 — 对齐 ASUI：仅处理 scroller padding + 高度链，勿对 .cm-sizer 等一概 min-width */
   /* !阅读模式 */
 }
-.csn-sticky-window-body .view-content .empty-state {
+body .csn-sticky-window-body .view-content .empty-state {
   display: none;
 }
-.csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 {
+body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 {
   zoom: var(--csn-sticky-view-content-zoom, 0.65);
-  padding: 0 !important;
+  padding: 0;
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
 }
-.csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-editor {
+body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-editor {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-editor > .cm-scroller {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  overflow: auto !important;
-  padding: 0 !important;
+body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-editor > .cm-scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
 }
-.csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-content {
-  max-width: none !important;
-  width: 100% !important;
+body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-content {
+  max-width: none;
+  width: 100%;
 }
-.csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-contentContainer {
+body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-contentContainer {
   padding: 0px;
   box-sizing: border-box;
 }
-.csn-sticky-window-body .view-content .markdown-reading-view {
+body .csn-sticky-window-body .view-content .markdown-reading-view {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-.csn-sticky-window-body .view-content .markdown-reading-view .markdown-preview-view {
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 10px !important;
-  width: 100% !important;
+body .csn-sticky-window-body .view-content .markdown-reading-view .markdown-preview-view {
+  max-width: none;
+  margin: 0;
+  padding: 10px;
+  width: 100%;
   flex: 1 1 auto;
   min-height: 0;
   box-sizing: border-box;
   overflow: auto;
   zoom: var(--csn-sticky-view-content-zoom, 0.65);
 }
-.csn-sticky-window-body .view-content .markdown-preview-view::-webkit-scrollbar {
-  width: 0px !important;
+body .csn-sticky-window-body .view-content .markdown-preview-view::-webkit-scrollbar {
+  width: 0px;
 }
-.csn-sticky-window-body .view-content .markdown-preview-sizer.markdown-preview-section,
-.csn-sticky-window-body .view-content .cm-s-obsidian .cm-content {
-  padding: 0px !important;
+body .csn-sticky-window-body .view-content .markdown-preview-sizer.markdown-preview-section,
+body .csn-sticky-window-body .view-content .cm-s-obsidian .cm-content {
+  padding: 0px;
 }
 /*
  * 与 ASUI「body .asui-preview-window .view-content」相同作用：抬高优先级。
@@ -340,14 +340,14 @@ body .csn-sticky-window-body .view-content {
 .csn-sticky-sheet-action:hover {
   background-color: var(--background-modifier-hover);
 }
-.csn-sticky-sheet-action.csn-sticky-sheet-action--danger {
+body .csn-sticky .csn-sticky-sheet-action.csn-sticky-sheet-action--danger {
   --csn-sheet-danger: var(--text-error, var(--color-red, #e93147));
-  color: var(--csn-sheet-danger) !important;
+  color: var(--csn-sheet-danger);
   background: transparent;
 }
-.csn-sticky-sheet-action.csn-sticky-sheet-action--danger:hover {
+body .csn-sticky .csn-sticky-sheet-action.csn-sticky-sheet-action--danger:hover {
   background-color: var(--background-modifier-hover);
-  color: var(--csn-sheet-danger) !important;
+  color: var(--csn-sheet-danger);
 }
 .csn-sticky-sheet-action .csn-sticky-sheet-action-icon {
   display: flex;
@@ -358,9 +358,9 @@ body .csn-sticky-window-body .view-content {
   justify-content: center;
   color: inherit;
 }
-.csn-sticky-sheet-action.csn-sticky-sheet-action--danger .csn-sticky-sheet-action-icon,
-.csn-sticky-sheet-action.csn-sticky-sheet-action--danger .csn-sticky-sheet-action-icon svg {
-  color: var(--csn-sheet-danger) !important;
+body .csn-sticky .csn-sticky-sheet-action.csn-sticky-sheet-action--danger .csn-sticky-sheet-action-icon,
+body .csn-sticky .csn-sticky-sheet-action.csn-sticky-sheet-action--danger .csn-sticky-sheet-action-icon svg {
+  color: var(--csn-sheet-danger);
 }
 .csn-sticky-sheet-action .csn-sticky-sheet-action-icon svg {
   width: 18px;
@@ -572,11 +572,11 @@ body .csn-sticky-window-body .view-content {
   --csn-b: #2a2a2a;
 }
 /* YAML 显示开关 */
-.csn-sticky:not(.csn-metadata-on) .metadata-container {
-  display: none !important;
+body .csn-sticky:not(.csn-metadata-on) .metadata-container {
+  display: none;
 }
-.csn-sticky.csn-metadata-on .metadata-container {
-  display: block !important;
+body .csn-sticky.csn-metadata-on .metadata-container {
+  display: block;
 }
 /* 渚跨鍒楄〃 */
 .workspace-leaf-content .view-content.csn-list-view {

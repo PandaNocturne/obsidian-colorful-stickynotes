@@ -723,7 +723,12 @@ export class StickyNotePopover {
 	private applyCollapsedClass(): void {
 		const expanding = this.rootEl.hasClass('csn-sticky--collapsed') && !this.collapsed;
 		this.rootEl.toggleClass('csn-sticky--collapsed', this.collapsed);
-		if (this.collapsed) this.closeSettingsSheet();
+		if (this.collapsed) {
+			this.rootEl.style.removeProperty('height');
+			this.closeSettingsSheet();
+		} else if (this.expandedH > 0) {
+			this.rootEl.style.height = `${this.expandedH}px`;
+		}
 		this.syncFoldButtonUi();
 		if (expanding) {
 			window.requestAnimationFrame(() => {
@@ -1100,7 +1105,11 @@ export class StickyNotePopover {
 		const top = Math.min(maxTop, Math.max(minPos, bounds.top));
 
 		this.rootEl.style.width = `${width}px`;
-		this.rootEl.style.height = `${height}px`;
+		if (this.collapsed) {
+			this.rootEl.style.removeProperty('height');
+		} else {
+			this.rootEl.style.height = `${height}px`;
+		}
 		this.rootEl.style.left = `${left}px`;
 		this.rootEl.style.top = `${top}px`;
 

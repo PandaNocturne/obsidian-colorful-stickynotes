@@ -31,6 +31,7 @@ import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
 import { ListBatchDeleteConfirmModal } from '../modals/ListBatchDeleteConfirmModal';
+import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-folder';
 
 /** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
 function listPreviewEmbedMarkdown(file: TFile): string {
@@ -154,15 +155,6 @@ function buildStickyBgSubmenuTitle(
 	}
 	frag.appendChild(row);
 	return frag;
-}
-
-function collectMarkdownUnderFolder(folder: TFolder): TFile[] {
-	const out: TFile[] = [];
-	for (const c of folder.children) {
-		if (c instanceof TFile && c.extension === 'md') out.push(c);
-		else if (c instanceof TFolder) out.push(...collectMarkdownUnderFolder(c));
-	}
-	return out;
 }
 
 /** 工作区快照中、实际存在于便笺目录下的唯一 .md 路径数（与列表「按工作区筛选」一致）。 */
