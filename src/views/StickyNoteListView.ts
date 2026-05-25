@@ -1367,17 +1367,6 @@ export class StickyNoteListView extends ItemView {
 
 		const toolbarLeft = toolbar.createDiv({ cls: 'csn-list-toolbar-left' });
 
-		const floatGroup = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-dropdown-group' });
-		this.floatFilterDropdownBtn = floatGroup.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-list-toolbar-icon-btn',
-			attr: { 'aria-haspopup': 'menu' }
-		});
-		this.registerDomEvent(this.floatFilterDropdownBtn, 'click', (evt: MouseEvent) => {
-			evt.preventDefault();
-			this.openFloatFilterMenu(evt);
-		});
-
 		const workspaceGroup = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-dropdown-group' });
 		this.workspaceFilterDropdownBtn = workspaceGroup.createEl('button', {
 			type: 'button',
@@ -1387,6 +1376,17 @@ export class StickyNoteListView extends ItemView {
 		this.registerDomEvent(this.workspaceFilterDropdownBtn, 'click', (evt: MouseEvent) => {
 			evt.preventDefault();
 			this.openWorkspaceFilterMenu(evt);
+		});
+
+		const floatGroup = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-dropdown-group' });
+		this.floatFilterDropdownBtn = floatGroup.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn',
+			attr: { 'aria-haspopup': 'menu' }
+		});
+		this.registerDomEvent(this.floatFilterDropdownBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openFloatFilterMenu(evt);
 		});
 
 		const archiveGroup = toolbarLeft.createDiv({ cls: 'csn-list-toolbar-dropdown-group' });
