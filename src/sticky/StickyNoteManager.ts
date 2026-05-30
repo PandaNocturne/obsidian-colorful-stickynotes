@@ -18,6 +18,7 @@ import {
 } from '../utils/sticky-bg-from-file';
 import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-folder';
 import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
+import { FM_STICKY_ID_KEY, getStickyIdFromMetadataCache } from '../utils/sticky-id-from-file';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
 import {
@@ -39,7 +40,6 @@ type PreparedExistingStickyOpen = {
 };
 
 const FM_COLOR_KEY = 'colorful-sticky-bg';
-const FM_ID_KEY = 'colorful-sticky-id';
 const FM_ARCHIVED_KEY = 'colorful-sticky-archived';
 const STICKY_EDGE_GAP_PX = 5;
 const STICKY_TOP_ALIGN_SNAP_PX = 10;
@@ -118,6 +118,8 @@ export class StickyNoteManager {
 	private pendingDeleteSafetyTimer: number | null = null;
 
 	workspaces: WorkspacesFile = defaultWorkspacesFile();
+	/** `colorful-sticky-id` → 当前路径；便笺目录内扫描，路径变更后用于工作区恢复。 */
+	private stickyIdToPathIndex: Map<string, string> | null = null;
 
 	constructor(
 		private readonly plugin: ColorfulStickyNotesPlugin,
@@ -172,6 +174,9 @@ export class StickyNoteManager {
 
 	async init(): Promise<void> {
 		this.workspaces = await loadWorkspacesFile(this.plugin);
+		if (this.reconcileAllWorkspaceWindowPaths()) {
+			await this.flushWorkspacesToDisk();
+		}
 		this.plugin.registerEvent(
 			this.app.workspace.on('active-leaf-change', leaf => {
 				if (!leaf) return;
@@ -193,6 +198,22 @@ export class StickyNoteManager {
 				const p = normalizePath(f.path);
 				if (p !== root && !p.startsWith(`${root}/`)) return;
 				this.pruneStickyPathFromAllWorkspaces(f.path);
+				this.invalidateStickyIdIndex();
+			})
+		);
+		this.plugin.registerEvent(
+			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
+				if (!(file instanceof TFile) || file.extension !== 'md') return;
+				const oldN = normalizePath(oldPath);
+				const newN = normalizePath(file.path);
+				if (
+					!this.isPathUnderStickyFolder(oldN) &&
+					!this.isPathUnderStickyFolder(newN)
+				) {
+					return;
+				}
+				this.relocateStickyPathInAllWorkspaces(oldN, newN);
+				this.invalidateStickyIdIndex();
 			})
 		);
 	}
@@ -362,9 +383,111 @@ export class StickyNoteManager {
 	}
 
 	private readStickyIdFromCache(file: TFile): string | null {
-		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
-		const v = fm?.[FM_ID_KEY];
-		return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
+		return getStickyIdFromMetadataCache(this.app, file);
+	}
+
+	private getStickyNotesFolder(): TFolder | null {
+		const folder = this.app.vault.getFolderByPath(
+			normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes')
+		);
+		return folder instanceof TFolder ? folder : null;
+	}
+
+	private invalidateStickyIdIndex(): void {
+		this.stickyIdToPathIndex = null;
+	}
+
+	private buildStickyIdToPathIndex(): Map<string, string> {
+		const map = new Map<string, string>();
+		const folder = this.getStickyNotesFolder();
+		if (!folder) return map;
+		for (const f of collectMarkdownUnderFolder(folder)) {
+			const id = this.readStickyIdFromCache(f);
+			if (!id || map.has(id)) continue;
+			map.set(id, f.path);
+		}
+		return map;
+	}
+
+	private stickyIdToPathIndexOrBuild(): Map<string, string> {
+		if (!this.stickyIdToPathIndex) {
+			this.stickyIdToPathIndex = this.buildStickyIdToPathIndex();
+		}
+		return this.stickyIdToPathIndex;
+	}
+
+	private workspaceWindowMergeKey(w: SerializedStickyWindow): string {
+		const id = typeof w.stickyId === 'string' ? w.stickyId.trim() : '';
+		if (id.length > 0) return `id:${id}`;
+		return `path:${normalizePath(w.path)}`;
+	}
+
+	private findWorkspaceWindowIndex(ws: StickyWorkspace, file: TFile): number {
+		const norm = normalizePath(file.path);
+		const fileStickyId = this.readStickyIdFromCache(file);
+		return ws.windows.findIndex(w => {
+			if (normalizePath(w.path) === norm) return true;
+			if (fileStickyId && w.stickyId === fileStickyId) return true;
+			return false;
+		});
+	}
+
+	/** 将工作区快照条目解析为当前库内路径（改名/移动后按 `colorful-sticky-id` 在便笺目录查找）。 */
+	resolveWorkspaceMemberPath(serial: SerializedStickyWindow): string | null {
+		return this.resolveStickyFileForSerialized(serial)?.path ?? null;
+	}
+
+	/** 工作区成员对应的当前路径集合（供列表「按工作区筛选」等）。 */
+	getWorkspaceMemberPathSet(ws: StickyWorkspace): Set<string> {
+		const out = new Set<string>();
+		for (const w of ws.windows) {
+			out.add(normalizePath(this.resolveWorkspaceMemberPath(w) ?? w.path));
+		}
+		return out;
+	}
+
+	/**
+	 * 根据 `stickyId` 将快照中的旧路径更新为当前路径；返回是否有变更。
+	 */
+	reconcileAllWorkspaceWindowPaths(): boolean {
+		let changed = false;
+		const touch = (ws: StickyWorkspace): void => {
+			for (const w of ws.windows) {
+				const file = this.resolveStickyFileForSerialized(w);
+				if (!file) continue;
+				const nextPath = normalizePath(file.path);
+				if (normalizePath(w.path) !== nextPath) {
+					w.path = file.path;
+					changed = true;
+				}
+				const id = this.readStickyIdFromCache(file);
+				if (id && w.stickyId !== id) {
+					w.stickyId = id;
+					changed = true;
+				}
+			}
+		};
+		for (const ws of this.workspaces.workspaces) touch(ws);
+		for (const ws of this.workspaces.trash) touch(ws);
+		return changed;
+	}
+
+	private relocateStickyPathInAllWorkspaces(oldPath: string, newPath: string): void {
+		const oldN = normalizePath(oldPath);
+		const newN = normalizePath(newPath);
+		if (oldN === newN) return;
+		let changed = false;
+		const relocate = (ws: StickyWorkspace): void => {
+			for (const w of ws.windows) {
+				if (normalizePath(w.path) === oldN) {
+					w.path = newPath;
+					changed = true;
+				}
+			}
+		};
+		for (const ws of this.workspaces.workspaces) relocate(ws);
+		for (const ws of this.workspaces.trash) relocate(ws);
+		if (changed) this.scheduleSaveWorkspaces();
 	}
 
 	/** 补齐便笺 frontmatter：`id`、`archived`、背景色等默认值。 */
@@ -376,9 +499,9 @@ export class StickyNoteManager {
 		const preferredColor = opts?.preferredColor;
 		await this.app.fileManager.processFrontMatter(file, fm => {
 			const obj = fm as Record<string, unknown>;
-			const curId = obj[FM_ID_KEY];
+			const curId = obj[FM_STICKY_ID_KEY];
 			if (typeof curId !== 'string' || curId.trim().length === 0) {
-				obj[FM_ID_KEY] = preferredId && preferredId.length > 0 ? preferredId : this.newId();
+				obj[FM_STICKY_ID_KEY] = preferredId && preferredId.length > 0 ? preferredId : this.newId();
 			}
 			if (typeof obj[FM_ARCHIVED_KEY] !== 'boolean') {
 				obj[FM_ARCHIVED_KEY] = false;
@@ -397,24 +520,37 @@ export class StickyNoteManager {
 	private resolveStickyFileByStickyId(stickyId: string): TFile | null {
 		const want = stickyId.trim();
 		if (!want) return null;
-		const folder = this.app.vault.getFolderByPath(
-			normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes')
-		);
-		if (!(folder instanceof TFolder)) return null;
+		const indexed = this.stickyIdToPathIndexOrBuild().get(want);
+		if (indexed) {
+			const hit = this.app.vault.getAbstractFileByPath(indexed);
+			if (hit instanceof TFile) {
+				const got = this.readStickyIdFromCache(hit);
+				if (got === want) return hit;
+			}
+		}
+		const folder = this.getStickyNotesFolder();
+		if (!folder) return null;
 		for (const f of collectMarkdownUnderFolder(folder)) {
 			const got = this.readStickyIdFromCache(f);
-			if (got === want) return f;
+			if (got === want) {
+				this.stickyIdToPathIndexOrBuild().set(want, f.path);
+				return f;
+			}
 		}
 		return null;
 	}
 
 	private resolveStickyFileForSerialized(serial: SerializedStickyWindow): TFile | null {
-		const byPath = this.app.vault.getAbstractFileByPath(serial.path);
-		if (byPath instanceof TFile) return byPath;
-		if (typeof serial.stickyId === 'string' && serial.stickyId.trim().length > 0) {
-			const byId = this.resolveStickyFileByStickyId(serial.stickyId);
+		const wantId = typeof serial.stickyId === 'string' ? serial.stickyId.trim() : '';
+		if (wantId.length > 0) {
+			const byId = this.resolveStickyFileByStickyId(wantId);
 			if (byId) return byId;
 		}
+		const byPath = this.app.vault.getAbstractFileByPath(serial.path);
+		if (!(byPath instanceof TFile)) return null;
+		if (!wantId) return byPath;
+		const pathId = this.readStickyIdFromCache(byPath);
+		if (!pathId || pathId === wantId) return byPath;
 		return null;
 	}
 
@@ -457,14 +593,21 @@ export class StickyNoteManager {
 		existing: readonly SerializedStickyWindow[],
 		open: SerializedStickyWindow[]
 	): SerializedStickyWindow[] {
-		const byPath = new Map<string, SerializedStickyWindow>();
+		const byKey = new Map<string, SerializedStickyWindow>();
 		for (const w of existing) {
-			byPath.set(normalizePath(w.path), { ...w, open: false });
+			byKey.set(this.workspaceWindowMergeKey(w), { ...w, open: false });
 		}
 		for (const w of open) {
-			byPath.set(normalizePath(w.path), { ...w, open: true });
+			const key = this.workspaceWindowMergeKey(w);
+			const prev = byKey.get(key);
+			byKey.set(key, {
+				...(prev ?? {}),
+				...w,
+				open: true,
+				path: w.path
+			});
 		}
-		return [...byPath.values()];
+		return [...byKey.values()];
 	}
 
 	private isWorkspaceStickyRestoreTarget(w: SerializedStickyWindow): boolean {
@@ -480,8 +623,7 @@ export class StickyNoteManager {
 	isStickyInWorkspace(file: TFile, wsId: string): boolean {
 		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
 		if (!ws) return false;
-		const norm = normalizePath(file.path);
-		return ws.windows.some(w => normalizePath(w.path) === norm);
+		return this.findWorkspaceWindowIndex(ws, file) >= 0;
 	}
 
 	private buildSerializedWindowForFile(
@@ -522,8 +664,7 @@ export class StickyNoteManager {
 	}
 
 	private upsertStickyInWorkspace(ws: StickyWorkspace, file: TFile, entry: SerializedStickyWindow): boolean {
-		const norm = normalizePath(file.path);
-		const idx = ws.windows.findIndex(w => normalizePath(w.path) === norm);
+		const idx = this.findWorkspaceWindowIndex(ws, file);
 		if (idx >= 0) {
 			ws.windows[idx] = { ...ws.windows[idx]!, ...entry, path: file.path };
 			return true;
@@ -559,9 +700,8 @@ export class StickyNoteManager {
 		if (!target || files.length === 0) return;
 		let changed = false;
 		for (const f of files) {
-			const norm = normalizePath(f.path);
 			let entry: SerializedStickyWindow | undefined;
-			const activeIdx = active.windows.findIndex(w => normalizePath(w.path) === norm);
+			const activeIdx = this.findWorkspaceWindowIndex(active, f);
 			if (activeIdx >= 0) {
 				entry = active.windows.splice(activeIdx, 1)[0];
 				changed = true;
@@ -588,8 +728,7 @@ export class StickyNoteManager {
 	ensureStickyInActiveWorkspace(file: TFile): void {
 		const ws = this.activeWorkspace();
 		if (!ws) return;
-		const norm = normalizePath(file.path);
-		if (ws.windows.some(w => normalizePath(w.path) === norm)) return;
+		if (this.findWorkspaceWindowIndex(ws, file) >= 0) return;
 		ws.windows.push(this.buildSerializedWindowForFile(file, { open: true }));
 		ws.updatedAt = Date.now();
 		this.scheduleSaveWorkspaces();
@@ -602,7 +741,16 @@ export class StickyNoteManager {
 		if (!ws || files.length === 0) return;
 		let changed = false;
 		const removeNorms = new Set(files.map(f => normalizePath(f.path)));
-		const next = ws.windows.filter(w => !removeNorms.has(normalizePath(w.path)));
+		const removeIds = new Set<string>();
+		for (const f of files) {
+			const sid = this.readStickyIdFromCache(f);
+			if (sid) removeIds.add(sid);
+		}
+		const next = ws.windows.filter(w => {
+			if (removeNorms.has(normalizePath(w.path))) return false;
+			if (w.stickyId && removeIds.has(w.stickyId)) return false;
+			return true;
+		});
 		if (next.length !== ws.windows.length) {
 			ws.windows = next;
 			changed = true;
@@ -1512,8 +1660,15 @@ export class StickyNoteManager {
 	): Promise<PreparedExistingStickyOpen | null> {
 		const file = this.resolveStickyFileForSerialized(serial);
 		if (!(file instanceof TFile)) {
-			new Notice(`找不到便笺文件：${serial.path}`);
+			const hint =
+				typeof serial.stickyId === 'string' && serial.stickyId.trim().length > 0
+					? `${serial.path}（id: ${serial.stickyId}）`
+					: serial.path;
+			new Notice(`找不到便笺文件：${hint}`);
 			return null;
+		}
+		if (normalizePath(serial.path) !== normalizePath(file.path)) {
+			serial.path = file.path;
 		}
 		const id = serial.id || this.newId();
 		const b = serial.bounds ?? this.getDefaultBounds();
@@ -1612,17 +1767,29 @@ export class StickyNoteManager {
 		if (switchToken !== undefined && this.isStaleWorkspaceSwitch(switchToken)) return;
 		const ws = this.activeWorkspace();
 		const openPaths = new Set<string>();
+		const openStickyIds = new Set<string>();
 		for (const pop of this.popovers.values()) {
 			const vf =
 				pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
-			if (vf) openPaths.add(vf.path);
+			if (!vf) continue;
+			openPaths.add(normalizePath(vf.path));
+			const sid = this.readStickyIdFromCache(vf);
+			if (sid) openStickyIds.add(sid);
 		}
 		if (!ws || ws.windows.length === 0) {
 			return;
 		}
-		const pending = ws.windows.filter(
-			w => this.isWorkspaceStickyRestoreTarget(w) && !openPaths.has(w.path)
-		);
+		const pending = ws.windows.filter(w => {
+			if (!this.isWorkspaceStickyRestoreTarget(w)) return false;
+			const resolved = this.resolveStickyFileForSerialized(w);
+			if (resolved) {
+				if (openPaths.has(normalizePath(resolved.path))) return false;
+			}
+			if (normalizePath(w.path) !== '' && openPaths.has(normalizePath(w.path))) return false;
+			const sid = typeof w.stickyId === 'string' ? w.stickyId.trim() : '';
+			if (sid && openStickyIds.has(sid)) return false;
+			return true;
+		});
 		if (pending.length === 0) return;
 		const preparedList = (
 			await Promise.all(pending.map(w => this.prepareExistingStickyShell(w)))

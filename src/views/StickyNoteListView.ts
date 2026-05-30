@@ -157,17 +157,13 @@ function buildStickyBgSubmenuTitle(
 	return frag;
 }
 
-/** 工作区快照中、实际存在于便笺目录下的唯一 .md 路径数（与列表「按工作区筛选」一致）。 */
+/** 工作区成员路径与便笺目录 .md 的交集数量（`memberPaths` 为按 id 解析后的当前路径）。 */
 function countWorkspaceStickyPathsInFolder(
-	ws: { windows: readonly { path: string }[] },
+	memberPaths: ReadonlySet<string>,
 	stickyMdPathSet: ReadonlySet<string>
 ): number {
-	const seen = new Set<string>();
 	let n = 0;
-	for (const w of ws.windows) {
-		const p = normalizePath(w.path);
-		if (seen.has(p)) continue;
-		seen.add(p);
+	for (const p of memberPaths) {
 		if (stickyMdPathSet.has(p)) n++;
 	}
 	return n;
@@ -1682,7 +1678,10 @@ export class StickyNoteListView extends ItemView {
 		});
 		const activeWs = this.plugin.stickies.activeWorkspace();
 		const activeCount = activeWs
-			? countWorkspaceStickyPathsInFolder(activeWs, stickyMdPathSet)
+			? countWorkspaceStickyPathsInFolder(
+					this.plugin.stickies.getWorkspaceMemberPathSet(activeWs),
+					stickyMdPathSet
+				)
 			: 0;
 		menu.addItem(item => {
 			item
@@ -1694,7 +1693,10 @@ export class StickyNoteListView extends ItemView {
 				});
 		});
 		for (const ws of this.plugin.stickies.workspaces.workspaces) {
-			const n = countWorkspaceStickyPathsInFolder(ws, stickyMdPathSet);
+			const n = countWorkspaceStickyPathsInFolder(
+				this.plugin.stickies.getWorkspaceMemberPathSet(ws),
+				stickyMdPathSet
+			);
 			menu.addItem(item => {
 				item
 					.setTitle(titleWithCount(ws.name, n))
@@ -2080,7 +2082,7 @@ export class StickyNoteListView extends ItemView {
 			if (wsFilterId) {
 				const ws = this.resolveListWorkspaceFilterWorkspace(wsFilterId);
 				if (ws) {
-					const inWs = new Set(ws.windows.map(w => normalizePath(w.path)));
+					const inWs = this.plugin.stickies.getWorkspaceMemberPathSet(ws);
 					files = files.filter(f => inWs.has(normalizePath(f.path)));
 				} else {
 					files = [];
