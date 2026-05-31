@@ -453,6 +453,22 @@ export class StickyNoteManager {
 		return out;
 	}
 
+	/** 已归入任意工作区的成员路径并集（活动区 + 回收站归档区；用于「未分类」筛选）。 */
+	getAllAssignedWorkspaceMemberPathSet(): Set<string> {
+		const out = new Set<string>();
+		for (const ws of this.workspaces.workspaces) {
+			for (const p of this.getWorkspaceMemberPathSet(ws)) {
+				out.add(p);
+			}
+		}
+		for (const ws of this.workspaces.trash) {
+			for (const p of this.getWorkspaceMemberPathSet(ws)) {
+				out.add(p);
+			}
+		}
+		return out;
+	}
+
 	/**
 	 * 根据 `stickyId` 将快照中的旧路径更新为当前路径；返回是否有变更。
 	 */
@@ -729,22 +745,40 @@ export class StickyNoteManager {
 		target.updatedAt = Date.now();
 		await this.flushWorkspacesToDisk();
 		await this.syncStickyWorkspaceYamlForFiles(files);
+		await this.closeOpenStickiesNotInActiveWorkspace();
 		this.refreshStickyListIfActiveWorkspaceFilter();
 		this.plugin.refreshStickyListIfOpen();
 	}
 
-	/** 将便笺加入当前活动工作区成员（若尚无活动工作区则忽略）。 */
-	ensureStickyInActiveWorkspace(file: TFile): void {
+	/** 将便笺加入当前活动工作区成员，并同步 frontmatter 工作区属性。 */
+	async ensureStickyInActiveWorkspace(file: TFile): Promise<void> {
 		const ws = this.activeWorkspace();
 		if (!ws) return;
-		if (this.findWorkspaceWindowIndex(ws, file) >= 0) return;
-		ws.windows.push(this.buildSerializedWindowForFile(file, { open: true }));
-		ws.updatedAt = Date.now();
-		this.scheduleSaveWorkspaces();
-		void this.syncStickyWorkspaceYamlForFile(file);
+		if (this.findWorkspaceWindowIndex(ws, file) < 0) {
+			ws.windows.push(this.buildSerializedWindowForFile(file, { open: true }));
+			ws.updatedAt = Date.now();
+			this.scheduleSaveWorkspaces();
+		}
+		await this.syncStickyWorkspaceYamlForFile(file).catch(() => undefined);
 	}
 
-	/** 从指定工作区移除便笺成员（不关闭浮动窗口）。 */
+	/** 关闭已打开、但不在当前活动工作区成员中的浮动便笺。 */
+	private async closeOpenStickiesNotInActiveWorkspace(): Promise<void> {
+		const ws = this.activeWorkspace();
+		if (!ws) return;
+		const toClose: TFile[] = [];
+		for (const pop of this.popovers.values()) {
+			const vf =
+				pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
+			if (!vf || this.isStickyInWorkspace(vf, ws.id)) continue;
+			toClose.push(vf);
+		}
+		for (const f of toClose) {
+			await this.closeStickyWindowForFile(f);
+		}
+	}
+
+	/** 从指定工作区移除便笺成员；若从当前活动工作区移除则自动关闭对应浮动便笺。 */
 	async removeFilesFromWorkspace(wsId: string, files: TFile[]): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
 		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
@@ -769,11 +803,14 @@ export class StickyNoteManager {
 		ws.updatedAt = Date.now();
 		await this.flushWorkspacesToDisk();
 		await this.syncStickyWorkspaceYamlForFiles(files);
+		if (this.activeWorkspace()?.id === wsId) {
+			await this.closeOpenStickiesNotInActiveWorkspace();
+		}
 		this.refreshStickyListIfActiveWorkspaceFilter();
 		this.plugin.refreshStickyListIfOpen();
 	}
 
-	/** 从当前活动工作区移除便笺成员（不关闭浮动窗口）。 */
+	/** 从当前活动工作区移除便笺成员；若便笺已打开则自动关闭浮动窗口。 */
 	async removeStickyFromActiveWorkspace(file: TFile): Promise<boolean> {
 		const ws = this.activeWorkspace();
 		if (!ws) return false;
@@ -1253,7 +1290,7 @@ export class StickyNoteManager {
 				if (file.extension === 'md' && opts?.markdownMode) {
 					await pop.setMarkdownViewMode(opts.markdownMode);
 				}
-				this.ensureStickyInActiveWorkspace(file);
+				await this.ensureStickyInActiveWorkspace(file);
 				return;
 			}
 		}
@@ -1465,6 +1502,7 @@ export class StickyNoteManager {
 		await this.ensureStickyFrontmatterDefaults(f, { preferredId: id, preferredColor: color }).catch(() => undefined);
 		this.bringStickyToFront(pop);
 		this.persistOpenWindows();
+		await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
 		this.notifyStickyListOpenIndicators();
 	}
 
@@ -1851,6 +1889,9 @@ export class StickyNoteManager {
 		/* 批量恢复时禁止在此处 persist：并行完成顺序会导致快照只含部分窗口并覆盖磁盘。 */
 		if (opts.persistLayout !== false) {
 			this.persistOpenWindows();
+		}
+		if (opts.workspaceActive) {
+			await this.ensureStickyInActiveWorkspace(file);
 		}
 		this.notifyStickyListOpenIndicators();
 	}

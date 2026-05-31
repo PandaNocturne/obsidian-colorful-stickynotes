@@ -96,3 +96,6 @@ export type NoteListArchiveFilter = 'all' | 'unarchived' | 'archived';
 /** 便笺列表工作区筛选：跟随当前活动工作区（非具体工作区 id）。 */
 export const NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID = '@active-workspace';
 
+/** 便笺列表工作区筛选：未加入任何活动工作区的便笺。 */
+export const NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID = '@uncategorized-workspace';
+

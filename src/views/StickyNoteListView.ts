@@ -20,6 +20,7 @@ import { clampViewContentZoom } from '../settings';
 import {
 	VIEW_STICKY_NOTE_LIST,
 	NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID,
+	NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID,
 	type NoteListArchiveFilter,
 	type NoteListFloatOpenFilter,
 	type NoteListSort,
@@ -165,6 +166,18 @@ function countWorkspaceStickyPathsInFolder(
 	let n = 0;
 	for (const p of memberPaths) {
 		if (stickyMdPathSet.has(p)) n++;
+	}
+	return n;
+}
+
+/** 便笺目录中未加入任何活动/归档工作区的 .md 数量。 */
+function countUncategorizedStickyPathsInFolder(
+	stickyMdPathSet: ReadonlySet<string>,
+	categorizedPaths: ReadonlySet<string>
+): number {
+	let n = 0;
+	for (const p of stickyMdPathSet) {
+		if (!categorizedPaths.has(p)) n++;
 	}
 	return n;
 }
@@ -1605,6 +1618,8 @@ export class StickyNoteListView extends ItemView {
 		let wfTitle = titleNone;
 		if (wfId === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID) {
 			wfTitle = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_ACTIVE');
+		} else if (wfId === NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID) {
+			wfTitle = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_UNCATEGORIZED');
 		} else if (wfId) {
 			const ws = this.plugin.stickies.workspaces.workspaces.find(w => w.id === wfId);
 			wfTitle = ws?.name ?? titleNone;
@@ -1690,6 +1705,19 @@ export class StickyNoteListView extends ItemView {
 				.setChecked(cur === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID)
 				.onClick(() => {
 					void this.setListWorkspaceFilterId(NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID);
+				});
+		});
+		const categorizedPaths = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
+		const uncategorizedCount = countUncategorizedStickyPathsInFolder(stickyMdPathSet, categorizedPaths);
+		menu.addItem(item => {
+			item
+				.setTitle(
+					titleWithCount(t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_UNCATEGORIZED'), uncategorizedCount)
+				)
+				.setIcon('folder-x')
+				.setChecked(cur === NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID)
+				.onClick(() => {
+					void this.setListWorkspaceFilterId(NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID);
 				});
 		});
 		for (const ws of this.plugin.stickies.workspaces.workspaces) {
@@ -2079,7 +2107,10 @@ export class StickyNoteListView extends ItemView {
 
 			let files = collectMarkdownUnderFolder(folderAbs);
 			const wsFilterId = this.plugin.settings.noteListWorkspaceFilterId;
-			if (wsFilterId) {
+			if (wsFilterId === NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID) {
+				const categorized = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
+				files = files.filter(f => !categorized.has(normalizePath(f.path)));
+			} else if (wsFilterId) {
 				const ws = this.resolveListWorkspaceFilterWorkspace(wsFilterId);
 				if (ws) {
 					const inWs = this.plugin.stickies.getWorkspaceMemberPathSet(ws);
