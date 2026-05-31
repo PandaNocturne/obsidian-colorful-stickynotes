@@ -20,6 +20,12 @@ import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-fold
 import { isBlankStickyMarkdown } from '../utils/is-blank-sticky-markdown';
 import { FM_STICKY_ID_KEY, getStickyIdFromMetadataCache } from '../utils/sticky-id-from-file';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
+import {
+	FM_STICKY_ARCHIVED_WORKSPACES_KEY,
+	FM_STICKY_WORKSPACES_KEY,
+	resolveStickyArchivedWorkspacesForFile,
+	resolveStickyWorkspacesForFile
+} from '../utils/sticky-workspace-yaml';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
 import {
 	defaultWorkspacesFile,
@@ -177,6 +183,7 @@ export class StickyNoteManager {
 		if (this.reconcileAllWorkspaceWindowPaths()) {
 			await this.flushWorkspacesToDisk();
 		}
+		await this.reconcileWorkspacesFromStickyYaml();
 		this.plugin.registerEvent(
 			this.app.workspace.on('active-leaf-change', leaf => {
 				if (!leaf) return;
@@ -687,6 +694,7 @@ export class StickyNoteManager {
 		if (!changed) return;
 		ws.updatedAt = Date.now();
 		await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForFiles(files);
 		this.refreshStickyListIfActiveWorkspaceFilter();
 		this.plugin.refreshStickyListIfOpen();
 	}
@@ -720,6 +728,7 @@ export class StickyNoteManager {
 		active.updatedAt = Date.now();
 		target.updatedAt = Date.now();
 		await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForFiles(files);
 		this.refreshStickyListIfActiveWorkspaceFilter();
 		this.plugin.refreshStickyListIfOpen();
 	}
@@ -732,6 +741,7 @@ export class StickyNoteManager {
 		ws.windows.push(this.buildSerializedWindowForFile(file, { open: true }));
 		ws.updatedAt = Date.now();
 		this.scheduleSaveWorkspaces();
+		void this.syncStickyWorkspaceYamlForFile(file);
 	}
 
 	/** 从指定工作区移除便笺成员（不关闭浮动窗口）。 */
@@ -758,6 +768,7 @@ export class StickyNoteManager {
 		if (!changed) return;
 		ws.updatedAt = Date.now();
 		await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForFiles(files);
 		this.refreshStickyListIfActiveWorkspaceFilter();
 		this.plugin.refreshStickyListIfOpen();
 	}
@@ -783,9 +794,94 @@ export class StickyNoteManager {
 				changed = true;
 			}
 		};
+		const affected: TFile[] = [];
+		const f = this.app.vault.getAbstractFileByPath(path);
+		if (f instanceof TFile) affected.push(f);
 		for (const ws of this.workspaces.workspaces) prune(ws);
 		for (const ws of this.workspaces.trash) prune(ws);
-		if (changed) this.scheduleSaveWorkspaces();
+		if (changed) {
+			this.scheduleSaveWorkspaces();
+			void this.syncStickyWorkspaceYamlForFiles(affected);
+		}
+	}
+
+	private workspaceMemberFiles(ws: StickyWorkspace): TFile[] {
+		const out: TFile[] = [];
+		const seen = new Set<string>();
+		for (const w of ws.windows) {
+			const p = this.resolveWorkspaceMemberPath(w);
+			if (!p) continue;
+			const norm = normalizePath(p);
+			if (seen.has(norm)) continue;
+			seen.add(norm);
+			const hit = this.app.vault.getAbstractFileByPath(p);
+			if (hit instanceof TFile) out.push(hit);
+		}
+		return out;
+	}
+
+	/** 按当前 JSON 成员关系写回便笺 frontmatter 工作区列表。 */
+	private async syncStickyWorkspaceYamlForFile(file: TFile): Promise<void> {
+		if (file.extension !== 'md') return;
+		const activeIds: string[] = [];
+		const archivedIds: string[] = [];
+		for (const ws of this.workspaces.workspaces) {
+			if (this.findWorkspaceWindowIndex(ws, file) >= 0) activeIds.push(ws.id);
+		}
+		for (const ws of this.workspaces.trash) {
+			if (this.findWorkspaceWindowIndex(ws, file) >= 0) archivedIds.push(ws.id);
+		}
+		await this.app.fileManager.processFrontMatter(file, fm => {
+			const obj = fm as Record<string, unknown>;
+			if (activeIds.length > 0) obj[FM_STICKY_WORKSPACES_KEY] = activeIds;
+			else delete obj[FM_STICKY_WORKSPACES_KEY];
+			if (archivedIds.length > 0) obj[FM_STICKY_ARCHIVED_WORKSPACES_KEY] = archivedIds;
+			else delete obj[FM_STICKY_ARCHIVED_WORKSPACES_KEY];
+		});
+	}
+
+	private async syncStickyWorkspaceYamlForFiles(files: readonly TFile[]): Promise<void> {
+		const seen = new Set<string>();
+		const unique: TFile[] = [];
+		for (const f of files) {
+			const norm = normalizePath(f.path);
+			if (seen.has(norm)) continue;
+			seen.add(norm);
+			unique.push(f);
+		}
+		for (const f of unique) {
+			await this.syncStickyWorkspaceYamlForFile(f).catch(() => undefined);
+		}
+	}
+
+	private async syncStickyWorkspaceYamlForWorkspaceMembers(ws: StickyWorkspace): Promise<void> {
+		await this.syncStickyWorkspaceYamlForFiles(this.workspaceMemberFiles(ws));
+	}
+
+	/** 启动时从便笺 YAML 恢复 JSON 成员关系，再统一写回 YAML 与磁盘对齐。 */
+	private async reconcileWorkspacesFromStickyYaml(): Promise<void> {
+		const folder = this.getStickyNotesFolder();
+		if (!folder) return;
+		let changed = false;
+		const files = collectMarkdownUnderFolder(folder);
+		for (const file of files) {
+			const activeIds = await resolveStickyWorkspacesForFile(this.app, file);
+			for (const wsId of activeIds) {
+				const ws = this.workspaces.workspaces.find(w => w.id === wsId);
+				if (!ws || this.findWorkspaceWindowIndex(ws, file) >= 0) continue;
+				this.upsertStickyInWorkspace(ws, file, this.buildSerializedWindowForFile(file, { open: false }));
+				changed = true;
+			}
+			const archivedIds = await resolveStickyArchivedWorkspacesForFile(this.app, file);
+			for (const wsId of archivedIds) {
+				const ws = this.workspaces.trash.find(w => w.id === wsId);
+				if (!ws || this.findWorkspaceWindowIndex(ws, file) >= 0) continue;
+				this.upsertStickyInWorkspace(ws, file, this.buildSerializedWindowForFile(file, { open: false }));
+				changed = true;
+			}
+		}
+		if (changed) await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForFiles(files);
 	}
 
 	/**
@@ -809,6 +905,7 @@ export class StickyNoteManager {
 		this.workspaces.workspaces.push(nw);
 		this.workspaces.activeWorkspaceId = id;
 		await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForWorkspaceMembers(nw);
 	}
 
 	/**
@@ -965,6 +1062,7 @@ export class StickyNoteManager {
 		if (ws.remark) nw.remark = ws.remark;
 		this.workspaces.workspaces.push(nw);
 		await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForWorkspaceMembers(nw);
 		new Notice(t('NOTICE_WORKSPACE_COPIED'));
 	}
 
@@ -981,6 +1079,7 @@ export class StickyNoteManager {
 			if (idx < 0) return;
 			const [removed] = this.workspaces.workspaces.splice(idx, 1);
 			if (!removed) return;
+			const memberFiles = this.workspaceMemberFiles(removed);
 			const isBlank = !removed.windows || removed.windows.length === 0;
 			if (!isBlank) {
 				removed.updatedAt = Date.now();
@@ -1001,6 +1100,7 @@ export class StickyNoteManager {
 				this.saveTimer = null;
 			}
 			await this.flushWorkspacesToDisk();
+			if (!isBlank) await this.syncStickyWorkspaceYamlForFiles(memberFiles);
 			if (this.plugin.settings.noteListWorkspaceFilterId === wsId) {
 				this.plugin.settings.noteListWorkspaceFilterId = null;
 				void this.plugin.saveSettings();
@@ -1022,9 +1122,11 @@ export class StickyNoteManager {
 		const [w] = this.workspaces.trash.splice(tIdx, 1);
 		if (!w) return;
 		if (this.workspaces.workspaces.some(x => x.id === w.id)) return;
+		const memberFiles = this.workspaceMemberFiles(w);
 		w.updatedAt = Date.now();
 		this.workspaces.workspaces.push(w);
 		await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForFiles(memberFiles);
 		new Notice(t('NOTICE_WORKSPACE_RESTORED'));
 		this.plugin.refreshStickyListIfOpen();
 	}
@@ -1032,10 +1134,13 @@ export class StickyNoteManager {
 	/** 从回收站永久删除快照。 */
 	async permanentlyDeleteStickyWorkspaceFromTrash(wsId: string): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
+		const trashed = this.workspaces.trash.find(x => x.id === wsId);
+		const memberFiles = trashed ? this.workspaceMemberFiles(trashed) : [];
 		const before = this.workspaces.trash.length;
 		this.workspaces.trash = this.workspaces.trash.filter(x => x.id !== wsId);
 		if (this.workspaces.trash.length === before) return;
 		await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForFiles(memberFiles);
 		if (this.plugin.settings.noteListWorkspaceFilterId === wsId) {
 			this.plugin.settings.noteListWorkspaceFilterId = null;
 			void this.plugin.saveSettings();
