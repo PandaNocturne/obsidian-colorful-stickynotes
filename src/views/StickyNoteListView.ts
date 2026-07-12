@@ -886,7 +886,7 @@ export class StickyNoteListView extends ItemView {
 				try {
 					v.canvas?.selection?.clear();
 					for (const n of createdNodes) {
-						(v.canvas?.selection as Set<unknown> | undefined)?.add?.(n as unknown);
+						v.canvas?.selection?.add(n);
 					}
 					await v.canvas?.requestFrame?.();
 				} catch {

@@ -183,9 +183,7 @@ export class StickyNotePopover {
 				if (!(t instanceof Node) || !paneEl?.contains(t)) return;
 				const ws = this.plugin.app.workspace;
 				void ws.setActiveLeaf(leaf, { focus: false });
-				if (ws.activeLeaf === leaf) {
-					leaf.setEphemeralState({ focus: true });
-				}
+				leaf.setEphemeralState({ focus: true });
 			},
 			{ capture: true }
 		);

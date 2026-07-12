@@ -456,13 +456,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			this.settings.canvasLinkShowDragHint = DEFAULT_SETTINGS.canvasLinkShowDragHint;
 		}
 		// 批量拖入 Canvas 的网格排布设置（兼容旧版 `canvasLinkBatchStackDy`）。
-		const rawAny = raw as Record<string, unknown>;
 		let gridGap =
 			typeof this.settings.canvasLinkBatchGridGap === 'number' && Number.isFinite(this.settings.canvasLinkBatchGridGap)
 				? this.settings.canvasLinkBatchGridGap
 				: undefined;
 		if (gridGap === undefined) {
-			const legacyDy = rawAny.canvasLinkBatchStackDy;
+			const legacyDy = raw.canvasLinkBatchStackDy;
 			if (typeof legacyDy === 'number' && Number.isFinite(legacyDy)) {
 				gridGap = legacyDy;
 			}
@@ -477,9 +476,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.settings.canvasLinkBatchMaxPerRow = Math.max(1, Math.min(50, Math.round(maxPerRow)));
 
 		// 保留旧字段但做一次归一化，避免写回 data.json 时出现奇怪值
-		let stackDy = this.settings.canvasLinkBatchStackDy;
-		if (typeof stackDy !== 'number' || !Number.isFinite(stackDy)) stackDy = DEFAULT_SETTINGS.canvasLinkBatchStackDy;
-		this.settings.canvasLinkBatchStackDy = Math.max(0, Math.min(500, Math.round(stackDy)));
+		const legacyStackDy = st.canvasLinkBatchStackDy;
+		const stackDy =
+			typeof legacyStackDy === 'number' && Number.isFinite(legacyStackDy) ? legacyStackDy : 24;
+		st.canvasLinkBatchStackDy = Math.max(0, Math.min(500, Math.round(stackDy)));
 
 		const listFromDisk = await loadNoteListPersistedFile(this);
 		if (listFromDisk) {
