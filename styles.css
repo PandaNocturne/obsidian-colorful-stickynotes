@@ -1320,7 +1320,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 .modal.csn-workspace-panel-modal {
   width: 100%;
   max-width: min(80vw, 800px);
-  min-height: 200px;
+  height: min(60vh, 600px);
   max-height: min(85vh, 880px);
   display: flex;
   flex-direction: column;
@@ -1543,8 +1543,6 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   cursor: default;
 }
 .csn-ws-panel-grid {
-  max-height: min(60vh, 500px);
-  overflow: auto;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
