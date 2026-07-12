@@ -31,8 +31,11 @@ import {
 	defaultWorkspacesFile,
 	loadWorkspacesFile,
 	newStickyWorkspaceId,
+	newStickyWorkspaceTabGroupId,
+	resolveWorkspaceTabGroupId,
 	saveWorkspacesFile
 } from '../workspace-store';
+import { WS_TAB_FILTER_ALL, WS_TAB_GROUP_DEFAULT_ID } from '../types';
 import { StickyNotePopover } from './StickyNotePopover';
 
 /** 打开已有便笺前先建好外壳；正式 `setViewState`/打开文件后再与磁盘 YAML 等对齐全貌。 */
@@ -949,16 +952,23 @@ export class StickyNoteManager {
 	 * 持久化当前布局后新建空白工作区（无窗口快照）并写入列表；
 	 * 不切换活动工作区，不改变已打开的浮动便笺。
 	 * @param options.name 留空或仅空白则使用自动命名（便笺工作区 n）。
+	 * @param options.tabGroupId 归属顶部分组；缺省时按当前面板筛选或默认分组。
 	 */
-	async createBlankWorkspace(options?: { name?: string; remark?: string }): Promise<void> {
+	async createBlankWorkspace(options?: {
+		name?: string;
+		remark?: string;
+		tabGroupId?: string;
+	}): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
 		this.persistOpenWindows();
 		const id = newStickyWorkspaceId();
 		const n = this.workspaces.workspaces.length + 1;
 		const nameTrim = options?.name?.trim() ?? '';
+		const tabGroupId = this.resolveTabGroupIdForNewWorkspace(options?.tabGroupId);
 		const nw: StickyWorkspace = {
 			id,
 			name: nameTrim ? nameTrim : t('WS_NEW_WORKSPACE_AUTO_NAME', { n }),
+			tabGroupId,
 			windows: [],
 			updatedAt: Date.now()
 		};
@@ -1097,6 +1107,7 @@ export class StickyNoteManager {
 			updatedAt: Date.now()
 		};
 		if (ws.remark) nw.remark = ws.remark;
+		if (ws.tabGroupId) nw.tabGroupId = ws.tabGroupId;
 		this.workspaces.workspaces.push(nw);
 		await this.flushWorkspacesToDisk();
 		await this.syncStickyWorkspaceYamlForWorkspaceMembers(nw);
@@ -1204,7 +1215,7 @@ export class StickyNoteManager {
 		await this.flushWorkspacesToDisk();
 	}
 
-	/** 拖到「新建」格上时移到列表末尾。 */
+	/** 拖到工具栏「+」或列表末尾时移到当前筛选列表的末尾。 */
 	async reorderWorkspaceToEnd(draggedId: string): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
 		const list = this.workspaces.workspaces;
@@ -1216,6 +1227,69 @@ export class StickyNoteManager {
 		next.push(moved);
 		this.workspaces.workspaces = next;
 		await this.flushWorkspacesToDisk();
+	}
+
+	/** 新建顶部分组标签；返回新分组 id。 */
+	async createWorkspaceTabGroup(name?: string): Promise<string | null> {
+		if (!this.assertWorkspaceMetaMutable()) return null;
+		const n = this.workspaces.tabGroups.length + 1;
+		const id = newStickyWorkspaceTabGroupId();
+		const finalName = name?.trim() || t('WS_TAB_GROUP_AUTO_NAME', { n });
+		this.workspaces.tabGroups.push({ id, name: finalName });
+		await this.flushWorkspacesToDisk();
+		return id;
+	}
+
+	/** 将顶部分组标签拖到另一标签前。 */
+	async reorderWorkspaceTabGroupBefore(draggedId: string, beforeId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		if (draggedId === beforeId) return;
+		const list = this.workspaces.tabGroups;
+		const fromIdx = list.findIndex(g => g.id === draggedId);
+		const toIdx = list.findIndex(g => g.id === beforeId);
+		if (fromIdx < 0 || toIdx < 0) return;
+		const next = [...list];
+		const [moved] = next.splice(fromIdx, 1);
+		if (moved === undefined) return;
+		const insertAt = next.findIndex(g => g.id === beforeId);
+		if (insertAt < 0) return;
+		next.splice(insertAt, 0, moved);
+		this.workspaces.tabGroups = next;
+		await this.flushWorkspacesToDisk();
+	}
+
+	/** 将顶部分组标签拖到末尾（「+」按钮前）。 */
+	async reorderWorkspaceTabGroupToEnd(draggedId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		const list = this.workspaces.tabGroups;
+		const fromIdx = list.findIndex(g => g.id === draggedId);
+		if (fromIdx < 0) return;
+		const next = [...list];
+		const [moved] = next.splice(fromIdx, 1);
+		if (moved === undefined) return;
+		next.push(moved);
+		this.workspaces.tabGroups = next;
+		await this.flushWorkspacesToDisk();
+	}
+
+	private resolveTabGroupIdForNewWorkspace(explicit?: string): string {
+		const groups = this.workspaces.tabGroups;
+		if (typeof explicit === 'string' && explicit.length > 0 && groups.some(g => g.id === explicit)) {
+			return explicit;
+		}
+		return (
+			groups.find(g => g.id === WS_TAB_GROUP_DEFAULT_ID)?.id ??
+			groups[0]?.id ??
+			WS_TAB_GROUP_DEFAULT_ID
+		);
+	}
+
+	/** 管理面板按顶部分组筛选工作区列表（保持全局顺序）。 */
+	filterWorkspacesForTab(tabFilterId: string): StickyWorkspace[] {
+		if (tabFilterId === WS_TAB_FILTER_ALL) return [...this.workspaces.workspaces];
+		return this.workspaces.workspaces.filter(
+			ws => resolveWorkspaceTabGroupId(ws, this.workspaces.tabGroups) === tabFilterId
+		);
 	}
 
 	private persistOpenWindows(opts?: { bypassFreeze?: boolean }): void {

@@ -1,10 +1,11 @@
 import { App, Modal, Notice, Setting, setIcon } from 'obsidian';
 import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
-import type { StickyWorkspace } from '../types';
+import { WS_TAB_FILTER_ALL, type StickyWorkspace, type StickyWorkspaceTabGroup } from '../types';
 
 /** HTML5 DnD 用 payload（text/plain 兼容性最好） */
 const WORKSPACE_DND_MIME = 'text/plain';
+const WORKSPACE_TAB_GROUP_DND_MIME = 'text/x-csn-ws-tab-group';
 
 function formatWorkspaceRelativeTime(updatedAt: number | undefined): string {
 	if (updatedAt === undefined || !Number.isFinite(updatedAt)) {
@@ -234,6 +235,54 @@ class PermanentlyDeleteStickyWorkspaceConfirmModal extends Modal {
 	}
 }
 
+class NewWorkspaceTabGroupModal extends Modal {
+	constructor(
+		app: App,
+		private readonly autoNamePreview: string,
+		private readonly onCommit: (name: string) => void | Promise<void>
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(t('WS_NEW_TAB_GROUP_MODAL_TITLE'));
+		this.contentEl.addClass('csn-ws-edit-modal');
+		this.contentEl.createDiv({
+			cls: 'csn-ws-edit-field-label',
+			text: t('WS_NAME_LABEL')
+		});
+		const input = this.contentEl.createEl('input', {
+			type: 'text',
+			cls: 'csn-ws-edit-name-input',
+			attr: {
+				placeholder: t('WS_NEW_TAB_GROUP_USE_AUTO_HINT', { name: this.autoNamePreview }),
+				'aria-label': t('WS_NAME_LABEL')
+			}
+		});
+		input.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				void this.commit(input.value);
+			}
+		});
+		const row = this.contentEl.createDiv({ cls: 'csn-ws-edit-actions' });
+		const cancel = row.createEl('button', { text: t('MODAL_CANCEL') });
+		cancel.addEventListener('click', () => this.close());
+		const ok = row.createEl('button', { text: t('MODAL_OK'), cls: 'mod-cta' });
+		ok.addEventListener('click', () => void this.commit(input.value));
+		requestAnimationFrame(() => input.focus());
+	}
+
+	private async commit(rawName: string): Promise<void> {
+		await Promise.resolve(this.onCommit(rawName));
+		this.close();
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 export class WorkspacePanelModal extends Modal {
 	/** 正在执行 `finalizeWorkspaceSwitch` 的工作区 id，用于角标加载态。 */
 	private openingWorkspaceId: string | null = null;
@@ -243,6 +292,8 @@ export class WorkspacePanelModal extends Modal {
 	 */
 	private clearInitialWorkspaceTileFocusPending = false;
 	private panelMode: 'workspaces' | 'trash' = 'workspaces';
+	/** 顶部分组筛选：`@all` 或具体分组 id。 */
+	private activeTabFilterId: string = WS_TAB_FILTER_ALL;
 
 	constructor(
 		app: App,
@@ -271,70 +322,31 @@ export class WorkspacePanelModal extends Modal {
 			this.panelMode === 'trash' ? t('WS_TRASH_PANEL_TITLE') : t('WS_PANEL_TITLE')
 		);
 
+		if (this.panelMode === 'workspaces') {
+			this.renderTabGroupBar(this.contentEl, () => this.render());
+		}
+
 		const bodyEl = this.contentEl.createDiv({ cls: 'csn-ws-panel-body' });
 		const gridEl = bodyEl.createDiv({ cls: 'csn-ws-panel-grid' });
 
 		if (this.panelMode === 'workspaces') {
-			for (const ws of data.workspaces) {
-				this.renderWorkspaceTile(
-					gridEl,
-					ws,
-					data.activeWorkspaceId,
-					this.openingWorkspaceId,
-					() => this.render()
-				);
-			}
-
-			const addTile = gridEl.createDiv({
-				cls: 'csn-ws-panel-add-tile',
-				attr: {
-					role: 'button',
-					tabindex: '0',
-					'aria-label': t('WS_NEW_BLANK_ARIA')
+			const visibleWorkspaces = mgr.filterWorkspacesForTab(this.activeTabFilterId);
+			if (visibleWorkspaces.length === 0) {
+				gridEl.createDiv({
+					cls: 'csn-ws-panel-empty',
+					text: t('WS_TAB_GROUP_EMPTY')
+				});
+			} else {
+				for (const ws of visibleWorkspaces) {
+					this.renderWorkspaceTile(
+						gridEl,
+						ws,
+						data.activeWorkspaceId,
+						this.openingWorkspaceId,
+						() => this.render()
+					);
 				}
-			});
-			const addIconWrap = addTile.createSpan({ cls: 'csn-ws-panel-add-tile-icon' });
-			setIcon(addIconWrap, 'plus');
-			const openNewBlankWorkspace = (): void => {
-				const nextN = data.workspaces.length + 1;
-				const autoPreview = t('WS_NEW_WORKSPACE_AUTO_NAME', { n: nextN });
-				new NewBlankWorkspaceModal(this.app, autoPreview, async ({ name, remark }) => {
-					await mgr.createBlankWorkspace({
-						name: name.trim() ? name : undefined,
-						remark
-					});
-					new Notice(t('NOTICE_NEW_BLANK_WORKSPACE'));
-					this.render();
-				}).open();
-			};
-			addTile.addEventListener('click', openNewBlankWorkspace);
-			addTile.addEventListener('keydown', (e: KeyboardEvent) => {
-				if (e.key !== 'Enter' && e.key !== ' ') return;
-				e.preventDefault();
-				openNewBlankWorkspace();
-			});
-
-			const clearAddDropStyle = (): void => {
-				addTile.classList.remove('csn-ws-panel-add-tile--drop-target');
-			};
-			addTile.addEventListener('dragover', (e: DragEvent) => {
-				if (!e.dataTransfer?.types.includes(WORKSPACE_DND_MIME)) return;
-				e.preventDefault();
-				e.dataTransfer.dropEffect = 'move';
-				addTile.classList.add('csn-ws-panel-add-tile--drop-target');
-			});
-			addTile.addEventListener('dragleave', (e: DragEvent) => {
-				const r = e.relatedTarget as Node | null;
-				if (r && addTile.contains(r)) return;
-				clearAddDropStyle();
-			});
-			addTile.addEventListener('drop', (e: DragEvent) => {
-				e.preventDefault();
-				clearAddDropStyle();
-				const fromId = e.dataTransfer?.getData(WORKSPACE_DND_MIME);
-				if (!fromId) return;
-				void mgr.reorderWorkspaceToEnd(fromId).then(() => this.render());
-			});
+			}
 		} else if (data.trash.length === 0) {
 			gridEl.createDiv({
 				cls: 'csn-ws-panel-empty',
@@ -349,6 +361,22 @@ export class WorkspacePanelModal extends Modal {
 		const toolbar = this.contentEl.createDiv({ cls: 'csn-ws-panel-toolbar' });
 		const inner = toolbar.createDiv({ cls: 'csn-ws-panel-toolbar-inner' });
 		if (this.panelMode === 'workspaces') {
+			const openNewBlankWorkspace = (): void => {
+				const nextN = data.workspaces.length + 1;
+				const autoPreview = t('WS_NEW_WORKSPACE_AUTO_NAME', { n: nextN });
+				const tabGroupId =
+					this.activeTabFilterId === WS_TAB_FILTER_ALL ? undefined : this.activeTabFilterId;
+				new NewBlankWorkspaceModal(this.app, autoPreview, async ({ name, remark }) => {
+					await mgr.createBlankWorkspace({
+						name: name.trim() ? name : undefined,
+						remark,
+						tabGroupId
+					});
+					new Notice(t('NOTICE_NEW_BLANK_WORKSPACE'));
+					this.render();
+				}).open();
+			};
+
 			const btnTrash = inner.createEl('button', {
 				cls: 'csn-ws-panel-toolbar-btn csn-ws-panel-icon-btn--bordered',
 				attr: { 'aria-label': t('WS_TOOLBAR_TRASH_ARIA'), type: 'button' }
@@ -363,6 +391,34 @@ export class WorkspacePanelModal extends Modal {
 			btnTrash.addEventListener('click', () => {
 				this.panelMode = 'trash';
 				this.render();
+			});
+
+			const btnAdd = inner.createEl('button', {
+				cls: 'csn-ws-panel-toolbar-btn csn-ws-panel-icon-btn--bordered csn-ws-panel-toolbar-btn--new',
+				attr: { 'aria-label': t('WS_NEW_BLANK_ARIA'), type: 'button' }
+			});
+			setIcon(btnAdd, 'plus');
+			btnAdd.addEventListener('click', openNewBlankWorkspace);
+			const clearAddDropStyle = (): void => {
+				btnAdd.classList.remove('csn-ws-panel-toolbar-btn--drop-target');
+			};
+			btnAdd.addEventListener('dragover', (e: DragEvent) => {
+				if (!e.dataTransfer?.types.includes(WORKSPACE_DND_MIME)) return;
+				e.preventDefault();
+				e.dataTransfer.dropEffect = 'move';
+				btnAdd.classList.add('csn-ws-panel-toolbar-btn--drop-target');
+			});
+			btnAdd.addEventListener('dragleave', (e: DragEvent) => {
+				const r = e.relatedTarget as Node | null;
+				if (r && btnAdd.contains(r)) return;
+				clearAddDropStyle();
+			});
+			btnAdd.addEventListener('drop', (e: DragEvent) => {
+				e.preventDefault();
+				clearAddDropStyle();
+				const fromId = e.dataTransfer?.getData(WORKSPACE_DND_MIME);
+				if (!fromId) return;
+				void mgr.reorderWorkspaceToEnd(fromId).then(() => this.render());
 			});
 		} else {
 			const btnBack = inner.createEl('button', {
@@ -392,6 +448,133 @@ export class WorkspacePanelModal extends Modal {
 				});
 			});
 		}
+	}
+
+	private renderTabGroupBar(parentEl: HTMLElement, refresh: () => void): void {
+		const mgr = this.plugin.stickies;
+		const data = mgr.workspaces;
+		const bar = parentEl.createDiv({ cls: 'csn-ws-panel-tabbar' });
+		const scroll = bar.createDiv({ cls: 'csn-ws-panel-tabbar-scroll' });
+
+		const allTab = scroll.createEl('button', {
+			cls: `csn-ws-panel-tab${this.activeTabFilterId === WS_TAB_FILTER_ALL ? ' csn-ws-panel-tab--active' : ''}`,
+			text: t('WS_TAB_FILTER_ALL'),
+			attr: { type: 'button', 'aria-pressed': String(this.activeTabFilterId === WS_TAB_FILTER_ALL) }
+		});
+		allTab.addEventListener('click', () => {
+			this.activeTabFilterId = WS_TAB_FILTER_ALL;
+			refresh();
+		});
+
+		for (const group of data.tabGroups) {
+			this.renderTabGroupTab(scroll, group, refresh);
+		}
+
+		const addTab = scroll.createEl('button', {
+			cls: 'csn-ws-panel-tab csn-ws-panel-tab--add',
+			attr: {
+				type: 'button',
+				'aria-label': t('WS_NEW_TAB_GROUP_ARIA')
+			}
+		});
+		setIcon(addTab.createSpan({ cls: 'csn-ws-panel-tab-add-icon' }), 'plus');
+		const openNewTabGroup = (): void => {
+			const nextN = data.tabGroups.length + 1;
+			const autoPreview = t('WS_TAB_GROUP_AUTO_NAME', { n: nextN });
+			new NewWorkspaceTabGroupModal(this.app, autoPreview, async name => {
+				const id = await mgr.createWorkspaceTabGroup(name.trim() ? name : undefined);
+				if (id) {
+					this.activeTabFilterId = id;
+					refresh();
+				}
+			}).open();
+		};
+		addTab.addEventListener('click', openNewTabGroup);
+
+		const clearTabAddDropStyle = (): void => {
+			addTab.classList.remove('csn-ws-panel-tab--drop-target');
+		};
+		addTab.addEventListener('dragover', (e: DragEvent) => {
+			if (!e.dataTransfer?.types.includes(WORKSPACE_TAB_GROUP_DND_MIME)) return;
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'move';
+			addTab.classList.add('csn-ws-panel-tab--drop-target');
+		});
+		addTab.addEventListener('dragleave', (e: DragEvent) => {
+			const r = e.relatedTarget as Node | null;
+			if (r && addTab.contains(r)) return;
+			clearTabAddDropStyle();
+		});
+		addTab.addEventListener('drop', (e: DragEvent) => {
+			e.preventDefault();
+			clearTabAddDropStyle();
+			const fromId = e.dataTransfer?.getData(WORKSPACE_TAB_GROUP_DND_MIME);
+			if (!fromId) return;
+			void mgr.reorderWorkspaceTabGroupToEnd(fromId).then(() => refresh());
+		});
+	}
+
+	private renderTabGroupTab(
+		scrollEl: HTMLElement,
+		group: StickyWorkspaceTabGroup,
+		refresh: () => void
+	): void {
+		const mgr = this.plugin.stickies;
+		const isActive = this.activeTabFilterId === group.id;
+		const tab = scrollEl.createEl('button', {
+			cls: `csn-ws-panel-tab csn-ws-panel-tab--draggable${isActive ? ' csn-ws-panel-tab--active' : ''}`,
+			attr: {
+				type: 'button',
+				'aria-pressed': String(isActive),
+				'aria-label': t('WS_TAB_GROUP_ARIA', { name: group.name })
+			}
+		});
+		tab.createSpan({ cls: 'csn-ws-panel-tab-label', text: group.name });
+		const dragHandle = tab.createSpan({
+			cls: 'csn-ws-panel-tab-drag',
+			attr: { draggable: 'true', 'aria-label': t('WS_TAB_GROUP_REORDER_ARIA') }
+		});
+		setIcon(dragHandle, 'grip-vertical');
+		dragHandle.addEventListener('click', e => e.stopPropagation());
+		dragHandle.addEventListener('dragstart', (e: DragEvent) => {
+			e.stopPropagation();
+			tab.classList.add('csn-ws-panel-tab--dragging');
+			e.dataTransfer?.setData(WORKSPACE_TAB_GROUP_DND_MIME, group.id);
+			e.dataTransfer!.effectAllowed = 'move';
+		});
+		dragHandle.addEventListener('dragend', () => {
+			tab.classList.remove('csn-ws-panel-tab--dragging');
+			for (const el of Array.from(scrollEl.querySelectorAll('.csn-ws-panel-tab--drop-target'))) {
+				el.classList.remove('csn-ws-panel-tab--drop-target');
+			}
+			scrollEl.querySelector('.csn-ws-panel-tab--add')?.classList.remove('csn-ws-panel-tab--drop-target');
+		});
+
+		tab.addEventListener('click', e => {
+			if (e.target instanceof HTMLElement && e.target.closest('.csn-ws-panel-tab-drag')) return;
+			this.activeTabFilterId = group.id;
+			refresh();
+		});
+
+		tab.addEventListener('dragover', (e: DragEvent) => {
+			if (!e.dataTransfer?.types.includes(WORKSPACE_TAB_GROUP_DND_MIME)) return;
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'move';
+			tab.classList.add('csn-ws-panel-tab--drop-target');
+		});
+		tab.addEventListener('dragleave', (e: DragEvent) => {
+			const r = e.relatedTarget as Node | null;
+			if (r && tab.contains(r)) return;
+			tab.classList.remove('csn-ws-panel-tab--drop-target');
+		});
+		tab.addEventListener('drop', (e: DragEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			tab.classList.remove('csn-ws-panel-tab--drop-target');
+			const fromId = e.dataTransfer?.getData(WORKSPACE_TAB_GROUP_DND_MIME);
+			if (!fromId || fromId === group.id) return;
+			void mgr.reorderWorkspaceTabGroupBefore(fromId, group.id).then(() => refresh());
+		});
 	}
 
 	private renderWorkspaceTile(
@@ -440,7 +623,10 @@ export class WorkspacePanelModal extends Modal {
 			for (const el of Array.from(gridEl.querySelectorAll('.csn-ws-panel-item--drop-target'))) {
 				el.classList.remove('csn-ws-panel-item--drop-target');
 			}
-			gridEl.querySelector('.csn-ws-panel-add-tile')?.classList.remove('csn-ws-panel-add-tile--drop-target');
+			gridEl
+				.closest('.csn-workspace-panel')
+				?.querySelector('.csn-ws-panel-toolbar-btn--new')
+				?.classList.remove('csn-ws-panel-toolbar-btn--drop-target');
 		});
 
 		if (isActive) {
@@ -648,6 +834,7 @@ export class WorkspacePanelModal extends Modal {
 
 	onClose(): void {
 		this.panelMode = 'workspaces';
+		this.activeTabFilterId = WS_TAB_FILTER_ALL;
 		this.contentEl.empty();
 	}
 }

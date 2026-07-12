@@ -51,19 +51,35 @@ export interface SerializedStickyWindow {
 	open?: boolean;
 }
 
+/** 管理面板顶部分组标签（「默认」及用户新建分组）。 */
+export interface StickyWorkspaceTabGroup {
+	id: string;
+	name: string;
+}
+
 export interface StickyWorkspace {
 	id: string;
 	name: string;
 	/** 工作区备注（可选），显示在工作区面板卡片上。 */
 	remark?: string;
+	/** 所属顶部分组标签 id；缺省视为默认分组。 */
+	tabGroupId?: string;
 	windows: SerializedStickyWindow[];
 	/** 最近一次写入该便笺工作区快照的时间（毫秒时间戳）。 */
 	updatedAt?: number;
 }
 
+/** 管理面板「全部」筛选（非持久化分组 id）。 */
+export const WS_TAB_FILTER_ALL = '@all';
+
+/** 内置默认分组 id（`tabGroupId` 缺省时归属此分组）。 */
+export const WS_TAB_GROUP_DEFAULT_ID = 'wsg_default';
+
 export interface WorkspacesFile {
 	version: 1;
 	workspaces: StickyWorkspace[];
+	/** 管理面板顶部分组标签顺序。 */
+	tabGroups: StickyWorkspaceTabGroup[];
 	/** 从面板删除的工作区快照，可还原或彻底删除（持久化在 `*-workspaces.json` 的 `trash` 字段）。 */
 	trash: StickyWorkspace[];
 	/** 当前选中的便笺工作区；为 null 表示未选中（删除当前区后不应默认落到其它区，以免把当前浮动布局误写入该区快照）。 */

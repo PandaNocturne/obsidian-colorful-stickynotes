@@ -64,6 +64,119 @@
 	padding-bottom: 4px;
 }
 
+/* 顶部分组标签栏 */
+.csn-ws-panel-tabbar {
+	flex-shrink: 0;
+	padding: 0 0 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	margin-bottom: 10px;
+}
+
+.csn-ws-panel-tabbar-scroll {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: 6px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	padding-bottom: 2px;
+	scrollbar-width: thin;
+}
+
+.csn-ws-panel-tab {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	flex: 0 0 auto;
+	height: var(--input-height);
+	padding: 0 12px;
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	white-space: nowrap;
+	box-sizing: border-box;
+}
+
+.csn-ws-panel-tab:hover:not(.csn-ws-panel-tab--active) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.csn-ws-panel-tab--active {
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+	font-weight: 600;
+}
+
+.csn-ws-panel-tab--add {
+	width: var(--input-height);
+	min-width: var(--input-height);
+	padding: 0;
+	color: var(--text-muted);
+}
+
+.csn-ws-panel-tab-add-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 0;
+}
+
+.csn-ws-panel-tab-add-icon svg {
+	width: var(--icon-size, 16px);
+	height: var(--icon-size, 16px);
+}
+
+.csn-ws-panel-tab--draggable {
+	padding-right: 6px;
+}
+
+.csn-ws-panel-tab-label {
+	max-width: 140px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.csn-ws-panel-tab-drag {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	color: var(--text-faint);
+	cursor: grab;
+	flex-shrink: 0;
+}
+
+.csn-ws-panel-tab-drag svg {
+	width: 12px;
+	height: 12px;
+}
+
+.csn-ws-panel-tab-drag:hover {
+	color: var(--text-muted);
+}
+
+.csn-ws-panel-tab-drag:active {
+	cursor: grabbing;
+}
+
+.csn-ws-panel-tab--dragging {
+	opacity: 0.55;
+}
+
+.csn-ws-panel-tab--drop-target,
+.csn-ws-panel-toolbar-btn--drop-target {
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: 2px;
+}
+
 /* 底部工具栏：操作按钮靠右（不随网格滚动） */
 .csn-ws-panel-toolbar {
 	padding-top: 12px;
