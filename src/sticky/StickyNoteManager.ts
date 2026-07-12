@@ -32,6 +32,7 @@ import {
 	loadWorkspacesFile,
 	newStickyWorkspaceId,
 	newStickyWorkspaceTabGroupId,
+	resolvePanelTabFilterId,
 	resolveWorkspaceTabGroupId,
 	saveWorkspacesFile
 } from '../workspace-store';
@@ -1272,6 +1273,32 @@ export class StickyNoteManager {
 		await this.flushWorkspacesToDisk();
 	}
 
+	/** 将工作区移入指定顶部分组标签。 */
+	async moveWorkspaceToTabGroup(workspaceId: string, tabGroupId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		if (!this.workspaces.tabGroups.some(g => g.id === tabGroupId)) return;
+		const ws = this.workspaces.workspaces.find(w => w.id === workspaceId);
+		if (!ws) return;
+		if (resolveWorkspaceTabGroupId(ws, this.workspaces.tabGroups) === tabGroupId) return;
+		ws.tabGroupId = tabGroupId;
+		ws.updatedAt = Date.now();
+		await this.flushWorkspacesToDisk();
+	}
+
+	/** 重命名顶部分组标签。 */
+	async renameWorkspaceTabGroup(groupId: string, name: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		const group = this.workspaces.tabGroups.find(g => g.id === groupId);
+		if (!group) return;
+		const next = name.trim();
+		if (!next) {
+			new Notice(t('NOTICE_NAME_EMPTY'));
+			return;
+		}
+		group.name = next;
+		await this.flushWorkspacesToDisk();
+	}
+
 	private resolveTabGroupIdForNewWorkspace(explicit?: string): string {
 		const groups = this.workspaces.tabGroups;
 		if (typeof explicit === 'string' && explicit.length > 0 && groups.some(g => g.id === explicit)) {
@@ -1290,6 +1317,19 @@ export class StickyNoteManager {
 		return this.workspaces.workspaces.filter(
 			ws => resolveWorkspaceTabGroupId(ws, this.workspaces.tabGroups) === tabFilterId
 		);
+	}
+
+	/** 读取管理面板上次选中的顶部分组筛选。 */
+	getPanelTabFilterId(): string {
+		return resolvePanelTabFilterId(this.workspaces.panelTabFilterId, this.workspaces.tabGroups);
+	}
+
+	/** 记住管理面板顶部分组筛选并落盘。 */
+	async persistPanelTabFilterId(tabFilterId: string): Promise<void> {
+		const next = resolvePanelTabFilterId(tabFilterId, this.workspaces.tabGroups);
+		if (this.workspaces.panelTabFilterId === next) return;
+		this.workspaces.panelTabFilterId = next;
+		await this.flushWorkspacesToDisk();
 	}
 
 	private persistOpenWindows(opts?: { bypassFreeze?: boolean }): void {

@@ -7,6 +7,7 @@ export function stickyWorkspacesJsonVaultPath(plugin: Plugin): string {
 }
 import { t } from './lang/helpers';
 import {
+	WS_TAB_FILTER_ALL,
 	WS_TAB_GROUP_DEFAULT_ID,
 	type StickyWorkspace,
 	type StickyWorkspaceTabGroup,
@@ -62,6 +63,18 @@ function normalizeTabGroups(raw: unknown): StickyWorkspaceTabGroup[] {
 	return groups;
 }
 
+/** 管理面板顶部分组筛选 id（`@all` 或有效分组 id；无效时回退为「全部」）。 */
+export function resolvePanelTabFilterId(
+	raw: unknown,
+	tabGroups: readonly StickyWorkspaceTabGroup[]
+): string {
+	if (raw === WS_TAB_FILTER_ALL) return WS_TAB_FILTER_ALL;
+	if (typeof raw === 'string' && raw.length > 0 && tabGroups.some(g => g.id === raw)) {
+		return raw;
+	}
+	return WS_TAB_FILTER_ALL;
+}
+
 function workspacesPrefixedPath(plugin: Plugin): string {
 	return normalizePath(`${plugin.manifest.dir}/${plugin.manifest.id}-workspaces.json`);
 }
@@ -92,6 +105,7 @@ export function defaultWorkspacesFile(): WorkspacesFile {
 		version: 1,
 		activeWorkspaceId: id,
 		tabGroups,
+		panelTabFilterId: WS_TAB_FILTER_ALL,
 		workspaces: [
 			{
 				id,
@@ -135,6 +149,10 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 			active = first?.id ?? null;
 		}
 		const tabGroups = normalizeTabGroups((parsed as { tabGroups?: unknown }).tabGroups);
+		const panelTabFilterId = resolvePanelTabFilterId(
+			(parsed as { panelTabFilterId?: unknown }).panelTabFilterId,
+			tabGroups
+		);
 		const mapWorkspace = (w: (typeof parsed.workspaces)[number]): StickyWorkspace => {
 			const rawRemark = (w as { remark?: unknown }).remark;
 			const remark = typeof rawRemark === 'string' ? rawRemark : undefined;
@@ -162,6 +180,7 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 			version: 1,
 			activeWorkspaceId: active,
 			tabGroups,
+			panelTabFilterId,
 			workspaces: parsed.workspaces.map(mapWorkspace),
 			trash
 		};

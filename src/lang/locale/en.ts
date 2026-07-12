@@ -285,7 +285,11 @@ export const en = {
 	WS_TAB_GROUP_AUTO_NAME: 'Group {n}',
 	WS_TAB_GROUP_EMPTY: 'No workspaces in this group',
 	WS_TAB_GROUP_ARIA: 'Group: {name}',
+	WS_TAB_GROUP_INTERACT_ARIA:
+		'Group: {name}; drag to reorder, right-click to rename, drop workspaces here',
+	WS_TAB_GROUP_DROP_WORKSPACE_ARIA: 'Group: {name}; drop a workspace here to move it into this group',
 	WS_TAB_GROUP_REORDER_ARIA: 'Drag to reorder group tabs',
+	WS_RENAME_TAB_GROUP_MODAL_TITLE: 'Rename group tab',
 	WS_NEW_TAB_GROUP_ARIA: 'New group tab',
 	WS_NEW_TAB_GROUP_MODAL_TITLE: 'New group tab',
 	WS_NEW_TAB_GROUP_USE_AUTO_HINT: 'Leave blank to use “{name}”',

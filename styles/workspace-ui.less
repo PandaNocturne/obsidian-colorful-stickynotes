@@ -67,21 +67,36 @@
 /* 顶部分组标签栏 */
 .csn-ws-panel-tabbar {
 	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
 	padding: 0 0 10px;
 	border-bottom: 1px solid var(--background-modifier-border);
 	margin-bottom: 10px;
 }
 
-.csn-ws-panel-tabbar-scroll {
+.csn-ws-panel-tabbar-groups {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
 	flex-wrap: nowrap;
 	gap: 6px;
+	flex: 1 1 auto;
+	min-width: 0;
 	overflow-x: auto;
 	overflow-y: hidden;
 	padding-bottom: 2px;
 	scrollbar-width: thin;
+}
+
+.csn-ws-panel-tabbar-all {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex: 0 0 auto;
+	margin-left: auto;
 }
 
 .csn-ws-panel-tab {
@@ -134,7 +149,12 @@
 }
 
 .csn-ws-panel-tab--draggable {
-	padding-right: 6px;
+	cursor: grab;
+	user-select: none;
+}
+
+.csn-ws-panel-tab--draggable:active {
+	cursor: grabbing;
 }
 
 .csn-ws-panel-tab-label {
@@ -143,32 +163,9 @@
 	text-overflow: ellipsis;
 }
 
-.csn-ws-panel-tab-drag {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 18px;
-	height: 18px;
-	color: var(--text-faint);
-	cursor: grab;
-	flex-shrink: 0;
-}
-
-.csn-ws-panel-tab-drag svg {
-	width: 12px;
-	height: 12px;
-}
-
-.csn-ws-panel-tab-drag:hover {
-	color: var(--text-muted);
-}
-
-.csn-ws-panel-tab-drag:active {
-	cursor: grabbing;
-}
-
 .csn-ws-panel-tab--dragging {
 	opacity: 0.55;
+	cursor: grabbing;
 }
 
 .csn-ws-panel-tab--drop-target,
@@ -190,7 +187,7 @@
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	justify-content: flex-end;
+	justify-content: space-between;
 	gap: 8px;
 }
 

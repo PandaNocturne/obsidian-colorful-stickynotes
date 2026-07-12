@@ -7,6 +7,16 @@ import { WS_TAB_FILTER_ALL, type StickyWorkspace, type StickyWorkspaceTabGroup }
 const WORKSPACE_DND_MIME = 'text/plain';
 const WORKSPACE_TAB_GROUP_DND_MIME = 'text/x-csn-ws-tab-group';
 
+function dragEventHasMime(e: DragEvent, mime: string): boolean {
+	return e.dataTransfer?.types.includes(mime) ?? false;
+}
+
+function clearWorkspacePanelTabDropTargets(root: ParentNode): void {
+	for (const el of Array.from(root.querySelectorAll('.csn-ws-panel-tab--drop-target'))) {
+		el.classList.remove('csn-ws-panel-tab--drop-target');
+	}
+}
+
 function formatWorkspaceRelativeTime(updatedAt: number | undefined): string {
 	if (updatedAt === undefined || !Number.isFinite(updatedAt)) {
 		return t('WS_TIME_UNKNOWN');
@@ -283,6 +293,60 @@ class NewWorkspaceTabGroupModal extends Modal {
 	}
 }
 
+class RenameWorkspaceTabGroupModal extends Modal {
+	constructor(
+		app: App,
+		private readonly initialName: string,
+		private readonly onCommit: (name: string) => void | Promise<void>
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(t('WS_RENAME_TAB_GROUP_MODAL_TITLE'));
+		this.contentEl.addClass('csn-ws-edit-modal');
+		this.contentEl.createDiv({
+			cls: 'csn-ws-edit-field-label',
+			text: t('WS_NAME_LABEL')
+		});
+		const input = this.contentEl.createEl('input', {
+			type: 'text',
+			cls: 'csn-ws-edit-name-input',
+			value: this.initialName,
+			attr: { 'aria-label': t('WS_NAME_LABEL') }
+		});
+		input.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				void this.commit(input.value);
+			}
+		});
+		const row = this.contentEl.createDiv({ cls: 'csn-ws-edit-actions' });
+		const cancel = row.createEl('button', { text: t('MODAL_CANCEL') });
+		cancel.addEventListener('click', () => this.close());
+		const ok = row.createEl('button', { text: t('MODAL_OK'), cls: 'mod-cta' });
+		ok.addEventListener('click', () => void this.commit(input.value));
+		requestAnimationFrame(() => {
+			input.focus();
+			input.select();
+		});
+	}
+
+	private async commit(rawName: string): Promise<void> {
+		const name = rawName.trim();
+		if (!name) {
+			new Notice(t('NOTICE_NAME_EMPTY'));
+			return;
+		}
+		await Promise.resolve(this.onCommit(name));
+		this.close();
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 export class WorkspacePanelModal extends Modal {
 	/** 正在执行 `finalizeWorkspaceSwitch` 的工作区 id，用于角标加载态。 */
 	private openingWorkspaceId: string | null = null;
@@ -307,8 +371,15 @@ export class WorkspacePanelModal extends Modal {
 		this.modalEl.addClass('csn-workspace-panel-modal');
 		this.contentEl.empty();
 		this.contentEl.addClass('csn-workspace-panel');
+		this.activeTabFilterId = this.plugin.stickies.getPanelTabFilterId();
 		this.clearInitialWorkspaceTileFocusPending = true;
 		this.render();
+	}
+
+	private selectTabFilter(tabFilterId: string, refresh?: () => void): void {
+		this.activeTabFilterId = tabFilterId;
+		void this.plugin.stickies.persistPanelTabFilterId(tabFilterId);
+		refresh?.();
 	}
 
 	private render(): void {
@@ -454,23 +525,13 @@ export class WorkspacePanelModal extends Modal {
 		const mgr = this.plugin.stickies;
 		const data = mgr.workspaces;
 		const bar = parentEl.createDiv({ cls: 'csn-ws-panel-tabbar' });
-		const scroll = bar.createDiv({ cls: 'csn-ws-panel-tabbar-scroll' });
-
-		const allTab = scroll.createEl('button', {
-			cls: `csn-ws-panel-tab${this.activeTabFilterId === WS_TAB_FILTER_ALL ? ' csn-ws-panel-tab--active' : ''}`,
-			text: t('WS_TAB_FILTER_ALL'),
-			attr: { type: 'button', 'aria-pressed': String(this.activeTabFilterId === WS_TAB_FILTER_ALL) }
-		});
-		allTab.addEventListener('click', () => {
-			this.activeTabFilterId = WS_TAB_FILTER_ALL;
-			refresh();
-		});
+		const groups = bar.createDiv({ cls: 'csn-ws-panel-tabbar-groups' });
 
 		for (const group of data.tabGroups) {
-			this.renderTabGroupTab(scroll, group, refresh);
+			this.renderTabGroupTab(groups, group, refresh);
 		}
 
-		const addTab = scroll.createEl('button', {
+		const addTab = groups.createEl('button', {
 			cls: 'csn-ws-panel-tab csn-ws-panel-tab--add',
 			attr: {
 				type: 'button',
@@ -483,10 +544,7 @@ export class WorkspacePanelModal extends Modal {
 			const autoPreview = t('WS_TAB_GROUP_AUTO_NAME', { n: nextN });
 			new NewWorkspaceTabGroupModal(this.app, autoPreview, async name => {
 				const id = await mgr.createWorkspaceTabGroup(name.trim() ? name : undefined);
-				if (id) {
-					this.activeTabFilterId = id;
-					refresh();
-				}
+				if (id) this.selectTabFilter(id, refresh);
 			}).open();
 		};
 		addTab.addEventListener('click', openNewTabGroup);
@@ -512,6 +570,16 @@ export class WorkspacePanelModal extends Modal {
 			if (!fromId) return;
 			void mgr.reorderWorkspaceTabGroupToEnd(fromId).then(() => refresh());
 		});
+
+		const allWrap = bar.createDiv({ cls: 'csn-ws-panel-tabbar-all' });
+		const allTab = allWrap.createEl('button', {
+			cls: `csn-ws-panel-tab csn-ws-panel-tab--all${this.activeTabFilterId === WS_TAB_FILTER_ALL ? ' csn-ws-panel-tab--active' : ''}`,
+			text: t('WS_TAB_FILTER_ALL'),
+			attr: { type: 'button', 'aria-pressed': String(this.activeTabFilterId === WS_TAB_FILTER_ALL) }
+		});
+		allTab.addEventListener('click', () => {
+			this.selectTabFilter(WS_TAB_FILTER_ALL, refresh);
+		});
 	}
 
 	private renderTabGroupTab(
@@ -525,41 +593,63 @@ export class WorkspacePanelModal extends Modal {
 			cls: `csn-ws-panel-tab csn-ws-panel-tab--draggable${isActive ? ' csn-ws-panel-tab--active' : ''}`,
 			attr: {
 				type: 'button',
+				draggable: 'true',
 				'aria-pressed': String(isActive),
-				'aria-label': t('WS_TAB_GROUP_ARIA', { name: group.name })
+				'aria-label': t('WS_TAB_GROUP_INTERACT_ARIA', { name: group.name })
 			}
 		});
 		tab.createSpan({ cls: 'csn-ws-panel-tab-label', text: group.name });
-		const dragHandle = tab.createSpan({
-			cls: 'csn-ws-panel-tab-drag',
-			attr: { draggable: 'true', 'aria-label': t('WS_TAB_GROUP_REORDER_ARIA') }
-		});
-		setIcon(dragHandle, 'grip-vertical');
-		dragHandle.addEventListener('click', e => e.stopPropagation());
-		dragHandle.addEventListener('dragstart', (e: DragEvent) => {
-			e.stopPropagation();
+
+		let suppressTabClick = false;
+		tab.addEventListener('dragstart', (e: DragEvent) => {
+			suppressTabClick = false;
 			tab.classList.add('csn-ws-panel-tab--dragging');
 			e.dataTransfer?.setData(WORKSPACE_TAB_GROUP_DND_MIME, group.id);
 			e.dataTransfer!.effectAllowed = 'move';
 		});
-		dragHandle.addEventListener('dragend', () => {
+		tab.addEventListener('drag', () => {
+			suppressTabClick = true;
+		});
+		tab.addEventListener('dragend', () => {
 			tab.classList.remove('csn-ws-panel-tab--dragging');
-			for (const el of Array.from(scrollEl.querySelectorAll('.csn-ws-panel-tab--drop-target'))) {
-				el.classList.remove('csn-ws-panel-tab--drop-target');
-			}
+			clearWorkspacePanelTabDropTargets(scrollEl);
 			scrollEl.querySelector('.csn-ws-panel-tab--add')?.classList.remove('csn-ws-panel-tab--drop-target');
+			if (suppressTabClick) {
+				window.setTimeout(() => {
+					suppressTabClick = false;
+				}, 0);
+			}
 		});
 
-		tab.addEventListener('click', e => {
-			if (e.target instanceof HTMLElement && e.target.closest('.csn-ws-panel-tab-drag')) return;
-			this.activeTabFilterId = group.id;
-			refresh();
+		tab.addEventListener('click', () => {
+			if (suppressTabClick) {
+				suppressTabClick = false;
+				return;
+			}
+			this.selectTabFilter(group.id, refresh);
+		});
+
+		const openRenameTabGroup = (): void => {
+			new RenameWorkspaceTabGroupModal(this.app, group.name, async name => {
+				await mgr.renameWorkspaceTabGroup(group.id, name);
+				refresh();
+			}).open();
+		};
+		tab.addEventListener('contextmenu', (e: MouseEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			openRenameTabGroup();
 		});
 
 		tab.addEventListener('dragover', (e: DragEvent) => {
-			if (!e.dataTransfer?.types.includes(WORKSPACE_TAB_GROUP_DND_MIME)) return;
+			if (
+				!dragEventHasMime(e, WORKSPACE_TAB_GROUP_DND_MIME) &&
+				!dragEventHasMime(e, WORKSPACE_DND_MIME)
+			) {
+				return;
+			}
 			e.preventDefault();
-			e.dataTransfer.dropEffect = 'move';
+			e.dataTransfer!.dropEffect = 'move';
 			tab.classList.add('csn-ws-panel-tab--drop-target');
 		});
 		tab.addEventListener('dragleave', (e: DragEvent) => {
@@ -571,9 +661,15 @@ export class WorkspacePanelModal extends Modal {
 			e.preventDefault();
 			e.stopPropagation();
 			tab.classList.remove('csn-ws-panel-tab--drop-target');
-			const fromId = e.dataTransfer?.getData(WORKSPACE_TAB_GROUP_DND_MIME);
-			if (!fromId || fromId === group.id) return;
-			void mgr.reorderWorkspaceTabGroupBefore(fromId, group.id).then(() => refresh());
+			const tabGroupDragId = e.dataTransfer?.getData(WORKSPACE_TAB_GROUP_DND_MIME);
+			if (tabGroupDragId) {
+				if (tabGroupDragId === group.id) return;
+				void mgr.reorderWorkspaceTabGroupBefore(tabGroupDragId, group.id).then(() => refresh());
+				return;
+			}
+			const workspaceId = e.dataTransfer?.getData(WORKSPACE_DND_MIME);
+			if (!workspaceId) return;
+			void mgr.moveWorkspaceToTabGroup(workspaceId, group.id).then(() => refresh());
 		});
 	}
 
@@ -623,10 +719,11 @@ export class WorkspacePanelModal extends Modal {
 			for (const el of Array.from(gridEl.querySelectorAll('.csn-ws-panel-item--drop-target'))) {
 				el.classList.remove('csn-ws-panel-item--drop-target');
 			}
-			gridEl
-				.closest('.csn-workspace-panel')
+			const panelRoot = gridEl.closest('.csn-workspace-panel');
+			panelRoot
 				?.querySelector('.csn-ws-panel-toolbar-btn--new')
 				?.classList.remove('csn-ws-panel-toolbar-btn--drop-target');
+			if (panelRoot) clearWorkspacePanelTabDropTargets(panelRoot);
 		});
 
 		if (isActive) {
@@ -834,7 +931,7 @@ export class WorkspacePanelModal extends Modal {
 
 	onClose(): void {
 		this.panelMode = 'workspaces';
-		this.activeTabFilterId = WS_TAB_FILTER_ALL;
+		void this.plugin.stickies.persistPanelTabFilterId(this.activeTabFilterId);
 		this.contentEl.empty();
 	}
 }
