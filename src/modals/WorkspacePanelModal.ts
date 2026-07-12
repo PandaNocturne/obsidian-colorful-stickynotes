@@ -1,7 +1,12 @@
-import { App, Modal, Notice, Setting, setIcon } from 'obsidian';
+import { App, Menu, Modal, Notice, Setting, setIcon } from 'obsidian';
 import { t } from '../lang/helpers';
 import type ColorfulStickyNotesPlugin from '../main';
-import { WS_TAB_FILTER_ALL, type StickyWorkspace, type StickyWorkspaceTabGroup } from '../types';
+import {
+	WS_TAB_FILTER_ALL,
+	WS_TAB_GROUP_DEFAULT_ID,
+	type StickyWorkspace,
+	type StickyWorkspaceTabGroup
+} from '../types';
 
 /** HTML5 DnD 用 payload（text/plain 兼容性最好） */
 const WORKSPACE_DND_MIME = 'text/plain';
@@ -286,6 +291,46 @@ class NewWorkspaceTabGroupModal extends Modal {
 	private async commit(rawName: string): Promise<void> {
 		await Promise.resolve(this.onCommit(rawName));
 		this.close();
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+class DeleteWorkspaceTabGroupConfirmModal extends Modal {
+	constructor(
+		app: App,
+		private readonly groupName: string,
+		private readonly onConfirm: () => void | Promise<void>
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.titleEl.setText(t('WS_DELETE_TAB_GROUP_TITLE'));
+		contentEl.createEl('p', {
+			text: t('WS_DELETE_TAB_GROUP_BODY', { name: this.groupName })
+		});
+		new Setting(contentEl)
+			.setName('')
+			.addButton(btn => btn.setButtonText(t('MODAL_CANCEL')).onClick(() => this.close()))
+			.addButton(btn =>
+				btn
+					.setButtonText(t('WS_TAB_GROUP_MENU_DELETE'))
+					.setWarning()
+					.onClick(async () => {
+						btn.setDisabled(true);
+						try {
+							await Promise.resolve(this.onConfirm());
+							this.close();
+						} finally {
+							btn.setDisabled(false);
+						}
+					})
+			);
 	}
 
 	onClose(): void {
@@ -635,11 +680,38 @@ export class WorkspacePanelModal extends Modal {
 				refresh();
 			}).open();
 		};
-		tab.addEventListener('contextmenu', (e: MouseEvent) => {
+		const openDeleteTabGroup = (): void => {
+			new DeleteWorkspaceTabGroupConfirmModal(this.app, group.name, async () => {
+				await mgr.deleteWorkspaceTabGroup(group.id);
+				if (this.activeTabFilterId === group.id) {
+					this.selectTabFilter(WS_TAB_FILTER_ALL, refresh);
+				} else {
+					refresh();
+				}
+				new Notice(t('NOTICE_TAB_GROUP_DELETED'));
+			}).open();
+		};
+		const openTabGroupContextMenu = (e: MouseEvent): void => {
 			e.preventDefault();
 			e.stopPropagation();
-			openRenameTabGroup();
-		});
+			const menu = new Menu();
+			if (group.id !== WS_TAB_GROUP_DEFAULT_ID) {
+				menu.addItem(item => {
+					item
+						.setTitle(t('WS_TAB_GROUP_MENU_DELETE'))
+						.setIcon('trash-2')
+						.onClick(() => openDeleteTabGroup());
+				});
+			}
+			menu.addItem(item => {
+				item
+					.setTitle(t('WS_TAB_GROUP_MENU_RENAME'))
+					.setIcon('pen-line')
+					.onClick(() => openRenameTabGroup());
+			});
+			menu.showAtMouseEvent(e);
+		};
+		tab.addEventListener('contextmenu', openTabGroupContextMenu);
 
 		tab.addEventListener('dragover', (e: DragEvent) => {
 			if (

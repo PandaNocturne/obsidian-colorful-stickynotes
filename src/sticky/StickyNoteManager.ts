@@ -1299,6 +1299,25 @@ export class StickyNoteManager {
 		await this.flushWorkspacesToDisk();
 	}
 
+	/** 删除顶部分组标签；组内工作区移入默认分组。 */
+	async deleteWorkspaceTabGroup(groupId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		if (groupId === WS_TAB_GROUP_DEFAULT_ID) return;
+		const list = this.workspaces.tabGroups;
+		if (!list.some(g => g.id === groupId)) return;
+		const now = Date.now();
+		for (const ws of this.workspaces.workspaces) {
+			if (resolveWorkspaceTabGroupId(ws, list) !== groupId) continue;
+			ws.tabGroupId = undefined;
+			ws.updatedAt = now;
+		}
+		this.workspaces.tabGroups = list.filter(g => g.id !== groupId);
+		if (this.workspaces.panelTabFilterId === groupId) {
+			this.workspaces.panelTabFilterId = WS_TAB_FILTER_ALL;
+		}
+		await this.flushWorkspacesToDisk();
+	}
+
 	private resolveTabGroupIdForNewWorkspace(explicit?: string): string {
 		const groups = this.workspaces.tabGroups;
 		if (typeof explicit === 'string' && explicit.length > 0 && groups.some(g => g.id === explicit)) {
