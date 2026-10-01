@@ -1308,7 +1308,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   gap: 0;
   min-height: 0;
   min-width: 0;
-  --csn-dash-left-width: 220px;
+  --csn-dash-left-width: 280px;
   --csn-dash-composer-height: 168px;
 }
 .csn-dash-col {
@@ -1321,7 +1321,16 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 .csn-dash-col-left {
   flex: 0 0 var(--csn-dash-left-width);
   width: var(--csn-dash-left-width);
+  min-width: 245px;
   max-width: 45%;
+}
+.csn-dash--left-collapsed .csn-dash-col-left,
+.csn-dash--left-collapsed .csn-dash-splitter--v {
+  display: none;
+}
+.csn-dash--composer-hidden .csn-dash-composer,
+.csn-dash--composer-hidden .csn-dash-splitter--h {
+  display: none;
 }
 .csn-dash-col-right {
   flex: 1 1 auto;
@@ -2508,7 +2517,10 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 .csn-dash-cal-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 3px;
+  gap: 2px;
+  width: 100%;
+  justify-items: stretch;
+  align-items: stretch;
 }
 .csn-dash-cal-weekday {
   text-align: center;
@@ -2519,29 +2531,41 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 .csn-dash-cal-cell {
   appearance: none;
+  -webkit-appearance: none;
   border: none;
   background: transparent;
-  padding: 0;
+  padding: 0 !important;
+  margin: 0;
   border-radius: 3px;
   font-size: 11px;
   color: var(--text-normal);
   cursor: var(--cursor);
   position: relative;
   line-height: 1;
-  aspect-ratio: 1;
+  width: 100%;
+  min-width: 0;
+  height: auto !important;
   min-height: 0;
-  display: inline-flex;
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+  display: flex;
   align-items: center;
   justify-content: center;
+  outline: none !important;
   transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, transform 0.08s ease;
 }
 .csn-dash-cal-day {
+  border: 1px solid var(--background-modifier-border) !important;
   background: var(--csn-heat-empty);
+  box-shadow: none;
 }
-.csn-dash-cal-day:hover {
+.csn-dash-cal-day:hover,
+.csn-dash-cal-day:focus,
+.csn-dash-cal-day:focus-visible {
   transform: scale(1.08);
   z-index: 1;
   filter: brightness(0.96);
+  outline: none !important;
 }
 .csn-dash-cal-day.heat-1 {
   background: var(--csn-heat-1);

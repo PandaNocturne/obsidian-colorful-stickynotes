@@ -27,9 +27,9 @@ export function clampViewContentZoom(value: number): number {
 }
 
 /** 仪表盘左侧栏宽度（px）。 */
-export const DASH_LEFT_PANE_WIDTH_MIN = 160;
+export const DASH_LEFT_PANE_WIDTH_MIN = 245;
 export const DASH_LEFT_PANE_WIDTH_MAX = 480;
-export const DASH_LEFT_PANE_WIDTH_DEFAULT = 220;
+export const DASH_LEFT_PANE_WIDTH_DEFAULT = 280;
 
 export function clampDashLeftPaneWidth(value: number): number {
 	if (typeof value !== 'number' || !Number.isFinite(value)) return DASH_LEFT_PANE_WIDTH_DEFAULT;
@@ -142,8 +142,12 @@ export interface ColorfulStickyNotesSettings {
 	noteListPageSize: number;
 	/** 仪表盘左侧栏宽度（px）：日历 + 工作区树。 */
 	dashboardLeftPaneWidth: number;
+	/** 仪表盘左侧栏是否折叠隐藏（拖到最小宽度时自动收起）。 */
+	dashboardLeftPaneCollapsed: boolean;
 	/** 仪表盘快速输入区高度（px）。 */
 	dashboardComposerPaneHeight: number;
+	/** 仪表盘快速输入区是否隐藏。 */
+	dashboardComposerHidden: boolean;
 	/** 仪表盘工作区树中已折叠的分组 id。 */
 	dashboardCollapsedWorkspaceGroupIds: string[];
 	/** 仪表盘左侧面板折叠：`area` | `workspace`。 */
@@ -217,7 +221,9 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	noteListGridMinWidth: '320px',
 	noteListPageSize: 12,
 	dashboardLeftPaneWidth: DASH_LEFT_PANE_WIDTH_DEFAULT,
+	dashboardLeftPaneCollapsed: false,
 	dashboardComposerPaneHeight: DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
+	dashboardComposerHidden: false,
 	dashboardCollapsedWorkspaceGroupIds: [],
 	dashboardCollapsedLeftPanelIds: [],
 	noteListSort: 'ctime-desc',

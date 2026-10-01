@@ -205,6 +205,8 @@ export const zhCn: Record<MessageKey, string> = {
 	DASH_WS_FILTER_PLACEHOLDER: '筛选',
 	DASH_SPLITTER_LR: '调整左右栏比例',
 	DASH_SPLITTER_COMPOSER: '调整输入区与网格区比例',
+	DASH_COMPOSER_TOGGLE_ARIA: '显示或隐藏输入区',
+	DASH_LEFT_PANE_TOGGLE_ARIA: '显示或隐藏左侧栏',
 	DASH_WS_FILTER_ALL: '全部',
 	DASH_ATTR_LABEL: '属性：',
 	DASH_AREA_LABEL: '区域管理',

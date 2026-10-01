@@ -387,9 +387,15 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.settings.dashboardLeftPaneWidth = clampDashLeftPaneWidth(
 			this.settings.dashboardLeftPaneWidth
 		);
+		if (typeof this.settings.dashboardLeftPaneCollapsed !== 'boolean') {
+			this.settings.dashboardLeftPaneCollapsed = false;
+		}
 		this.settings.dashboardComposerPaneHeight = clampDashComposerPaneHeight(
 			this.settings.dashboardComposerPaneHeight
 		);
+		if (typeof this.settings.dashboardComposerHidden !== 'boolean') {
+			this.settings.dashboardComposerHidden = false;
+		}
 		{
 			const rawIds = this.settings.dashboardCollapsedWorkspaceGroupIds;
 			this.settings.dashboardCollapsedWorkspaceGroupIds = Array.isArray(rawIds)

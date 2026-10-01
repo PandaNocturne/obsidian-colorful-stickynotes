@@ -269,6 +269,8 @@ export class StickyNoteDashboardView extends ItemView {
 	private sortDropdownBtn: HTMLButtonElement | null = null;
 	private listBulkEditBtn: HTMLButtonElement | null = null;
 	private listCardOverflowClipBtn: HTMLButtonElement | null = null;
+	private composerToggleBtn: HTMLButtonElement | null = null;
+	private leftPaneToggleBtn: HTMLButtonElement | null = null;
 	/** 开启后卡片头部显示归档复选框，便于勾选修改。 */
 	private listArchiveCheckboxEditMode = false;
 
@@ -364,7 +366,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncCardOverflowClipToolbarBtn();
 	}
 
-	/** 写入左右栏宽、输入区高到 CSS 变量。 */
+	/** 写入左右栏宽、输入区高到 CSS 变量，并同步折叠态 class。 */
 	applyDashPaneLayout(): void {
 		if (!this.contentEl.hasClass('csn-dash')) return;
 		const leftW = clampDashLeftPaneWidth(this.plugin.settings.dashboardLeftPaneWidth);
@@ -373,6 +375,44 @@ export class StickyNoteDashboardView extends ItemView {
 		this.plugin.settings.dashboardComposerPaneHeight = composerH;
 		this.contentEl.style.setProperty('--csn-dash-left-width', `${leftW}px`);
 		this.contentEl.style.setProperty('--csn-dash-composer-height', `${composerH}px`);
+		this.contentEl.toggleClass(
+			'csn-dash--left-collapsed',
+			!!this.plugin.settings.dashboardLeftPaneCollapsed
+		);
+		this.contentEl.toggleClass(
+			'csn-dash--composer-hidden',
+			!!this.plugin.settings.dashboardComposerHidden
+		);
+		this.syncLeftPaneToggleBtn();
+		this.syncComposerToggleBtn();
+	}
+
+	private syncLeftPaneToggleBtn(): void {
+		const btn = this.leftPaneToggleBtn;
+		if (!btn) return;
+		const collapsed = !!this.plugin.settings.dashboardLeftPaneCollapsed;
+		btn.toggleClass('is-active', !collapsed);
+		btn.setAttr('aria-pressed', collapsed ? 'false' : 'true');
+	}
+
+	private syncComposerToggleBtn(): void {
+		const btn = this.composerToggleBtn;
+		if (!btn) return;
+		const hidden = !!this.plugin.settings.dashboardComposerHidden;
+		btn.toggleClass('is-active', !hidden);
+		btn.setAttr('aria-pressed', hidden ? 'false' : 'true');
+	}
+
+	private async toggleLeftPaneCollapsed(): Promise<void> {
+		this.plugin.settings.dashboardLeftPaneCollapsed = !this.plugin.settings.dashboardLeftPaneCollapsed;
+		this.applyDashPaneLayout();
+		await this.plugin.saveSettings();
+	}
+
+	private async toggleComposerHidden(): Promise<void> {
+		this.plugin.settings.dashboardComposerHidden = !this.plugin.settings.dashboardComposerHidden;
+		this.applyDashPaneLayout();
+		await this.plugin.saveSettings();
 	}
 
 	/** 垂直/水平拖拽分隔条：调整左栏宽或输入区高，松手后写入设置。 */
@@ -389,9 +429,11 @@ export class StickyNoteDashboardView extends ItemView {
 
 			const onMove = (e: PointerEvent) => {
 				if (orientation === 'vertical') {
+					if (this.plugin.settings.dashboardLeftPaneCollapsed) return;
 					const next = clampDashLeftPaneWidth(startLeft + (e.clientX - startX));
 					this.plugin.settings.dashboardLeftPaneWidth = next;
 				} else {
+					if (this.plugin.settings.dashboardComposerHidden) return;
 					const next = clampDashComposerPaneHeight(startComposer + (e.clientY - startY));
 					this.plugin.settings.dashboardComposerPaneHeight = next;
 				}
@@ -1539,6 +1581,34 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 
 		const toolbar = filterBar.createDiv({ cls: 'csn-dash-toolbar' });
+		this.leftPaneToggleBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-dash-left-toggle-btn',
+			attr: {
+				'aria-label': t('DASH_LEFT_PANE_TOGGLE_ARIA'),
+				'aria-pressed': this.plugin.settings.dashboardLeftPaneCollapsed ? 'false' : 'true'
+			}
+		});
+		setIcon(this.leftPaneToggleBtn, 'panel-left');
+		this.registerDomEvent(this.leftPaneToggleBtn, 'click', () => {
+			void this.toggleLeftPaneCollapsed();
+		});
+
+		this.composerToggleBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-dash-composer-toggle-btn',
+			attr: {
+				'aria-label': t('DASH_COMPOSER_TOGGLE_ARIA'),
+				'aria-pressed': this.plugin.settings.dashboardComposerHidden ? 'false' : 'true'
+			}
+		});
+		setIcon(this.composerToggleBtn, 'panel-top');
+		this.registerDomEvent(this.composerToggleBtn, 'click', () => {
+			void this.toggleComposerHidden();
+		});
+		this.syncLeftPaneToggleBtn();
+		this.syncComposerToggleBtn();
+
 		this.sortDropdownBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-toolbar-icon-btn',
@@ -4172,6 +4242,8 @@ export class StickyNoteDashboardView extends ItemView {
 		this.sortDropdownBtn = null;
 		this.listBulkEditBtn = null;
 		this.listCardOverflowClipBtn = null;
+		this.composerToggleBtn = null;
+		this.leftPaneToggleBtn = null;
 		this.gridEl = null;
 		this.paginationEl = null;
 		this.paginationRowEl = null;

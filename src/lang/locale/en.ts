@@ -219,6 +219,8 @@ export const en = {
 	DASH_WS_FILTER_PLACEHOLDER: 'Filter',
 	DASH_SPLITTER_LR: 'Resize left and right panes',
 	DASH_SPLITTER_COMPOSER: 'Resize composer and note grid',
+	DASH_COMPOSER_TOGGLE_ARIA: 'Show or hide composer',
+	DASH_LEFT_PANE_TOGGLE_ARIA: 'Show or hide left sidebar',
 	DASH_WS_FILTER_ALL: 'All',
 	DASH_ATTR_LABEL: 'Status:',
 	DASH_AREA_LABEL: 'Smart areas',
