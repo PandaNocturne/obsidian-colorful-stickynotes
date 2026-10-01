@@ -210,7 +210,7 @@ export class DeleteStickyWorkspaceConfirmModal extends Modal {
 	}
 }
 
-class PermanentlyDeleteStickyWorkspaceConfirmModal extends Modal {
+export class PermanentlyDeleteStickyWorkspaceConfirmModal extends Modal {
 	constructor(
 		app: App,
 		private readonly workspaceName: string,

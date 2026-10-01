@@ -38,7 +38,8 @@ import { ListBatchDeleteConfirmModal } from '../modals/ListBatchDeleteConfirmMod
 import {
 	DeleteStickyWorkspaceConfirmModal,
 	DeleteWorkspaceTabGroupConfirmModal,
-	NewBlankWorkspaceModal
+	NewBlankWorkspaceModal,
+	PermanentlyDeleteStickyWorkspaceConfirmModal
 } from '../modals/WorkspacePanelModal';
 import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-folder';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
@@ -254,6 +255,9 @@ export class StickyNoteDashboardView extends ItemView {
 	private wsTreeDragKind: 'none' | 'workspace' | 'group' | 'sticky' = 'none';
 	private wsTreeSortBtn: HTMLButtonElement | null = null;
 	private wsTreeCollapseBtn: HTMLButtonElement | null = null;
+	private wsTreeShowArchivedBtn: HTMLButtonElement | null = null;
+	/** 工作区树是否显示已归档（trash）工作区。 */
+	private wsTreeShowArchived = false;
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
 	private searchClearBtn: HTMLButtonElement | null = null;
@@ -1334,6 +1338,20 @@ export class StickyNoteDashboardView extends ItemView {
 					evt.stopPropagation();
 					this.toggleWsTreeCollapseAll();
 				});
+				this.wsTreeShowArchivedBtn = wsActions.createEl('button', {
+					type: 'button',
+					cls: 'clickable-icon csn-dash-ws-action-btn',
+					attr: {
+						'aria-label': t('DASH_WS_SHOW_ARCHIVED_ARIA'),
+						'aria-pressed': 'false'
+					}
+				});
+				setIcon(this.wsTreeShowArchivedBtn, 'archive');
+				this.registerDomEvent(this.wsTreeShowArchivedBtn, 'click', (evt: MouseEvent) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.toggleWsTreeShowArchived();
+				});
 				const newWsBtn = wsActions.createEl('button', {
 					type: 'button',
 					cls: 'clickable-icon csn-dash-ws-add-btn',
@@ -1916,6 +1934,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncTagFilterButton();
 		this.syncSortToolbarBtn();
 		this.syncWsTreeSortBtn();
+		this.syncWsTreeShowArchivedBtn();
 		this.syncListArchiveCheckboxEditUI();
 		this.syncCardOverflowClipToolbarBtn();
 		this.syncSearchClearVisibility();
@@ -3158,6 +3177,32 @@ export class StickyNoteDashboardView extends ItemView {
 		this.renderWorkspaceTree();
 	}
 
+	private toggleWsTreeShowArchived(): void {
+		this.wsTreeShowArchived = !this.wsTreeShowArchived;
+		/* 切换列表模式时清空选中，避免跨模式残留筛选 */
+		this.setWorkspaceSel({ kind: 'all' });
+		this.syncWsTreeShowArchivedBtn();
+		this.renderWorkspaceTree();
+	}
+
+	private syncWsTreeShowArchivedBtn(): void {
+		const btn = this.wsTreeShowArchivedBtn;
+		if (!btn) return;
+		const on = this.wsTreeShowArchived;
+		btn.toggleClass('is-active', on);
+		btn.setAttr('aria-pressed', on ? 'true' : 'false');
+		btn.setAttr('aria-label', on ? t('DASH_WS_HIDE_ARCHIVED_ARIA') : t('DASH_WS_SHOW_ARCHIVED_ARIA'));
+		btn.title = on ? t('DASH_WS_HIDE_ARCHIVED_ARIA') : t('DASH_WS_SHOW_ARCHIVED_ARIA');
+		const actions = btn.parentElement;
+		actions?.querySelector('.csn-dash-ws-add-btn')?.toggleClass('csn-dash-ws-add-btn--hidden', on);
+		this.wsTreeCollapseBtn?.toggleClass('csn-dash-ws-action-btn--hidden', on);
+		const titleBtn = this.leftPanelTitleBtns.get('workspace');
+		const titleText = titleBtn?.querySelector('.csn-dash-panel-title-text');
+		if (titleText instanceof HTMLElement) {
+			titleText.setText(on ? t('DASH_WS_ARCHIVED_SECTION') : t('DASH_WS_TREE_TITLE'));
+		}
+	}
+
 	private loadCollapsedGroupsFromSettings(): void {
 		const ids = this.plugin.settings.dashboardCollapsedWorkspaceGroupIds;
 		this.collapsedGroupIds = new Set(Array.isArray(ids) ? ids.filter(Boolean) : []);
@@ -3457,7 +3502,10 @@ export class StickyNoteDashboardView extends ItemView {
 		const file = this.plugin.stickies.workspaces;
 		const groupName = (id: string) =>
 			file.tabGroups.find(g => g.id === id)?.name ?? id;
-		const wsName = (id: string) => file.workspaces.find(w => w.id === id)?.name ?? id;
+		const wsName = (id: string) =>
+			file.workspaces.find(w => w.id === id)?.name ??
+			file.trash.find(w => w.id === id)?.name ??
+			id;
 
 		const addChip = (kind: 'group' | 'workspace', id: string, label: string) => {
 			const chip = chipsEl.createEl('button', {
@@ -3806,15 +3854,24 @@ export class StickyNoteDashboardView extends ItemView {
 		host.empty();
 		const mgr = this.plugin.stickies;
 		const file = mgr.workspaces;
+		const q = this.wsTreeFilterQuery.trim().toLowerCase();
+		const matchText = (s: string) => !q || s.toLowerCase().includes(q);
+
+		this.syncWsTreeShowArchivedBtn();
+		if (this.wsTreeShowArchived) {
+			this.renderArchivedWorkspaceTree(host, q, matchText);
+			this.syncWsTreeSortBtn();
+			this.syncWsTreeCollapseBtn([]);
+			this.syncWorkspaceFilterBar();
+			return;
+		}
+
 		const tabGroups = file.tabGroups;
 		const rawGroups: StickyWorkspaceTabGroup[] =
 			tabGroups.length > 0
 				? tabGroups
 				: [{ id: WS_TAB_GROUP_DEFAULT_ID, name: t('WS_TAB_GROUP_DEFAULT') }];
 		const groups = this.sortGroupsForTree(rawGroups, file.workspaces);
-
-		const q = this.wsTreeFilterQuery.trim().toLowerCase();
-		const matchText = (s: string) => !q || s.toLowerCase().includes(q);
 
 		/* 拖到树空白处 → 移入根目录（未分组） */
 		this.bindWorkspaceTreeDrop(host, {
@@ -3966,7 +4023,105 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 		this.syncWsTreeSortBtn();
 		this.syncWsTreeCollapseBtn(groups.map(g => g.id));
+		this.syncWsTreeShowArchivedBtn();
 		this.syncWorkspaceFilterBar();
+	}
+
+	/** 仅显示已归档（trash）工作区。 */
+	private renderArchivedWorkspaceTree(
+		host: HTMLElement,
+		q: string,
+		matchText: (s: string) => boolean
+	): void {
+		const trash = this.plugin.stickies.workspaces.trash;
+		let list = [...trash];
+		if (q) {
+			list = list.filter(ws => matchText(ws.name) || matchText(ws.remark ?? ''));
+		}
+		list = this.sortWorkspacesForTree(list);
+		if (list.length === 0) {
+			host.createDiv({
+				cls: 'csn-dash-ws-tree-empty',
+				text: t('DASH_WS_ARCHIVED_EMPTY')
+			});
+			return;
+		}
+		for (const ws of list) {
+			this.appendArchivedWorkspaceTreeItem(host, ws);
+		}
+	}
+
+	private appendArchivedWorkspaceTreeItem(host: HTMLElement, ws: StickyWorkspace): void {
+		const mgr = this.plugin.stickies;
+		const memberCount = mgr.getWorkspaceMemberPathSet(ws).size;
+		const wsBtn = host.createEl('button', {
+			type: 'button',
+			cls: `csn-dash-tree-item csn-dash-tree-ws csn-dash-tree-ws--archived csn-dash-tree-ws--root${
+				this.isWorkspaceSelActive(ws.id) ? ' is-active' : ''
+			}`,
+			attr: { 'data-csn-ws-id': ws.id, 'data-csn-ws-archived': 'true' }
+		});
+		setIcon(wsBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'archive');
+		wsBtn.createSpan({ cls: 'csn-dash-tree-label', text: ws.name });
+		wsBtn.createSpan({ cls: 'csn-dash-tree-count', text: String(memberCount) });
+		this.registerDomEvent(wsBtn, 'click', (evt: MouseEvent) => {
+			this.clickWorkspaceTreeSel(
+				{ kind: 'workspace', id: ws.id },
+				evt.ctrlKey || evt.metaKey
+			);
+		});
+		this.registerDomEvent(wsBtn, 'contextmenu', (evt: MouseEvent) => {
+			this.openArchivedWorkspaceContextMenu(evt, ws);
+		});
+	}
+
+	private openArchivedWorkspaceContextMenu(evt: MouseEvent, ws: StickyWorkspace): void {
+		evt.preventDefault();
+		const menu = new Menu();
+		const mgr = this.plugin.stickies;
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_RESTORE')).setIcon('rotate-ccw').onClick(() => {
+				void (async () => {
+					await mgr.restoreStickyWorkspaceFromTrash(ws.id);
+					if (this.workspaceSel.kind === 'selection') {
+						const workspaceIds = this.workspaceSel.workspaceIds.filter(id => id !== ws.id);
+						this.workspaceSel =
+							workspaceIds.length === 0 && this.workspaceSel.groupIds.length === 0
+								? { kind: 'all' }
+								: {
+										kind: 'selection',
+										groupIds: [...this.workspaceSel.groupIds],
+										workspaceIds
+									};
+					}
+					this.syncWorkspaceFilterBar();
+					this.renderWorkspaceTree();
+					void this.renderDash();
+				})();
+			});
+		});
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_PERMANENT_DELETE')).setIcon('trash').onClick(() => {
+				new PermanentlyDeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
+					await mgr.permanentlyDeleteStickyWorkspaceFromTrash(ws.id);
+					if (this.workspaceSel.kind === 'selection') {
+						const workspaceIds = this.workspaceSel.workspaceIds.filter(id => id !== ws.id);
+						this.workspaceSel =
+							workspaceIds.length === 0 && this.workspaceSel.groupIds.length === 0
+								? { kind: 'all' }
+								: {
+										kind: 'selection',
+										groupIds: [...this.workspaceSel.groupIds],
+										workspaceIds
+									};
+					}
+					this.syncWorkspaceFilterBar();
+					this.renderWorkspaceTree();
+					void this.renderDash();
+				}).open();
+			});
+		});
+		menu.showAtMouseEvent(evt);
 	}
 
 	private appendWorkspaceTreeItem(
@@ -4041,9 +4196,12 @@ export class StickyNoteDashboardView extends ItemView {
 		const groupIdSet = new Set(sel.groupIds);
 		const workspaceIdSet = new Set(sel.workspaceIds);
 		const union = new Set<string>();
-		for (const ws of file.workspaces) {
+		const pool = [...file.workspaces, ...file.trash];
+		for (const ws of pool) {
 			const inSelWs = workspaceIdSet.has(ws.id);
-			const inSelGroup = groupIdSet.has(resolveWorkspaceTabGroupId(ws, groups));
+			const inSelGroup =
+				file.workspaces.some(w => w.id === ws.id) &&
+				groupIdSet.has(resolveWorkspaceTabGroupId(ws, groups));
 			if (!inSelWs && !inSelGroup) continue;
 			for (const p of this.plugin.stickies.getWorkspaceMemberPathSet(ws)) union.add(p);
 		}
@@ -4936,6 +5094,9 @@ export class StickyNoteDashboardView extends ItemView {
 		this.wsPanelEl = null;
 		this.leftPanelTitleBtns.clear();
 		this.wsTreeFilterInput = null;
+		this.wsTreeSortBtn = null;
+		this.wsTreeCollapseBtn = null;
+		this.wsTreeShowArchivedBtn = null;
 		this.searchInput = null;
 		this.searchInnerEl = null;
 		this.searchClearBtn = null;
