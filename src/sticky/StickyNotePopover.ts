@@ -63,10 +63,7 @@ export interface StickyNotePopoverOptions {
 	onOpenNoteList: () => void;
 	/** 删除便笺：由管理器激活当前叶视图并执行 Obsidian 默认「删除当前笔记」命令。 */
 	onDeleteCurrentSticky: () => void;
-	onHideCurrentSticky: () => void;
-	onHideOthersSticky: () => void;
-	onShowOthersSticky: () => void;
-	onShowAllStickies: () => void;
+
 	/** 切换当前便笺 frontmatter 归档状态（无 Markdown 文件时由实现侧忽略）。 */
 	onToggleArchiveCurrentSticky: () => void;
 	/** 便笺所属、可从中移除的工作区列表（头部菜单子项）。 */
@@ -420,8 +417,6 @@ export class StickyNotePopover {
 		this.restoreFromEdgeStretchIfNeeded();
 	}
 
-	// 其它“隐藏相关”按钮已迁移到便笺头部右键菜单中。
-
 	private async openHeaderContextMenu(evt: MouseEvent): Promise<void> {
 		const menu = new Menu();
 
@@ -434,33 +429,6 @@ export class StickyNotePopover {
 					this.yamlVisible = !this.yamlVisible;
 					this.applyYamlClass();
 					this.options.onYamlVisibilityChange?.(this.yamlVisible);
-				});
-		});
-
-		menu.addItem(item => {
-			item
-				.setTitle(t('HIDE_CURRENT_STICKY'))
-				.setIcon('eye-off')
-				.onClick(() => {
-					this.options.onHideCurrentSticky();
-				});
-		});
-
-		menu.addItem(item => {
-			item
-				.setTitle(t('HIDE_OTHERS_STICKY'))
-				.setIcon('eye-off')
-				.onClick(() => {
-					this.options.onHideOthersSticky();
-				});
-		});
-
-		menu.addItem(item => {
-			item
-				.setTitle(t('SHOW_OTHERS_STICKY'))
-				.setIcon('eye')
-				.onClick(() => {
-					this.options.onShowOthersSticky();
 				});
 		});
 
@@ -495,6 +463,16 @@ export class StickyNotePopover {
 				});
 			}
 		}
+
+		menu.addSeparator();
+		menu.addItem(item => {
+			item
+				.setTitle(t('DELETE_STICKY_ACTION'))
+				.setIcon('trash-2')
+				.onClick(() => {
+					this.options.onDeleteCurrentSticky();
+				});
+		});
 
 		menu.showAtMouseEvent(evt);
 	}

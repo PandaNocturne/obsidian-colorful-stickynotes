@@ -1803,10 +1803,6 @@ export class StickyNoteManager {
 			onMarkdownModeChange: () => this.persistOpenWindows(),
 			onOpenNoteList: () => void this.plugin.openNoteListView(),
 			onDeleteCurrentSticky: () => void this.deleteCurrentStickyNote(id),
-			onHideCurrentSticky: () => void this.hideCurrentStickyById(id),
-			onHideOthersSticky: () => void this.hideOthersRelativeToId(id),
-			onShowOthersSticky: () => void this.showOthersSticky(),
-			onShowAllStickies: () => void this.showAllStickies(),
 			onToggleArchiveCurrentSticky: () => void this.toggleArchiveCurrentStickyForPopover(id),
 			getWorkspacesForRemoveMenu: () => {
 				const pop = this.popovers.get(id);
