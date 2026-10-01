@@ -98,8 +98,8 @@ const DASH_AREA_MODE_SPECS: Array<{
 	showCount: boolean;
 }> = [
 	{ mode: 'all', titleKey: 'DASH_AREA_ALL', icon: 'inbox', showCount: true },
-	{ mode: 'ungrouped', titleKey: 'DASH_AREA_UNGROUPED', icon: 'layers', showCount: true },
-	{ mode: 'uncategorized', titleKey: 'DASH_AREA_UNCATEGORIZED', icon: 'folder-x', showCount: true },
+	{ mode: 'ungrouped', titleKey: 'DASH_AREA_UNGROUPED', icon: 'folder-x', showCount: true },
+	{ mode: 'uncategorized', titleKey: 'DASH_AREA_UNCATEGORIZED', icon: 'layers', showCount: true },
 	{ mode: 'recent', titleKey: 'DASH_AREA_RECENT', icon: 'clock', showCount: false },
 	{ mode: 'random', titleKey: 'DASH_AREA_RANDOM', icon: 'shuffle', showCount: false },
 	{ mode: 'archived', titleKey: 'DASH_AREA_ARCHIVED', icon: 'archive', showCount: true }
@@ -3024,7 +3024,11 @@ export class StickyNoteDashboardView extends ItemView {
 		this.composing = true;
 		try {
 			const extra = this.getComposerMarkdown();
-			const created = await this.plugin.stickies.addStickyWindow({ color: this.selectedCreateColor() });
+			const created = await this.plugin.stickies.addStickyWindow(
+				{ color: this.selectedCreateColor() },
+				undefined,
+				{ openFloating: false }
+			);
 			if (!created) return;
 			if (extra) {
 				this.plugin.muteStickyListModifyPaths.add(created.path);

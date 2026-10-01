@@ -1490,7 +1490,12 @@ export class StickyNoteManager {
 		}
 	}
 
-	async addStickyWindow(initial?: Partial<SerializedStickyWindow>, sourcePopover?: StickyNotePopover): Promise<TFile | null> {
+	async addStickyWindow(
+		initial?: Partial<SerializedStickyWindow>,
+		sourcePopover?: StickyNotePopover,
+		options?: { openFloating?: boolean }
+	): Promise<TFile | null> {
+		const openFloating = options?.openFloating !== false;
 		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 		const defaultTplPath = (this.plugin.settings.defaultTemplatePath || '').trim();
 
@@ -1575,6 +1580,40 @@ export class StickyNoteManager {
 		const color = resolvedNewColor;
 		const collapsed = initial?.collapsed ?? false;
 		const yamlVisible = initial?.yamlVisible ?? false;
+
+		if (!openFloating) {
+			const LIST_REFRESH_AFTER_NEW_STICKY_MS = 800;
+			const scheduleListRefreshSoon = (): void => {
+				window.setTimeout(() => {
+					requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
+				}, LIST_REFRESH_AFTER_NEW_STICKY_MS);
+			};
+			const endMuteAfterList = (p: string): void => {
+				window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(p), 120);
+			};
+			const parsedOnDisk = parseStickyBgColorFromMarkdownSource(bodyForCreate.replace(/^\uFEFF/, ''));
+			const needsBgWrite = color !== 'default' && parsedOnDisk !== color;
+			if (needsBgWrite) {
+				this.plugin.muteStickyListModifyPaths.add(f.path);
+				await new Promise<void>(resolve =>
+					requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+				);
+				void this.setStickyBackgroundColorForFile(f, color)
+					.catch(() => undefined)
+					.finally(() => {
+						scheduleListRefreshSoon();
+						endMuteAfterList(f.path);
+					});
+			} else {
+				scheduleListRefreshSoon();
+			}
+			await this.ensureStickyFrontmatterDefaults(f, { preferredId: id, preferredColor: color }).catch(
+				() => undefined
+			);
+			await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
+			this.notifyStickyListOpenIndicators();
+			return f;
+		}
 
 		let bounds: FloatingBounds;
 		if (initial?.bounds) {
