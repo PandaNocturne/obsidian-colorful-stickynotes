@@ -170,7 +170,7 @@ export const en = {
 
 	DISPLAY_STICKY_LIST: 'Sticky list',
 	DISPLAY_STICKY_DASHBOARD: 'Colorful StickyNotes',
-	DASH_COMPOSER_PLACEHOLDER: 'Write a note…',
+	DASH_COMPOSER_PLACEHOLDER: 'Enter content...',
 	DASH_COMPOSER_DONE: 'Done',
 	DASH_CALENDAR_PREV: 'Previous month',
 	DASH_CALENDAR_NEXT: 'Next month',

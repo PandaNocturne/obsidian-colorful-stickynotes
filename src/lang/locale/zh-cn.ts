@@ -156,7 +156,7 @@ export const zhCn: Record<MessageKey, string> = {
 
 	DISPLAY_STICKY_LIST: '便笺列表',
 	DISPLAY_STICKY_DASHBOARD: 'Colorful StickyNotes',
-	DASH_COMPOSER_PLACEHOLDER: '输入框…',
+	DASH_COMPOSER_PLACEHOLDER: '请输入内容...',
 	DASH_COMPOSER_DONE: '完成',
 	DASH_CALENDAR_PREV: '上一月',
 	DASH_CALENDAR_NEXT: '下一月',

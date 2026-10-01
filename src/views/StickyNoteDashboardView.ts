@@ -3777,23 +3777,22 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private async commitComposer(): Promise<void> {
 		if (this.composing) return;
+		const extra = this.getComposerMarkdown().trim();
+		if (!extra) return;
 		this.composing = true;
 		try {
-			const extra = this.getComposerMarkdown();
 			const created = await this.plugin.stickies.addStickyWindow(
 				{ color: this.selectedCreateColor() },
 				undefined,
 				{ openFloating: false }
 			);
 			if (!created) return;
-			if (extra) {
-				this.plugin.muteStickyListModifyPaths.add(created.path);
-				try {
-					const cur = await this.app.vault.read(created);
-					await this.app.vault.modify(created, injectMarkdownAfterFrontmatter(cur, extra));
-				} finally {
-					window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(created.path), 400);
-				}
+			this.plugin.muteStickyListModifyPaths.add(created.path);
+			try {
+				const cur = await this.app.vault.read(created);
+				await this.app.vault.modify(created, injectMarkdownAfterFrontmatter(cur, extra));
+			} finally {
+				window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(created.path), 400);
 			}
 			if (this.workspaceSel.kind === 'selection') {
 				for (const wsId of this.workspaceSel.workspaceIds) {
