@@ -4766,6 +4766,54 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 	}
 
+	/**
+	 * 筛选切换：旧卡片保持可见，新页准备好后一次性替换，避免 grid 清空后只剩输入区的闪烁。
+	 */
+	private async syncPageSwapReady(
+		container: HTMLElement,
+		pageFiles: TFile[],
+		pinnedSet: ReadonlySet<string>
+	): Promise<void> {
+		const wantedSet = new Set(pageFiles.map(x => x.path));
+		const existing = new Map<string, HTMLElement>();
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (p) existing.set(p, el);
+		}
+
+		const nextCards: HTMLElement[] = [];
+		for (const f of pageFiles) {
+			const color = await resolveStickyBgColorForFile(this.app, f);
+			const archived = await resolveStickyArchivedForFile(this.app, f);
+			const prev = existing.get(f.path);
+			if (prev) {
+				this.updateCardChrome(prev, f, color, pinnedSet, archived);
+				await this.maybeRefreshCardPreview(prev, f);
+				nextCards.push(prev);
+			} else {
+				nextCards.push(await this.createCard(f, color, pinnedSet, archived));
+			}
+		}
+
+		const frag = document.createDocumentFragment();
+		for (const card of nextCards) {
+			frag.appendChild(card);
+		}
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement)) {
+				el.remove();
+				continue;
+			}
+			if (el.hasClass('csn-list-card')) {
+				const p = el.dataset.csnNotePath;
+				if (p && !wantedSet.has(p)) this.disposeMarkdownHostForPath(p);
+			}
+			el.remove();
+		}
+		container.appendChild(frag);
+	}
+
 	private async syncPageIncremental(
 		container: HTMLElement,
 		pageFiles: TFile[],
@@ -4814,17 +4862,13 @@ export class StickyNoteDashboardView extends ItemView {
 			if (p) byPath.set(p, el);
 		}
 		if (byPath.size !== pageFiles.length) {
-			this.disposeAllMarkdownHosts();
-			container.empty();
-			await this.renderCardsFull(container, pageFiles, pinnedSet);
+			await this.syncPageSwapReady(container, pageFiles, pinnedSet);
 			return;
 		}
 		for (const f of pageFiles) {
 			const card = byPath.get(f.path);
 			if (!card) {
-				this.disposeAllMarkdownHosts();
-				container.empty();
-				await this.renderCardsFull(container, pageFiles, pinnedSet);
+				await this.syncPageSwapReady(container, pageFiles, pinnedSet);
 				return;
 			}
 			const color = await resolveStickyBgColorForFile(this.app, f);
@@ -5022,12 +5066,19 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 
 			if (files.length === 0) {
-				this.disposeAllMarkdownHosts();
 				this.lastDashStructureKey = '';
 				this.lastDashFilterKey = '';
 				this.lastRenderedPageIndex = null;
-				container.empty();
-				container.createDiv({ text: t('DASH_EMPTY'), cls: 'csn-list-empty' });
+				const emptyEl = document.createElement('div');
+				emptyEl.addClass('csn-list-empty');
+				emptyEl.setText(t('DASH_EMPTY'));
+				for (const el of Array.from(container.children)) {
+					if (el instanceof HTMLElement && el.hasClass('csn-list-card')) {
+						const p = el.dataset.csnNotePath;
+						if (p) this.disposeMarkdownHostForPath(p);
+					}
+				}
+				container.replaceChildren(emptyEl);
 				this.paginationPagesEl?.empty();
 				this.paginationMetaEl.setText('');
 				this.paginationEl.hide();
@@ -5087,18 +5138,15 @@ export class StickyNoteDashboardView extends ItemView {
 			this.lastDashStructureKey = structureKey;
 
 			if (filterChanged) {
-				this.disposeAllMarkdownHosts();
-				container.empty();
-				await this.renderCardsFull(container, pageFiles, pinnedSet);
+				/* 先保留旧卡片再一次性换页，避免清空后只露出输入区 */
+				await this.syncPageSwapReady(container, pageFiles, pinnedSet);
 			} else if (membershipOnlyChanged || paginationOnly) {
 				/* 新建/删除/翻页：复用未变动卡片的 Markdown 宿主，避免整表闪烁 */
 				await this.syncPageIncremental(container, pageFiles, pinnedSet);
 			} else if (samePageContentTouch) {
 				await this.syncPageContentOnly(container, pageFiles, pinnedSet);
 			} else {
-				this.disposeAllMarkdownHosts();
-				container.empty();
-				await this.renderCardsFull(container, pageFiles, pinnedSet);
+				await this.syncPageSwapReady(container, pageFiles, pinnedSet);
 			}
 			this.syncListCardSelectionChrome();
 			const pageIndexChanged =
