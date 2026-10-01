@@ -2175,6 +2175,42 @@ export class StickyNoteDashboardView extends ItemView {
 		return max;
 	}
 
+	/** 某年创建便笺总数（日期键 YYYY-MM-DD）。 */
+	private noteCountForYear(year: number): number {
+		const prefix = `${year}-`;
+		let total = 0;
+		for (const [key, count] of this.noteDateCounts) {
+			if (key.startsWith(prefix)) total += count;
+		}
+		return total;
+	}
+
+	/** 某年月创建便笺总数。 */
+	private noteCountForYearMonth(year: number, month0: number): number {
+		const prefix = `${year}-${String(month0 + 1).padStart(2, '0')}-`;
+		let total = 0;
+		for (const [key, count] of this.noteDateCounts) {
+			if (key.startsWith(prefix)) total += count;
+		}
+		return total;
+	}
+
+	private applyCalPopoverHeat(
+		el: HTMLElement,
+		count: number,
+		heatMax: number,
+		labelKey: string
+	): void {
+		const level = heatmapLevelFromCount(count, heatMax);
+		if (level > 0) el.addClass(`heat-${level}`);
+		const aria =
+			count > 0
+				? t('DASH_CALENDAR_DAY_ARIA', { date: labelKey, count })
+				: t('DASH_CALENDAR_DAY_ARIA_EMPTY', { date: labelKey });
+		el.setAttribute('aria-label', aria);
+		el.title = count > 0 ? aria : labelKey;
+	}
+
 	private syncDayCellHeat(el: HTMLElement, key: string): void {
 		for (let i = 0; i <= 4; i++) el.removeClass(`heat-${i}`);
 		el.removeClass('has-notes');
@@ -2270,12 +2306,22 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 
 		const grid = pop.createDiv({ cls: 'csn-dash-cal-popover-grid csn-dash-cal-year-grid' });
+		const yearCounts: number[] = [];
+		let heatMax = 0;
 		for (let y = this.calDecadeStart; y < this.calDecadeStart + 10; y++) {
+			const count = this.noteCountForYear(y);
+			yearCounts.push(count);
+			if (count > heatMax) heatMax = count;
+		}
+		for (let i = 0; i < 10; i++) {
+			const y = this.calDecadeStart + i;
+			const count = yearCounts[i] ?? 0;
 			const btn = grid.createEl('button', {
 				type: 'button',
 				cls: `csn-dash-cal-popover-item${y === this.calYear ? ' is-selected' : ''}`,
 				text: String(y)
 			});
+			this.applyCalPopoverHeat(btn, count, heatMax, String(y));
 			this.registerDomEvent(btn, 'click', evt => {
 				evt.stopPropagation();
 				this.calYear = y;
@@ -2292,12 +2338,22 @@ export class StickyNoteDashboardView extends ItemView {
 			text: this.formatCalMonthText(this.calMonth0)
 		});
 		const grid = pop.createDiv({ cls: 'csn-dash-cal-popover-grid csn-dash-cal-month-grid' });
+		const monthCounts: number[] = [];
+		let heatMax = 0;
 		for (let m = 0; m < 12; m++) {
+			const count = this.noteCountForYearMonth(this.calYear, m);
+			monthCounts.push(count);
+			if (count > heatMax) heatMax = count;
+		}
+		for (let m = 0; m < 12; m++) {
+			const count = monthCounts[m] ?? 0;
+			const ym = `${this.calYear}-${String(m + 1).padStart(2, '0')}`;
 			const btn = grid.createEl('button', {
 				type: 'button',
 				cls: `csn-dash-cal-popover-item${m === this.calMonth0 ? ' is-selected' : ''}`,
 				text: this.formatCalMonthText(m)
 			});
+			this.applyCalPopoverHeat(btn, count, heatMax, ym);
 			this.registerDomEvent(btn, 'click', evt => {
 				evt.stopPropagation();
 				this.calMonth0 = m;
