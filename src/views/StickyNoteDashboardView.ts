@@ -1712,7 +1712,7 @@ export class StickyNoteDashboardView extends ItemView {
 				'aria-pressed': 'false'
 			}
 		});
-		setIcon(this.listBulkEditBtn, 'pencil');
+		setIcon(this.listBulkEditBtn, 'square-check');
 		this.registerDomEvent(this.listBulkEditBtn, 'click', () => {
 			this.listArchiveCheckboxEditMode = !this.listArchiveCheckboxEditMode;
 			this.syncListArchiveCheckboxEditUI();
