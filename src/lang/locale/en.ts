@@ -184,6 +184,8 @@ export const en = {
 	DASH_CALENDAR_SELECT_YEAR: 'Filter by year {year}',
 	DASH_CALENDAR_SELECT_MONTH: 'Filter by {year}-{month}',
 	DASH_WS_TREE_TITLE: 'Workspaces',
+	DASH_SPLITTER_LR: 'Resize left and right panes',
+	DASH_SPLITTER_COMPOSER: 'Resize composer and note grid',
 	DASH_WS_FILTER_ALL: 'All',
 	DASH_ATTR_LABEL: 'Status:',
 	DASH_COLOR_LABEL: 'Color:',

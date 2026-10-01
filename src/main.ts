@@ -1,6 +1,8 @@
 import { Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from 'obsidian';
 import { t } from './lang/helpers';
 import {
+	clampDashComposerPaneHeight,
+	clampDashLeftPaneWidth,
 	clampViewContentZoom,
 	normalizeNoteListDimensionCss,
 	ColorfulStickyNotesSettingTab,
@@ -37,6 +39,10 @@ import {
 	type NoteListSort,
 	type StickyColorId
 } from './types';
+import {
+	resolveObsidianMarkdownEditorClass,
+	type ObsidianMarkdownEditorCtor
+} from './utils/embedded-markdown-editor';
 
 const VALID_NEW_STICKY_BG: readonly StickyColorId[] = [
 	'default',
@@ -79,6 +85,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 写入 frontmatter 等触发的 `modify`：跳过防抖列表刷新，由新建流程末尾主动 `refreshStickyListIfOpen` 一次，避免连刷卡顿 */
 	muteStickyListModifyPaths: Set<string> = new Set();
 
+	/**
+	 * Obsidian 内部可嵌入 Markdown 源码编辑器类（经 embedRegistry 提取）。
+	 * 供仪表盘快速输入等场景复用；提取失败时为 `null`，调用方应回退到 textarea。
+	 */
+	markdownEditorClass: ObsidianMarkdownEditorCtor | null = null;
+
 	private listOpenIndicatorRaf: number | null = null;
 
 	async onload(): Promise<void> {
@@ -93,7 +105,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.syncNoteListGridMetricsToOpenViews();
 		this.app.workspace.onLayoutReady(() => {
 			this.syncNoteListGridMetricsToOpenViews();
+			if (!this.markdownEditorClass) {
+				this.markdownEditorClass = resolveObsidianMarkdownEditorClass(this.app);
+			}
+			this.remountDashboardComposerEditors();
 		});
+		this.markdownEditorClass = resolveObsidianMarkdownEditorClass(this.app);
 
 		this.addRibbonIcon('square-pen', t('RIBBON_OPEN_STICKY'), () => {
 			void this.toggleStickyWindowsForCurrentWorkspace();
@@ -366,6 +383,13 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			listPs = DEFAULT_SETTINGS.noteListPageSize;
 		}
 		this.settings.noteListPageSize = Math.max(4, Math.min(48, Math.round(listPs)));
+
+		this.settings.dashboardLeftPaneWidth = clampDashLeftPaneWidth(
+			this.settings.dashboardLeftPaneWidth
+		);
+		this.settings.dashboardComposerPaneHeight = clampDashComposerPaneHeight(
+			this.settings.dashboardComposerPaneHeight
+		);
 
 		const nls = this.settings.noteListSort;
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.some(s => s === nls)) {
@@ -647,6 +671,17 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			const v = leaf.view;
 			if (v instanceof StickyNoteDashboardView) {
 				v.syncViewContentZoomFromSettings();
+			}
+		}
+	}
+
+	/** 内部 MarkdownEditor 类就绪后，刷新已打开仪表盘的快速输入编辑区。 */
+	remountDashboardComposerEditors(): void {
+		if (!this.markdownEditorClass) return;
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
+				v.remountComposerEditor();
 			}
 		}
 	}

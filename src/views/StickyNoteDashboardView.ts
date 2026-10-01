@@ -15,7 +15,13 @@ import {
 import type ColorfulStickyNotesPlugin from '../main';
 import { t } from '../lang/helpers';
 import type { MessageKey } from '../lang/locale/en';
-import { clampViewContentZoom } from '../settings';
+import {
+	clampDashComposerPaneHeight,
+	clampDashLeftPaneWidth,
+	clampViewContentZoom,
+	DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
+	DASH_LEFT_PANE_WIDTH_DEFAULT
+} from '../settings';
 import {
 	VIEW_STICKY_NOTE_DASHBOARD,
 	WS_TAB_GROUP_DEFAULT_ID,
@@ -44,6 +50,7 @@ import {
 } from '../utils/query-sticky-list';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
 import { resolveWorkspaceTabGroupId } from '../workspace-store';
+import { EmbeddedMarkdownEditorHost } from '../utils/embedded-markdown-editor';
 
 type DashWorkspaceSel =
 	| { kind: 'all' }
@@ -165,7 +172,9 @@ function buildMonthWeekRows(
 
 export class StickyNoteDashboardView extends ItemView {
 	private calendarEl: HTMLElement | null = null;
-	private composerEl: HTMLTextAreaElement | null = null;
+	private composerHostEl: HTMLElement | null = null;
+	private composerFallbackEl: HTMLTextAreaElement | null = null;
+	private composerEditor: EmbeddedMarkdownEditorHost | null = null;
 	private treeEl: HTMLElement | null = null;
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
@@ -250,7 +259,68 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncCardOverflowClipToolbarBtn();
 	}
 
-	/** 同步卡片预览区内容缩放（不重渲 Markdown）。 */
+	/** 写入左右栏宽、输入区高到 CSS 变量。 */
+	applyDashPaneLayout(): void {
+		if (!this.contentEl.hasClass('csn-dash')) return;
+		const leftW = clampDashLeftPaneWidth(this.plugin.settings.dashboardLeftPaneWidth);
+		const composerH = clampDashComposerPaneHeight(this.plugin.settings.dashboardComposerPaneHeight);
+		this.plugin.settings.dashboardLeftPaneWidth = leftW;
+		this.plugin.settings.dashboardComposerPaneHeight = composerH;
+		this.contentEl.style.setProperty('--csn-dash-left-width', `${leftW}px`);
+		this.contentEl.style.setProperty('--csn-dash-composer-height', `${composerH}px`);
+	}
+
+	/** 垂直/水平拖拽分隔条：调整左栏宽或输入区高，松手后写入设置。 */
+	private registerDashSplitter(el: HTMLElement, orientation: 'vertical' | 'horizontal'): void {
+		this.registerDomEvent(el, 'pointerdown', (evt: PointerEvent) => {
+			if (evt.button !== 0) return;
+			evt.preventDefault();
+			const startX = evt.clientX;
+			const startY = evt.clientY;
+			const startLeft = clampDashLeftPaneWidth(this.plugin.settings.dashboardLeftPaneWidth);
+			const startComposer = clampDashComposerPaneHeight(this.plugin.settings.dashboardComposerPaneHeight);
+			el.classList.add('is-dragging');
+			el.setPointerCapture(evt.pointerId);
+
+			const onMove = (e: PointerEvent) => {
+				if (orientation === 'vertical') {
+					const next = clampDashLeftPaneWidth(startLeft + (e.clientX - startX));
+					this.plugin.settings.dashboardLeftPaneWidth = next;
+				} else {
+					const next = clampDashComposerPaneHeight(startComposer + (e.clientY - startY));
+					this.plugin.settings.dashboardComposerPaneHeight = next;
+				}
+				this.applyDashPaneLayout();
+			};
+			const onUp = (e: PointerEvent) => {
+				el.classList.remove('is-dragging');
+				try {
+					el.releasePointerCapture(e.pointerId);
+				} catch {
+					/* already released */
+				}
+				window.removeEventListener('pointermove', onMove);
+				window.removeEventListener('pointerup', onUp);
+				window.removeEventListener('pointercancel', onUp);
+				void this.plugin.saveSettings();
+			};
+			window.addEventListener('pointermove', onMove);
+			window.addEventListener('pointerup', onUp);
+			window.addEventListener('pointercancel', onUp);
+		});
+
+		this.registerDomEvent(el, 'dblclick', () => {
+			if (orientation === 'vertical') {
+				this.plugin.settings.dashboardLeftPaneWidth = DASH_LEFT_PANE_WIDTH_DEFAULT;
+			} else {
+				this.plugin.settings.dashboardComposerPaneHeight = DASH_COMPOSER_PANE_HEIGHT_DEFAULT;
+			}
+			this.applyDashPaneLayout();
+			void this.plugin.saveSettings();
+		});
+	}
+
+	/** 同步卡片预览区与快速输入编辑区内容缩放（不重渲 Markdown）。 */
 	syncViewContentZoomFromSettings(): void {
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		this.gridEl?.querySelectorAll('.csn-list-card').forEach(card => {
@@ -258,6 +328,15 @@ export class StickyNoteDashboardView extends ItemView {
 				card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 			}
 		});
+		this.applyComposerContentZoom(zoom);
+	}
+
+	private applyComposerContentZoom(zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom)): void {
+		const host = this.composerHostEl;
+		const frame = host?.parentElement;
+		const target = frame ?? host;
+		if (!target) return;
+		target.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 	}
 
 	requestRedraw(): void {
@@ -999,19 +1078,43 @@ export class StickyNoteDashboardView extends ItemView {
 		const root = this.contentEl;
 		root.empty();
 		root.addClass('csn-dash');
+		this.applyDashPaneLayout();
 
-		const calendar = root.createDiv({ cls: 'csn-dash-calendar' });
-		this.calendarEl = calendar;
+		/* 先左右栏，再各自上下：左=日历+工作区树；右=输入区+网格 */
+		const colLeft = root.createDiv({ cls: 'csn-dash-col csn-dash-col-left' });
+		this.calendarEl = colLeft.createDiv({ cls: 'csn-dash-calendar' });
+		const left = colLeft.createDiv({ cls: 'csn-dash-left' });
+		left.createDiv({ cls: 'csn-dash-ws-title', text: t('DASH_WS_TREE_TITLE') });
+		this.treeEl = left.createDiv({ cls: 'csn-dash-ws-tree' });
 
-		const composerWrap = root.createDiv({ cls: 'csn-dash-composer' });
-		this.composerEl = composerWrap.createEl('textarea', {
-			cls: 'csn-dash-composer-input',
+		const splitV = root.createEl('div', {
+			cls: 'csn-dash-splitter csn-dash-splitter--v',
 			attr: {
-				placeholder: t('DASH_COMPOSER_PLACEHOLDER'),
-				spellcheck: 'false',
-				rows: '5',
-				'aria-label': t('DASH_COMPOSER_PLACEHOLDER')
+				role: 'separator',
+				'aria-orientation': 'vertical',
+				'aria-label': t('DASH_SPLITTER_LR'),
+				tabindex: '0'
 			}
+		});
+		this.registerDashSplitter(splitV, 'vertical');
+
+		const colRight = root.createDiv({ cls: 'csn-dash-col csn-dash-col-right' });
+
+		const composerWrap = colRight.createDiv({ cls: 'csn-dash-composer' });
+		const composerFrame = composerWrap.createDiv({
+			cls: 'csn-dash-composer-editor',
+			attr: { 'aria-label': t('DASH_COMPOSER_PLACEHOLDER') }
+		});
+		/* 与 Kanban 一致：CM 挂到轻量容器，勿直接把 markdown-source-view 当构造容器 */
+		this.composerHostEl = composerFrame.createDiv({ cls: 'csn-dash-composer-cm cm-table-widget' });
+		this.mountComposerEditor();
+		this.registerDomEvent(composerFrame, 'click', (evt: MouseEvent) => {
+			const tEl = evt.target;
+			if (!(tEl instanceof Element)) return;
+			if (tEl.closest('.csn-dash-composer-done')) return;
+			if (tEl.closest('.cm-editor')) return;
+			this.composerEditor?.focus();
+			this.composerFallbackEl?.focus();
 		});
 		const doneBtn = composerWrap.createEl('button', {
 			type: 'button',
@@ -1021,18 +1124,19 @@ export class StickyNoteDashboardView extends ItemView {
 		this.registerDomEvent(doneBtn, 'click', () => {
 			void this.commitComposer();
 		});
-		this.registerDomEvent(this.composerEl, 'keydown', (evt: KeyboardEvent) => {
-			if ((evt.ctrlKey || evt.metaKey) && evt.key === 'Enter') {
-				evt.preventDefault();
-				void this.commitComposer();
+
+		const splitH = colRight.createEl('div', {
+			cls: 'csn-dash-splitter csn-dash-splitter--h',
+			attr: {
+				role: 'separator',
+				'aria-orientation': 'horizontal',
+				'aria-label': t('DASH_SPLITTER_COMPOSER'),
+				tabindex: '0'
 			}
 		});
+		this.registerDashSplitter(splitH, 'horizontal');
 
-		const left = root.createDiv({ cls: 'csn-dash-left' });
-		left.createDiv({ cls: 'csn-dash-ws-title', text: t('DASH_WS_TREE_TITLE') });
-		this.treeEl = left.createDiv({ cls: 'csn-dash-ws-tree' });
-
-		const main = root.createDiv({ cls: 'csn-dash-main' });
+		const main = colRight.createDiv({ cls: 'csn-dash-main' });
 
 		const filterBar = main.createDiv({ cls: 'csn-dash-filter-bar' });
 		const filters = filterBar.createDiv({ cls: 'csn-dash-filters' });
@@ -1213,6 +1317,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 		this.registerVaultRefresh();
 		this.syncListGridMetricsFromSettings();
+		this.syncViewContentZoomFromSettings();
 		this.syncArchiveButtons();
 		this.syncColorButtons();
 		this.syncSortToolbarBtn();
@@ -1620,11 +1725,89 @@ export class StickyNoteDashboardView extends ItemView {
 		return this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
 	}
 
+	/** 挂载 Obsidian 原生 Markdown 编辑器；失败时回退到 textarea。 */
+	private mountComposerEditor(): void {
+		const host = this.composerHostEl;
+		if (!host) return;
+		this.composerEditor?.destroy();
+		this.composerEditor = null;
+		this.composerFallbackEl = null;
+		host.empty();
+
+		const Ctor = this.plugin.markdownEditorClass;
+		if (Ctor) {
+			try {
+				this.composerEditor = new EmbeddedMarkdownEditorHost({
+					plugin: this.plugin,
+					app: this.app,
+					hostEl: host,
+					MarkdownEditor: Ctor,
+					/* 切勿绑定 workspace 当前文件，否则 Enter/内部同步会覆盖或清空输入 */
+					getFile: () => null,
+					placeholder: t('DASH_COMPOSER_PLACEHOLDER'),
+					initialValue: '',
+					onSubmit: () => {
+						void this.commitComposer();
+					},
+					onEscape: () => {
+						this.composerEditor?.setValue('');
+					}
+				});
+				this.composerEditor.mount();
+				this.applyComposerContentZoom();
+				return;
+			} catch (e) {
+				console.error('[colorful-sticky-notes] mount composer markdown editor failed', e);
+				this.composerEditor?.destroy();
+				this.composerEditor = null;
+				host.empty();
+			}
+		}
+
+		this.composerFallbackEl = host.createEl('textarea', {
+			cls: 'csn-dash-composer-input',
+			attr: {
+				placeholder: t('DASH_COMPOSER_PLACEHOLDER'),
+				spellcheck: 'false',
+				rows: '5',
+				'aria-label': t('DASH_COMPOSER_PLACEHOLDER')
+			}
+		});
+		this.applyComposerContentZoom();
+		this.registerDomEvent(this.composerFallbackEl, 'keydown', (evt: KeyboardEvent) => {
+			if ((evt.ctrlKey || evt.metaKey) && evt.key === 'Enter') {
+				evt.preventDefault();
+				void this.commitComposer();
+			}
+		});
+	}
+
+	/** 插件稍后解析到内部 MarkdownEditor 类时，从 textarea 升级为 CM 编辑区。 */
+	remountComposerEditor(): void {
+		if (!this.composerHostEl) return;
+		/* 已有可用 CM 时勿重挂，避免清空正在输入的内容 */
+		if (this.composerEditor) return;
+		this.mountComposerEditor();
+	}
+
+	private getComposerMarkdown(): string {
+		if (this.composerEditor) return this.composerEditor.getValue().trimEnd();
+		return (this.composerFallbackEl?.value ?? '').trimEnd();
+	}
+
+	private clearComposer(): void {
+		if (this.composerEditor) {
+			this.composerEditor.setValue('');
+			return;
+		}
+		if (this.composerFallbackEl) this.composerFallbackEl.value = '';
+	}
+
 	private async commitComposer(): Promise<void> {
 		if (this.composing) return;
 		this.composing = true;
 		try {
-			const extra = (this.composerEl?.value ?? '').trimEnd();
+			const extra = this.getComposerMarkdown();
 			const created = await this.plugin.stickies.addStickyWindow({ color: this.selectedCreateColor() });
 			if (!created) return;
 			if (extra) {
@@ -1639,7 +1822,7 @@ export class StickyNoteDashboardView extends ItemView {
 			if (this.workspaceSel.kind === 'workspace') {
 				await this.plugin.stickies.addFilesToWorkspace(this.workspaceSel.workspaceId, [created]);
 			}
-			if (this.composerEl) this.composerEl.value = '';
+			this.clearComposer();
 			this.listPageIndex = 0;
 			void this.renderDash();
 		} finally {
@@ -2280,7 +2463,10 @@ export class StickyNoteDashboardView extends ItemView {
 		this.selectedListNotePaths.clear();
 		this.lastSelectedListNotePath = null;
 		this.calendarEl = null;
-		this.composerEl = null;
+		this.composerEditor?.destroy();
+		this.composerEditor = null;
+		this.composerHostEl = null;
+		this.composerFallbackEl = null;
 		this.treeEl = null;
 		this.searchInput = null;
 		this.searchInnerEl = null;

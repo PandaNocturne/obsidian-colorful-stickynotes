@@ -1297,19 +1297,58 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   width: 14px;
   height: 14px;
 }
-/* 便笺标签页仪表盘 */
+/* 便笺标签页仪表盘：先左右，再各自上下 */
 .workspace-leaf-content .view-content.csn-dash {
   height: 100%;
   box-sizing: border-box;
   padding: 10px;
-  display: grid;
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+  min-width: 0;
+  --csn-dash-left-width: 220px;
+  --csn-dash-composer-height: 168px;
+}
+.csn-dash-col {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
+.csn-dash-col-left {
+  flex: 0 0 var(--csn-dash-left-width);
+  width: var(--csn-dash-left-width);
+  max-width: 45%;
+}
+.csn-dash-col-right {
+  flex: 1 1 auto;
+}
+.csn-dash-splitter {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 3;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  touch-action: none;
+}
+.csn-dash-splitter--v {
+  width: 6px;
+  cursor: col-resize;
+  align-self: stretch;
+}
+.csn-dash-splitter--h {
+  height: 6px;
+  cursor: row-resize;
+  width: 100%;
+  flex-shrink: 0;
+}
 .csn-dash-calendar {
-  grid-column: 1;
-  grid-row: 1;
+  flex: 0 0 auto;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   padding: 8px;
@@ -1317,19 +1356,105 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   min-width: 0;
 }
 .csn-dash-composer {
-  grid-column: 2;
-  grid-row: 1;
   position: relative;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   background: var(--background-primary);
   min-width: 0;
+  flex: 0 0 var(--csn-dash-composer-height);
+  height: var(--csn-dash-composer-height);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* 外框承担缩放；内部 .csn-dash-composer-cm 才是 CM 挂载点 */
+.csn-dash-composer-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 8px 12px 40px;
+  box-sizing: border-box;
+  zoom: var(--csn-sticky-view-content-zoom, 0.65);
+  cursor: text;
   display: flex;
   flex-direction: column;
 }
+.csn-dash-composer-cm {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Obsidian CM：强制高度链，占满快速输入区 */
+.csn-dash-composer-cm .cm-editor {
+  background: transparent;
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100%;
+  display: flex !important;
+  flex-direction: column;
+  font-family: var(--font-text);
+  font-size: var(--font-text-size);
+  line-height: var(--line-height-normal);
+}
+.csn-dash-composer-cm .cm-scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: auto !important;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+.csn-dash-composer-cm .cm-content {
+  padding: 4px 0 !important;
+  min-height: 72px !important;
+}
+.csn-dash-composer-cm .cm-gutters {
+  display: none;
+}
+.csn-dash-composer-input {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 88px;
+  height: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-text);
+  font-size: var(--font-text-size);
+  line-height: var(--line-height-normal);
+  color: var(--text-normal);
+}
+.csn-dash-composer-done {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 2;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 999px;
+  background-color: #cde8c8;
+  color: rgba(0, 0, 0, 0.78);
+  font-size: var(--font-ui-small);
+  cursor: var(--cursor);
+}
+.theme-dark .csn-dash-composer-done {
+  background-color: #3d5c3a;
+  color: rgba(255, 255, 255, 0.9);
+}
 .csn-dash-left {
-  grid-column: 1;
-  grid-row: 2;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   border: 1px solid var(--background-modifier-border);
@@ -1337,10 +1462,11 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   padding: 8px;
   overflow: auto;
   background: var(--background-primary);
+  display: flex;
+  flex-direction: column;
 }
 .csn-dash-main {
-  grid-column: 2;
-  grid-row: 2;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -1589,41 +1715,19 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   width: 100%;
   font-size: var(--font-ui-smaller);
 }
-.csn-dash-composer-input {
-  flex: 1 1 auto;
-  min-height: 88px;
-  resize: none;
-  border: none;
-  box-shadow: none;
-  background: transparent;
-  padding: 10px 12px 36px;
-  font-size: var(--font-ui-small);
-}
-.csn-dash-composer-done {
-  position: absolute;
-  right: 10px;
-  bottom: 8px;
-  padding: 4px 12px;
-  border: none;
-  border-radius: 999px;
-  background-color: #cde8c8;
-  color: rgba(0, 0, 0, 0.78);
-  font-size: var(--font-ui-small);
-  cursor: var(--cursor);
-}
-.theme-dark .csn-dash-composer-done {
-  background-color: #3d5c3a;
-  color: rgba(255, 255, 255, 0.9);
-}
 .csn-dash-ws-title {
   font-size: var(--font-ui-small);
   font-weight: 600;
   margin-bottom: 8px;
+  flex-shrink: 0;
 }
 .csn-dash-ws-tree {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .csn-dash-tree-item {
   display: flex;
@@ -1687,26 +1791,15 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 @media (max-width: 900px) {
   .workspace-leaf-content .view-content.csn-dash {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    flex-direction: column;
   }
-  .csn-dash-calendar,
-  .csn-dash-composer,
-  .csn-dash-left,
-  .csn-dash-main {
-    grid-column: 1;
-  }
-  .csn-dash-calendar {
-    grid-row: 1;
-  }
-  .csn-dash-composer {
-    grid-row: 2;
-  }
-  .csn-dash-left {
+  .csn-dash-col-left,
+  .csn-dash-splitter--v {
     display: none;
   }
-  .csn-dash-main {
-    grid-row: 3;
+  .csn-dash-col-right {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 }
 /* 便笺工作区面板 */

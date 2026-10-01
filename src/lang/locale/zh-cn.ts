@@ -170,6 +170,8 @@ export const zhCn: Record<MessageKey, string> = {
 	DASH_CALENDAR_SELECT_YEAR: '按年筛选 {year}',
 	DASH_CALENDAR_SELECT_MONTH: '按月筛选 {year}-{month}',
 	DASH_WS_TREE_TITLE: '工作区列表',
+	DASH_SPLITTER_LR: '调整左右栏比例',
+	DASH_SPLITTER_COMPOSER: '调整输入区与网格区比例',
 	DASH_WS_FILTER_ALL: '全部',
 	DASH_ATTR_LABEL: '属性：',
 	DASH_COLOR_LABEL: '颜色：',
