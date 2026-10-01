@@ -1586,12 +1586,13 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 .csn-dash-composer-palette {
   position: absolute;
-  right: calc(100% + 8px);
+  right: 100%;
   top: 50%;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0;
+  /* 右侧透明桥接，避免移向色板时因空隙触发 mouseleave */
+  padding: 4px 8px 4px 0;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -1603,6 +1604,8 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
   z-index: 1;
 }
+.csn-dash-composer-color-wrap:hover .csn-dash-composer-palette,
+.csn-dash-composer-color-wrap:focus-within .csn-dash-composer-palette,
 .csn-dash-composer-color-wrap.is-expanded .csn-dash-composer-palette {
   opacity: 1;
   visibility: visible;
@@ -1782,34 +1785,12 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   background-color: var(--background-modifier-hover) !important;
 }
 .csn-dash-composer-done {
-  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 14px 5px 9px;
-  border: 1px solid rgba(70, 140, 70, 0.28);
-  border-radius: 999px;
-  background: linear-gradient(180deg, #d8efd2 0%, #bfe3b6 100%);
-  color: rgba(28, 72, 28, 0.92);
+  padding: 4px 10px 4px 8px;
   font-size: var(--font-ui-small);
-  font-weight: 560;
   cursor: var(--cursor);
-  box-shadow: 0 2px 8px rgba(70, 130, 70, 0.22) !important;
-  outline: none !important;
-  transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
-}
-.csn-dash-composer-done:hover,
-.csn-dash-composer-done:focus,
-.csn-dash-composer-done:focus-visible {
-  filter: brightness(1.03);
-  transform: translateY(-1px);
-  box-shadow: 0 5px 14px rgba(70, 130, 70, 0.28) !important;
-  outline: none !important;
-}
-.csn-dash-composer-done:active {
-  transform: translateY(0) scale(0.97);
-  filter: brightness(0.97);
-  box-shadow: 0 1px 4px rgba(70, 130, 70, 0.22) !important;
 }
 .csn-dash-composer-done-icon {
   display: inline-flex;
@@ -1824,12 +1805,6 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 .csn-dash-composer-done-label {
   line-height: 1.2;
-}
-.theme-dark .csn-dash-composer-done {
-  background: linear-gradient(180deg, #4a6f47 0%, #3a5a38 100%);
-  border-color: rgba(170, 220, 160, 0.22);
-  color: rgba(230, 245, 228, 0.95);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
 }
 .csn-dash-left {
   flex: 1 1 auto;

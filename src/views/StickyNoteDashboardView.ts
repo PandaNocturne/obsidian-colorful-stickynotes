@@ -1446,10 +1446,19 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		});
 		setIcon(this.composerColorBtn, 'palette');
+		this.registerDomEvent(this.composerColorWrapEl, 'mouseenter', () => {
+			this.openComposerColorPalette();
+		});
+		this.registerDomEvent(this.composerColorWrapEl, 'mouseleave', () => {
+			this.closeComposerColorPalette();
+		});
+		this.registerDomEvent(this.composerColorBtn, 'focus', () => {
+			this.openComposerColorPalette();
+		});
 		this.registerDomEvent(this.composerColorBtn, 'click', (evt: MouseEvent) => {
+			/* 悬停已展开；点击仅阻止冒泡到输入区，避免收起/抢焦点 */
 			evt.preventDefault();
 			evt.stopPropagation();
-			this.toggleComposerColorPalette();
 		});
 		this.composerDoneBtn = actions.createEl('button', {
 			type: 'button',
@@ -1463,12 +1472,6 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 		this.registerDomEvent(this.composerDoneBtn, 'click', () => {
 			void this.commitComposer();
-		});
-		this.registerDomEvent(document, 'pointerdown', (evt: PointerEvent) => {
-			const tEl = evt.target;
-			if (!(tEl instanceof Element)) return;
-			if (this.composerColorWrapEl?.contains(tEl)) return;
-			this.closeComposerColorPalette();
 		});
 		this.syncComposerColorBtn();
 
@@ -3447,7 +3450,8 @@ export class StickyNoteDashboardView extends ItemView {
 		const sel = this.workspaceSel;
 		const has = sel.kind === 'selection';
 		if (addBtn) {
-			addBtn.toggleClass('is-active', this.isWorkspaceFilterPanelOpen() || has);
+			/* 仅面板打开时高亮；左侧树选中不应点亮 + 按钮 */
+			addBtn.toggleClass('is-active', this.isWorkspaceFilterPanelOpen());
 			addBtn.setAttr('aria-expanded', this.isWorkspaceFilterPanelOpen() ? 'true' : 'false');
 		}
 		if (!has) return;
@@ -3988,11 +3992,6 @@ export class StickyNoteDashboardView extends ItemView {
 	private closeComposerColorPalette(): void {
 		this.composerColorWrapEl?.removeClass('is-expanded');
 		this.composerColorBtn?.setAttr('aria-expanded', 'false');
-	}
-
-	private toggleComposerColorPalette(): void {
-		if (this.composerColorWrapEl?.hasClass('is-expanded')) this.closeComposerColorPalette();
-		else this.openComposerColorPalette();
 	}
 
 	/** 挂载 Obsidian 原生 Markdown 编辑器；失败时回退到 textarea。 */
