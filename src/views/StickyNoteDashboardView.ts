@@ -2750,10 +2750,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 			/* 筛选时临时展开匹配分组，不改动已记住的折叠状态 */
 			const collapsed = !q && this.collapsedGroupIds.has(g.id);
-			const groupCount = groupWorkspaces.reduce(
-				(n, ws) => n + mgr.getWorkspaceMemberPathSet(ws).size,
-				0
-			);
+			const groupCount = groupWorkspaces.length;
 			const groupRow = host.createDiv({ cls: 'csn-dash-tree-group' });
 			const groupDraggable = tabGroups.some(tg => tg.id === g.id);
 			const groupBtn = groupRow.createEl('button', {
