@@ -38,7 +38,7 @@ function formatWorkspaceRelativeTime(updatedAt: number | undefined): string {
 	return t('WS_TIME_OLDER');
 }
 
-class EditStickyWorkspaceModal extends Modal {
+export class EditStickyWorkspaceModal extends Modal {
 	constructor(
 		app: App,
 		private readonly initialName: string,
@@ -106,7 +106,7 @@ class EditStickyWorkspaceModal extends Modal {
 }
 
 /** 新建空白工作区：填写后确认添加（名称可留空则自动命名） */
-class NewBlankWorkspaceModal extends Modal {
+export class NewBlankWorkspaceModal extends Modal {
 	constructor(
 		app: App,
 		private readonly autoNamePreview: string,
@@ -170,7 +170,7 @@ class NewBlankWorkspaceModal extends Modal {
 	}
 }
 
-class DeleteStickyWorkspaceConfirmModal extends Modal {
+export class DeleteStickyWorkspaceConfirmModal extends Modal {
 	constructor(
 		app: App,
 		private readonly workspaceName: string,
@@ -298,7 +298,7 @@ class NewWorkspaceTabGroupModal extends Modal {
 	}
 }
 
-class DeleteWorkspaceTabGroupConfirmModal extends Modal {
+export class DeleteWorkspaceTabGroupConfirmModal extends Modal {
 	constructor(
 		app: App,
 		private readonly groupName: string,
@@ -338,7 +338,7 @@ class DeleteWorkspaceTabGroupConfirmModal extends Modal {
 	}
 }
 
-class RenameWorkspaceTabGroupModal extends Modal {
+export class RenameWorkspaceTabGroupModal extends Modal {
 	constructor(
 		app: App,
 		private readonly initialName: string,

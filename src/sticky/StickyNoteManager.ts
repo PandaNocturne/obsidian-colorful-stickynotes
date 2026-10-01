@@ -36,7 +36,7 @@ import {
 	resolveWorkspaceTabGroupId,
 	saveWorkspacesFile
 } from '../workspace-store';
-import { WS_TAB_FILTER_ALL, WS_TAB_GROUP_DEFAULT_ID } from '../types';
+import { WS_TAB_FILTER_ALL, WS_TAB_GROUP_DEFAULT_ID, WS_TAB_GROUP_UNGROUPED_ID } from '../types';
 import { StickyNotePopover } from './StickyNotePopover';
 
 /** 打开已有便笺前先建好外壳；正式 `setViewState`/打开文件后再与磁盘 YAML 等对齐全貌。 */
@@ -1273,12 +1273,19 @@ export class StickyNoteManager {
 		await this.flushWorkspacesToDisk();
 	}
 
-	/** 将工作区移入指定顶部分组标签。 */
+	/** 将工作区移入指定顶部分组；`@ungrouped` 表示挂到根目录（未分组）。 */
 	async moveWorkspaceToTabGroup(workspaceId: string, tabGroupId: string): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
-		if (!this.workspaces.tabGroups.some(g => g.id === tabGroupId)) return;
 		const ws = this.workspaces.workspaces.find(w => w.id === workspaceId);
 		if (!ws) return;
+		if (tabGroupId === WS_TAB_GROUP_UNGROUPED_ID) {
+			if (ws.tabGroupId === WS_TAB_GROUP_UNGROUPED_ID) return;
+			ws.tabGroupId = WS_TAB_GROUP_UNGROUPED_ID;
+			ws.updatedAt = Date.now();
+			await this.flushWorkspacesToDisk();
+			return;
+		}
+		if (!this.workspaces.tabGroups.some(g => g.id === tabGroupId)) return;
 		if (resolveWorkspaceTabGroupId(ws, this.workspaces.tabGroups) === tabGroupId) return;
 		ws.tabGroupId = tabGroupId;
 		ws.updatedAt = Date.now();
@@ -1320,9 +1327,12 @@ export class StickyNoteManager {
 
 	private resolveTabGroupIdForNewWorkspace(explicit?: string): string {
 		const groups = this.workspaces.tabGroups;
+		if (explicit === WS_TAB_GROUP_UNGROUPED_ID) return WS_TAB_GROUP_UNGROUPED_ID;
 		if (typeof explicit === 'string' && explicit.length > 0 && groups.some(g => g.id === explicit)) {
 			return explicit;
 		}
+		/* 未指定分组时挂到根目录（未分组） */
+		if (explicit === undefined) return WS_TAB_GROUP_UNGROUPED_ID;
 		return (
 			groups.find(g => g.id === WS_TAB_GROUP_DEFAULT_ID)?.id ??
 			groups[0]?.id ??
@@ -1480,7 +1490,12 @@ export class StickyNoteManager {
 		}
 	}
 
-	async addStickyWindow(initial?: Partial<SerializedStickyWindow>, sourcePopover?: StickyNotePopover): Promise<void> {
+	async addStickyWindow(
+		initial?: Partial<SerializedStickyWindow>,
+		sourcePopover?: StickyNotePopover,
+		options?: { openFloating?: boolean }
+	): Promise<TFile | null> {
+		const openFloating = options?.openFloating !== false;
 		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 		const defaultTplPath = (this.plugin.settings.defaultTemplatePath || '').trim();
 
@@ -1509,7 +1524,7 @@ export class StickyNoteManager {
 		const relativeFormatted = formatStickyNoteRelativePath(tmpl);
 		if (relativeFormatted === 'invalid-format') {
 			new Notice(t('NOTICE_INVALID_FILENAME_TEMPLATE'));
-			return;
+			return null;
 		}
 		let relativeNoExt = relativeFormatted;
 		let path = await this.pathForStickyRelative(folder, relativeNoExt);
@@ -1546,7 +1561,7 @@ export class StickyNoteManager {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
 			new Notice(t('NOTICE_CANNOT_CREATE_STICKY_FILE'));
-			return;
+			return null;
 		}
 
 		const f = this.app.vault.getAbstractFileByPath(path);
@@ -1555,7 +1570,7 @@ export class StickyNoteManager {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
 			new Notice(t('NOTICE_CANNOT_CREATE_STICKY_FILE'));
-			return;
+			return null;
 		}
 
 		/* `create` 会触发 vault 事件；在 openFile 与列表刷新交错前先取消防抖刷新，减少重复整表渲染。 */
@@ -1565,6 +1580,40 @@ export class StickyNoteManager {
 		const color = resolvedNewColor;
 		const collapsed = initial?.collapsed ?? false;
 		const yamlVisible = initial?.yamlVisible ?? false;
+
+		if (!openFloating) {
+			const LIST_REFRESH_AFTER_NEW_STICKY_MS = 800;
+			const scheduleListRefreshSoon = (): void => {
+				window.setTimeout(() => {
+					requestAnimationFrame(() => this.plugin.refreshStickyListIfOpen());
+				}, LIST_REFRESH_AFTER_NEW_STICKY_MS);
+			};
+			const endMuteAfterList = (p: string): void => {
+				window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(p), 120);
+			};
+			const parsedOnDisk = parseStickyBgColorFromMarkdownSource(bodyForCreate.replace(/^\uFEFF/, ''));
+			const needsBgWrite = color !== 'default' && parsedOnDisk !== color;
+			if (needsBgWrite) {
+				this.plugin.muteStickyListModifyPaths.add(f.path);
+				await new Promise<void>(resolve =>
+					requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+				);
+				void this.setStickyBackgroundColorForFile(f, color)
+					.catch(() => undefined)
+					.finally(() => {
+						scheduleListRefreshSoon();
+						endMuteAfterList(f.path);
+					});
+			} else {
+				scheduleListRefreshSoon();
+			}
+			await this.ensureStickyFrontmatterDefaults(f, { preferredId: id, preferredColor: color }).catch(
+				() => undefined
+			);
+			await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
+			this.notifyStickyListOpenIndicators();
+			return f;
+		}
 
 		let bounds: FloatingBounds;
 		if (initial?.bounds) {
@@ -1637,6 +1686,7 @@ export class StickyNoteManager {
 		this.persistOpenWindows();
 		await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
 		this.notifyStickyListOpenIndicators();
+		return f;
 	}
 
 	/**

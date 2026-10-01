@@ -1,6 +1,8 @@
 import { Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from 'obsidian';
 import { t } from './lang/helpers';
 import {
+	clampDashComposerPaneHeight,
+	clampDashLeftPaneWidth,
 	clampViewContentZoom,
 	normalizeNoteListDimensionCss,
 	ColorfulStickyNotesSettingTab,
@@ -25,9 +27,11 @@ import {
 import { registerStickyWorkspacePatches } from './sticky/registerStickyWorkspacePatches';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
+import { StickyNoteDashboardView } from './views/StickyNoteDashboardView';
 import { registerSendToStickyMenus } from './register-send-to-sticky-menus';
 import {
 	VIEW_STICKY_NOTE_LIST,
+	VIEW_STICKY_NOTE_DASHBOARD,
 	type HeaderNewStickyAdjacentSide,
 	type NoteListArchiveFilter,
 	type NoteListFloatOpenFilter,
@@ -35,6 +39,10 @@ import {
 	type NoteListSort,
 	type StickyColorId
 } from './types';
+import {
+	resolveObsidianMarkdownEditorClass,
+	type ObsidianMarkdownEditorCtor
+} from './utils/embedded-markdown-editor';
 
 const VALID_NEW_STICKY_BG: readonly StickyColorId[] = [
 	'default',
@@ -77,6 +85,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 写入 frontmatter 等触发的 `modify`：跳过防抖列表刷新，由新建流程末尾主动 `refreshStickyListIfOpen` 一次，避免连刷卡顿 */
 	muteStickyListModifyPaths: Set<string> = new Set();
 
+	/**
+	 * Obsidian 内部可嵌入 Markdown 源码编辑器类（经 embedRegistry 提取）。
+	 * 供仪表盘快速输入等场景复用；提取失败时为 `null`，调用方应回退到 textarea。
+	 */
+	markdownEditorClass: ObsidianMarkdownEditorCtor | null = null;
+
 	private listOpenIndicatorRaf: number | null = null;
 
 	async onload(): Promise<void> {
@@ -87,10 +101,16 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		await this.pruneNoteListWorkspaceFilterAfterWorkspacesLoad();
 
 		this.registerView(VIEW_STICKY_NOTE_LIST, leaf => new StickyNoteListView(leaf, this));
+		this.registerView(VIEW_STICKY_NOTE_DASHBOARD, leaf => new StickyNoteDashboardView(leaf, this));
 		this.syncNoteListGridMetricsToOpenViews();
 		this.app.workspace.onLayoutReady(() => {
 			this.syncNoteListGridMetricsToOpenViews();
+			if (!this.markdownEditorClass) {
+				this.markdownEditorClass = resolveObsidianMarkdownEditorClass(this.app);
+			}
+			this.remountDashboardComposerEditors();
 		});
+		this.markdownEditorClass = resolveObsidianMarkdownEditorClass(this.app);
 
 		this.addRibbonIcon('square-pen', t('RIBBON_OPEN_STICKY'), () => {
 			void this.toggleStickyWindowsForCurrentWorkspace();
@@ -98,6 +118,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addRibbonIcon('layout-list', t('RIBBON_STICKY_LIST'), () => {
 			void this.openNoteListView();
+		});
+
+		this.addRibbonIcon('layout-dashboard', t('RIBBON_STICKY_DASHBOARD'), () => {
+			void this.openStickyDashboardView();
 		});
 
 		this.addRibbonIcon('layers', t('RIBBON_WORKSPACE'), () => {
@@ -117,6 +141,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			name: t('CMD_OPEN_STICKY_LIST'),
 			callback: () => {
 				void this.openNoteListView();
+			}
+		});
+
+		this.addCommand({
+			id: 'open-sticky-note-dashboard',
+			name: t('CMD_OPEN_STICKY_DASHBOARD'),
+			callback: () => {
+				void this.openStickyDashboardView();
 			}
 		});
 
@@ -352,6 +384,38 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 		this.settings.noteListPageSize = Math.max(4, Math.min(48, Math.round(listPs)));
 
+		this.settings.dashboardLeftPaneWidth = clampDashLeftPaneWidth(
+			this.settings.dashboardLeftPaneWidth
+		);
+		if (typeof this.settings.dashboardLeftPaneCollapsed !== 'boolean') {
+			this.settings.dashboardLeftPaneCollapsed = false;
+		}
+		this.settings.dashboardComposerPaneHeight = clampDashComposerPaneHeight(
+			this.settings.dashboardComposerPaneHeight
+		);
+		if (typeof this.settings.dashboardComposerHidden !== 'boolean') {
+			this.settings.dashboardComposerHidden = false;
+		}
+		{
+			const rawIds = this.settings.dashboardCollapsedWorkspaceGroupIds;
+			this.settings.dashboardCollapsedWorkspaceGroupIds = Array.isArray(rawIds)
+				? [...new Set(rawIds.filter((id): id is string => typeof id === 'string' && id.length > 0))]
+				: [];
+		}
+		{
+			const allowed = new Set(['area', 'workspace']);
+			const rawIds = this.settings.dashboardCollapsedLeftPanelIds;
+			this.settings.dashboardCollapsedLeftPanelIds = Array.isArray(rawIds)
+				? [
+						...new Set(
+							rawIds.filter(
+								(id): id is string => typeof id === 'string' && allowed.has(id)
+							)
+						)
+					]
+				: [];
+		}
+
 		const nls = this.settings.noteListSort;
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.some(s => s === nls)) {
 			this.settings.noteListSort = DEFAULT_SETTINGS.noteListSort;
@@ -540,6 +604,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				v.cancelPendingListRefresh();
 			}
 		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
+				v.cancelPendingRefresh();
+			}
+		}
 	}
 
 	/**
@@ -570,13 +640,26 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				v.flushListRedraw();
 			}
 		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
+				v.refreshWorkspaceTree();
+				v.flushDashRedraw();
+			}
+		}
 	}
 
-	/** 每页条数变更：回到第一页并重绘已打开的列表。 */
+	/** 每页条数变更：回到第一页并重绘已打开的列表与标签页仪表盘。 */
 	refreshStickyListPageSizeChanged(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) {
+				v.resetPageAndRedraw();
+			}
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
 				v.resetPageAndRedraw();
 			}
 		}
@@ -602,7 +685,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.stickies.updateLeafPinnedFromSettings();
 	}
 
-	/** 将列表预览缩放同步到已打开的便笺列表（不重渲 Markdown）。 */
+	/** 将列表预览缩放同步到已打开的便笺列表与标签页仪表盘（不重渲 Markdown）。 */
 	syncNoteListViewContentZoomToOpenViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
@@ -610,13 +693,36 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				v.syncViewContentZoomFromSettings();
 			}
 		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
+				v.syncViewContentZoomFromSettings();
+			}
+		}
 	}
 
-	/** 将列表网格的卡片高度、列最小宽度同步到已打开的便笺列表视图。 */
+	/** 内部 MarkdownEditor 类就绪后，刷新已打开仪表盘的快速输入编辑区。 */
+	remountDashboardComposerEditors(): void {
+		if (!this.markdownEditorClass) return;
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
+				v.remountComposerEditor();
+			}
+		}
+	}
+
+	/** 将列表网格的卡片高度、列最小宽度同步到已打开的便笺列表与标签页仪表盘。 */
 	syncNoteListGridMetricsToOpenViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) {
+				v.syncListGridMetricsFromSettings();
+			}
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
 				v.syncListGridMetricsFromSettings();
 			}
 		}
@@ -654,6 +760,19 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 		await workspace.revealLeaf(leaf);
 		this.refreshStickyListOpenIndicatorsIfOpen();
+	}
+
+	async openStickyDashboardView(): Promise<void> {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)[0];
+		if (!leaf) {
+			const tab = workspace.getLeaf('tab');
+			await tab.setViewState({ type: VIEW_STICKY_NOTE_DASHBOARD, active: true });
+			leaf = tab;
+		} else {
+			await leaf.setViewState({ type: VIEW_STICKY_NOTE_DASHBOARD, active: true });
+		}
+		await workspace.revealLeaf(leaf);
 	}
 
 	/** 打开或聚焦指定文件的便笺窗口 */

@@ -26,6 +26,31 @@ export function clampViewContentZoom(value: number): number {
 	return Math.max(VIEW_CONTENT_ZOOM_MIN, Math.min(VIEW_CONTENT_ZOOM_MAX, value));
 }
 
+/** 仪表盘左侧栏宽度（px）。 */
+export const DASH_LEFT_PANE_WIDTH_MIN = 245;
+export const DASH_LEFT_PANE_WIDTH_MAX = 480;
+export const DASH_LEFT_PANE_WIDTH_DEFAULT = 280;
+/** 仪表盘内容区宽度低于此值时自动收起左侧栏（px）。 */
+export const DASH_LEFT_PANE_AUTO_COLLAPSE_BELOW = 720;
+
+export function clampDashLeftPaneWidth(value: number): number {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return DASH_LEFT_PANE_WIDTH_DEFAULT;
+	return Math.max(DASH_LEFT_PANE_WIDTH_MIN, Math.min(DASH_LEFT_PANE_WIDTH_MAX, Math.round(value)));
+}
+
+/** 仪表盘快速输入区高度（px）。 */
+export const DASH_COMPOSER_PANE_HEIGHT_MIN = 96;
+export const DASH_COMPOSER_PANE_HEIGHT_MAX = 420;
+export const DASH_COMPOSER_PANE_HEIGHT_DEFAULT = 168;
+
+export function clampDashComposerPaneHeight(value: number): number {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return DASH_COMPOSER_PANE_HEIGHT_DEFAULT;
+	return Math.max(
+		DASH_COMPOSER_PANE_HEIGHT_MIN,
+		Math.min(DASH_COMPOSER_PANE_HEIGHT_MAX, Math.round(value))
+	);
+}
+
 /** 列表卡片高度 / 网格列宽：支持 `px`（会按范围钳制）或其它 CSS 长度单位。 */
 export function normalizeNoteListDimensionCss(
 	value: unknown,
@@ -117,6 +142,18 @@ export interface ColorfulStickyNotesSettings {
 	noteListGridMinWidth: string;
 	/** 便笺列表分页：每页显示的卡片数量。 */
 	noteListPageSize: number;
+	/** 仪表盘左侧栏宽度（px）：日历 + 工作区树。 */
+	dashboardLeftPaneWidth: number;
+	/** 仪表盘左侧栏是否折叠隐藏（拖到最小宽度时自动收起）。 */
+	dashboardLeftPaneCollapsed: boolean;
+	/** 仪表盘快速输入区高度（px）。 */
+	dashboardComposerPaneHeight: number;
+	/** 仪表盘快速输入区是否隐藏。 */
+	dashboardComposerHidden: boolean;
+	/** 仪表盘工作区树中已折叠的分组 id。 */
+	dashboardCollapsedWorkspaceGroupIds: string[];
+	/** 仪表盘左侧面板折叠：`area` | `workspace`。 */
+	dashboardCollapsedLeftPanelIds: string[];
 	/** 便笺列表排序（默认：创建时间新在前）。 */
 	noteListSort: NoteListSort;
 	/** 便笺列表置顶路径（靠前优先显示；顺序即置顶顺序）。 */
@@ -185,6 +222,12 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	noteListCardHeight: '160px',
 	noteListGridMinWidth: '320px',
 	noteListPageSize: 12,
+	dashboardLeftPaneWidth: DASH_LEFT_PANE_WIDTH_DEFAULT,
+	dashboardLeftPaneCollapsed: false,
+	dashboardComposerPaneHeight: DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
+	dashboardComposerHidden: false,
+	dashboardCollapsedWorkspaceGroupIds: [],
+	dashboardCollapsedLeftPanelIds: [],
 	noteListSort: 'ctime-desc',
 	noteListPinnedPaths: [],
 	noteListColorFilters: [],
