@@ -197,6 +197,8 @@ export const en = {
 	DASH_WS_SORT_MTIME_DESC: 'Recently updated (groups & workspaces)',
 	DASH_WS_COLLAPSE_ALL_ARIA: 'Collapse all groups',
 	DASH_WS_EXPAND_ALL_ARIA: 'Expand all groups',
+	DASH_WS_COLLAPSE_GROUP_ARIA: 'Collapse group',
+	DASH_WS_EXPAND_GROUP_ARIA: 'Expand group',
 	DASH_WS_FILTER_PLACEHOLDER: 'Filter',
 	DASH_SPLITTER_LR: 'Resize left and right panes',
 	DASH_SPLITTER_COMPOSER: 'Resize composer and note grid',

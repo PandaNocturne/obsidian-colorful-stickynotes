@@ -183,6 +183,8 @@ export const zhCn: Record<MessageKey, string> = {
 	DASH_WS_SORT_MTIME_DESC: '最近更新（分组与工作区）',
 	DASH_WS_COLLAPSE_ALL_ARIA: '折叠全部分组',
 	DASH_WS_EXPAND_ALL_ARIA: '展开全部分组',
+	DASH_WS_COLLAPSE_GROUP_ARIA: '折叠分组',
+	DASH_WS_EXPAND_GROUP_ARIA: '展开分组',
 	DASH_WS_FILTER_PLACEHOLDER: '筛选',
 	DASH_SPLITTER_LR: '调整左右栏比例',
 	DASH_SPLITTER_COMPOSER: '调整输入区与网格区比例',

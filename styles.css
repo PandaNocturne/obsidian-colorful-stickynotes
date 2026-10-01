@@ -2179,19 +2179,34 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   font-variant-numeric: tabular-nums;
   font-size: var(--font-ui-smaller);
 }
+.csn-dash-tree-count--toggle {
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: var(--radius-s);
+}
+.csn-dash-tree-count--toggle:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
+}
 .csn-dash-tree-ws {
-  padding-left: 28px;
+  padding-left: 24px;
 }
 .csn-dash-tree-icon,
-.csn-dash-tree-chevron {
+.csn-dash-tree-folder-toggle {
   display: inline-flex;
   width: 16px;
   height: 16px;
   flex-shrink: 0;
   color: var(--text-muted);
 }
+.csn-dash-tree-folder-toggle {
+  cursor: pointer;
+}
+.csn-dash-tree-folder-toggle:hover {
+  color: var(--text-normal);
+}
 .csn-dash-tree-icon svg,
-.csn-dash-tree-chevron svg {
+.csn-dash-tree-folder-toggle svg {
   width: 16px;
   height: 16px;
 }

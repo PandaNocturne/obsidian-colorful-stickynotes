@@ -2502,25 +2502,44 @@ export class StickyNoteDashboardView extends ItemView {
 				attr: { 'data-csn-ws-group': g.id }
 			});
 			if (groupDraggable) groupBtn.setAttr('draggable', 'true');
-			const chevron = groupBtn.createSpan({ cls: 'csn-dash-tree-chevron' });
-			setIcon(chevron, collapsed ? 'chevron-right' : 'chevron-down');
-			setIcon(groupBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'folder');
+			const folderIcon = groupBtn.createSpan({
+				cls: 'csn-dash-tree-icon csn-dash-tree-folder-toggle',
+				attr: {
+					'aria-label': collapsed ? t('DASH_WS_EXPAND_GROUP_ARIA') : t('DASH_WS_COLLAPSE_GROUP_ARIA'),
+					role: 'button'
+				}
+			});
+			setIcon(folderIcon, collapsed ? 'folder' : 'folder-open');
 			groupBtn.createSpan({ cls: 'csn-dash-tree-label', text: g.name });
-			groupBtn.createSpan({ cls: 'csn-dash-tree-count', text: String(groupCount) });
+			groupBtn.createSpan({
+				cls: 'csn-dash-tree-count csn-dash-tree-count--toggle',
+				text: String(groupCount),
+				attr: {
+					'aria-label': collapsed ? t('DASH_WS_EXPAND_GROUP_ARIA') : t('DASH_WS_COLLAPSE_GROUP_ARIA'),
+					role: 'button'
+				}
+			});
+			const toggleGroupCollapsed = (): void => {
+				if (this.collapsedGroupIds.has(g.id)) this.collapsedGroupIds.delete(g.id);
+				else this.collapsedGroupIds.add(g.id);
+				this.persistCollapsedGroups();
+				this.renderWorkspaceTree();
+			};
+			const isGroupToggleHit = (hit: EventTarget | null): boolean =>
+				hit instanceof Element &&
+				!!(
+					hit.closest('.csn-dash-tree-folder-toggle') ||
+					hit.closest('.csn-dash-tree-count--toggle')
+				);
 			this.registerDomEvent(groupBtn, 'click', (evt: MouseEvent) => {
-				const hit = evt.target;
-				if (hit instanceof Element && hit.closest('.csn-dash-tree-chevron')) {
-					if (this.collapsedGroupIds.has(g.id)) this.collapsedGroupIds.delete(g.id);
-					else this.collapsedGroupIds.add(g.id);
-					this.persistCollapsedGroups();
-					this.renderWorkspaceTree();
+				if (isGroupToggleHit(evt.target)) {
+					toggleGroupCollapsed();
 					return;
 				}
 				this.setWorkspaceSel({ kind: 'group', groupId: g.id });
 			});
 			this.registerDomEvent(groupBtn, 'dblclick', (evt: MouseEvent) => {
-				const hit = evt.target;
-				if (hit instanceof Element && hit.closest('.csn-dash-tree-chevron')) return;
+				if (isGroupToggleHit(evt.target)) return;
 				evt.preventDefault();
 				evt.stopPropagation();
 				this.renameWorkspaceGroup(g);
@@ -2536,8 +2555,7 @@ export class StickyNoteDashboardView extends ItemView {
 			};
 			if (groupDraggable) {
 				this.registerDomEvent(groupBtn, 'dragstart', (e: DragEvent) => {
-					const hit = e.target;
-					if (hit instanceof Element && hit.closest('.csn-dash-tree-chevron')) {
+					if (isGroupToggleHit(e.target)) {
 						e.preventDefault();
 						return;
 					}
