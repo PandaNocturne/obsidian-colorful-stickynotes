@@ -9,6 +9,7 @@ import { t } from './lang/helpers';
 import {
 	WS_TAB_FILTER_ALL,
 	WS_TAB_GROUP_DEFAULT_ID,
+	WS_TAB_GROUP_UNGROUPED_ID,
 	type StickyWorkspace,
 	type StickyWorkspaceTabGroup,
 	type WorkspacesFile
@@ -31,17 +32,25 @@ export function defaultStickyWorkspaceTabGroup(): StickyWorkspaceTabGroup {
 	};
 }
 
-/** 工作区实际归属的分组 id（兼容旧数据无 `tabGroupId`）。 */
+/** 工作区实际归属的分组 id（`@ungrouped` = 根目录未分组；缺省兼容旧数据归入默认分组）。 */
 export function resolveWorkspaceTabGroupId(
 	ws: Pick<StickyWorkspace, 'tabGroupId'>,
 	tabGroups: readonly StickyWorkspaceTabGroup[]
 ): string {
 	const raw = ws.tabGroupId;
+	if (raw === WS_TAB_GROUP_UNGROUPED_ID) return WS_TAB_GROUP_UNGROUPED_ID;
 	if (typeof raw === 'string' && raw.length > 0 && tabGroups.some(g => g.id === raw)) {
 		return raw;
 	}
 	const fallback = tabGroups.find(g => g.id === WS_TAB_GROUP_DEFAULT_ID)?.id ?? tabGroups[0]?.id;
 	return fallback ?? WS_TAB_GROUP_DEFAULT_ID;
+}
+
+export function isWorkspaceUngrouped(
+	ws: Pick<StickyWorkspace, 'tabGroupId'>,
+	tabGroups: readonly StickyWorkspaceTabGroup[]
+): boolean {
+	return resolveWorkspaceTabGroupId(ws, tabGroups) === WS_TAB_GROUP_UNGROUPED_ID;
 }
 
 function normalizeTabGroups(raw: unknown): StickyWorkspaceTabGroup[] {

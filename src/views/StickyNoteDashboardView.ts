@@ -25,6 +25,7 @@ import {
 import {
 	VIEW_STICKY_NOTE_DASHBOARD,
 	WS_TAB_GROUP_DEFAULT_ID,
+	WS_TAB_GROUP_UNGROUPED_ID,
 	type NoteListArchiveFilter,
 	type NoteListSort,
 	type StickyColorId,
@@ -64,7 +65,6 @@ import {
 	collectStickyTagCatalog,
 	displayStickyTag,
 	filterStickyFilesByTags,
-	getStickyTagsForFile,
 	normalizeStickyTag,
 	type StickyTagCount
 } from '../utils/sticky-tags-from-file';
@@ -85,8 +85,8 @@ type DashWorkspaceSel =
 /** 仪表盘文件列表顶部「区域管理」互斥模式。 */
 type DashAreaMode =
 	| 'all'
+	| 'ungrouped'
 	| 'uncategorized'
-	| 'untagged'
 	| 'recent'
 	| 'random'
 	| 'archived';
@@ -98,8 +98,8 @@ const DASH_AREA_MODE_SPECS: Array<{
 	showCount: boolean;
 }> = [
 	{ mode: 'all', titleKey: 'DASH_AREA_ALL', icon: 'inbox', showCount: true },
+	{ mode: 'ungrouped', titleKey: 'DASH_AREA_UNGROUPED', icon: 'layers', showCount: true },
 	{ mode: 'uncategorized', titleKey: 'DASH_AREA_UNCATEGORIZED', icon: 'folder-x', showCount: true },
-	{ mode: 'untagged', titleKey: 'DASH_AREA_UNTAGGED', icon: 'bookmark', showCount: true },
 	{ mode: 'recent', titleKey: 'DASH_AREA_RECENT', icon: 'clock', showCount: false },
 	{ mode: 'random', titleKey: 'DASH_AREA_RANDOM', icon: 'shuffle', showCount: false },
 	{ mode: 'archived', titleKey: 'DASH_AREA_ARCHIVED', icon: 'archive', showCount: true }
@@ -1642,10 +1642,17 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private async refreshAreaCounts(allFiles: TFile[]): Promise<void> {
-		const assigned = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
+		const mgr = this.plugin.stickies;
+		const file = mgr.workspaces;
+		const assigned = mgr.getAllAssignedWorkspaceMemberPathSet();
+		const ungroupedPaths = new Set<string>();
+		for (const ws of file.workspaces) {
+			if (resolveWorkspaceTabGroupId(ws, file.tabGroups) !== WS_TAB_GROUP_UNGROUPED_ID) continue;
+			for (const p of mgr.getWorkspaceMemberPathSet(ws)) ungroupedPaths.add(p);
+		}
 		let all = 0;
+		let ungrouped = 0;
 		let uncategorized = 0;
-		let untagged = 0;
 		let archived = 0;
 		for (const f of allFiles) {
 			const isArchived = await resolveStickyArchivedForFile(this.app, f);
@@ -1654,10 +1661,11 @@ export class StickyNoteDashboardView extends ItemView {
 				continue;
 			}
 			all++;
-			if (!assigned.has(normalizePath(f.path))) uncategorized++;
-			if (getStickyTagsForFile(this.app, f).length === 0) untagged++;
+			const path = normalizePath(f.path);
+			if (!assigned.has(path)) uncategorized++;
+			else if (ungroupedPaths.has(path)) ungrouped++;
 		}
-		this.areaCounts = { all, uncategorized, untagged, archived };
+		this.areaCounts = { all, ungrouped, uncategorized, archived };
 		this.syncAreaCountLabels();
 	}
 
@@ -2525,7 +2533,7 @@ export class StickyNoteDashboardView extends ItemView {
 			await mgr.createBlankWorkspace({
 				name: name.trim() || undefined,
 				remark,
-				tabGroupId: tabGroupId ?? WS_TAB_GROUP_DEFAULT_ID
+				tabGroupId: tabGroupId ?? WS_TAB_GROUP_UNGROUPED_ID
 			});
 			this.renderWorkspaceTree();
 			void this.renderDash();
@@ -2689,18 +2697,47 @@ export class StickyNoteDashboardView extends ItemView {
 		host.empty();
 		const mgr = this.plugin.stickies;
 		const file = mgr.workspaces;
+		const tabGroups = file.tabGroups;
 		const rawGroups: StickyWorkspaceTabGroup[] =
-			file.tabGroups.length > 0
-				? file.tabGroups
+			tabGroups.length > 0
+				? tabGroups
 				: [{ id: WS_TAB_GROUP_DEFAULT_ID, name: t('WS_TAB_GROUP_DEFAULT') }];
 		const groups = this.sortGroupsForTree(rawGroups, file.workspaces);
 
 		const q = this.wsTreeFilterQuery.trim().toLowerCase();
 		const matchText = (s: string) => !q || s.toLowerCase().includes(q);
 
+		/* 拖到树空白处 → 移入根目录（未分组） */
+		this.bindWorkspaceTreeDrop(host, {
+			acceptWorkspace: true,
+			onWorkspaceDrop: async workspaceId => {
+				this.ensureManualWsTreeSort();
+				await mgr.moveWorkspaceToTabGroup(workspaceId, WS_TAB_GROUP_UNGROUPED_ID);
+				this.renderWorkspaceTree();
+			}
+		});
+
+		/* 根目录未分组工作区 */
+		let ungroupedWorkspaces = file.workspaces.filter(
+			ws => resolveWorkspaceTabGroupId(ws, tabGroups) === WS_TAB_GROUP_UNGROUPED_ID
+		);
+		if (q) {
+			ungroupedWorkspaces = ungroupedWorkspaces.filter(
+				ws => matchText(ws.name) || matchText(ws.remark ?? '')
+			);
+		}
+		ungroupedWorkspaces = this.sortWorkspacesForTree(ungroupedWorkspaces);
+		for (const ws of ungroupedWorkspaces) {
+			this.appendWorkspaceTreeItem(host, ws, {
+				tabGroups,
+				rootLevel: true,
+				acceptGroupDrop: false
+			});
+		}
+
 		for (const g of groups) {
 			let groupWorkspaces = file.workspaces.filter(
-				ws => resolveWorkspaceTabGroupId(ws, groups) === g.id
+				ws => resolveWorkspaceTabGroupId(ws, tabGroups) === g.id
 			);
 			if (q) {
 				const groupMatch = matchText(g.name);
@@ -2718,7 +2755,7 @@ export class StickyNoteDashboardView extends ItemView {
 				0
 			);
 			const groupRow = host.createDiv({ cls: 'csn-dash-tree-group' });
-			const groupDraggable = file.tabGroups.some(tg => tg.id === g.id);
+			const groupDraggable = tabGroups.some(tg => tg.id === g.id);
 			const groupBtn = groupRow.createEl('button', {
 				type: 'button',
 				cls: `csn-dash-tree-item csn-dash-tree-group-btn${
@@ -2810,61 +2847,79 @@ export class StickyNoteDashboardView extends ItemView {
 
 			if (collapsed) continue;
 			for (const ws of groupWorkspaces) {
-				const memberCount = mgr.getWorkspaceMemberPathSet(ws).size;
-				const wsBtn = host.createEl('button', {
-					type: 'button',
-					cls: `csn-dash-tree-item csn-dash-tree-ws${
-						this.workspaceSel.kind === 'workspace' && this.workspaceSel.workspaceId === ws.id
-							? ' is-active'
-							: ''
-					}`,
-					attr: { 'data-csn-ws-id': ws.id, draggable: 'true' }
-				});
-				setIcon(wsBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'layers');
-				wsBtn.createSpan({ cls: 'csn-dash-tree-label', text: ws.name });
-				wsBtn.createSpan({ cls: 'csn-dash-tree-count', text: String(memberCount) });
-				this.registerDomEvent(wsBtn, 'click', () =>
-					this.setWorkspaceSel({ kind: 'workspace', workspaceId: ws.id })
-				);
-				this.registerDomEvent(wsBtn, 'dblclick', (evt: MouseEvent) => {
-					evt.preventDefault();
-					evt.stopPropagation();
-					this.renameWorkspace(ws);
-				});
-				this.registerDomEvent(wsBtn, 'contextmenu', (evt: MouseEvent) => {
-					this.openWorkspaceContextMenu(evt, ws);
-				});
-				this.registerDomEvent(wsBtn, 'dragstart', (e: DragEvent) => {
-					this.wsTreeDragKind = 'workspace';
-					e.dataTransfer?.setData(WORKSPACE_DND_MIME, ws.id);
-					if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-					wsBtn.addClass('csn-dash-tree-item--dragging');
-				});
-				this.registerDomEvent(wsBtn, 'dragend', () => {
-					this.wsTreeDragKind = 'none';
-					wsBtn.removeClass('csn-dash-tree-item--dragging');
-					this.clearTreeDropTargets();
-				});
-				this.bindWorkspaceTreeDrop(wsBtn, {
-					acceptSticky: true,
-					onStickyDrop: paths => this.addStickyPathsToWorkspace(ws.id, paths),
-					acceptWorkspace: true,
-					onWorkspaceDrop: async draggedId => {
-						if (draggedId === ws.id) return;
-						this.ensureManualWsTreeSort();
-						await mgr.reorderWorkspaceBefore(draggedId, ws.id);
-						const targetGroup = resolveWorkspaceTabGroupId(ws, groups);
-						await mgr.moveWorkspaceToTabGroup(draggedId, targetGroup);
-						this.renderWorkspaceTree();
-					},
-					/* 展开时拖分组常落在子工作区行上，在此接管为「插到该分组前」 */
-					acceptGroup: groupDraggable,
+				this.appendWorkspaceTreeItem(groupRow, ws, {
+					tabGroups,
+					rootLevel: false,
+					acceptGroupDrop: groupDraggable,
 					onGroupDrop: onGroupReorderDrop
 				});
 			}
 		}
 		this.syncWsTreeSortBtn();
 		this.syncWsTreeCollapseBtn(groups.map(g => g.id));
+	}
+
+	private appendWorkspaceTreeItem(
+		host: HTMLElement,
+		ws: StickyWorkspace,
+		opts: {
+			tabGroups: readonly StickyWorkspaceTabGroup[];
+			rootLevel: boolean;
+			acceptGroupDrop: boolean;
+			onGroupDrop?: (groupId: string) => void | Promise<void>;
+		}
+	): void {
+		const mgr = this.plugin.stickies;
+		const memberCount = mgr.getWorkspaceMemberPathSet(ws).size;
+		const wsBtn = host.createEl('button', {
+			type: 'button',
+			cls: `csn-dash-tree-item csn-dash-tree-ws${opts.rootLevel ? ' csn-dash-tree-ws--root' : ''}${
+				this.workspaceSel.kind === 'workspace' && this.workspaceSel.workspaceId === ws.id
+					? ' is-active'
+					: ''
+			}`,
+			attr: { 'data-csn-ws-id': ws.id, draggable: 'true' }
+		});
+		setIcon(wsBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'layers');
+		wsBtn.createSpan({ cls: 'csn-dash-tree-label', text: ws.name });
+		wsBtn.createSpan({ cls: 'csn-dash-tree-count', text: String(memberCount) });
+		this.registerDomEvent(wsBtn, 'click', () =>
+			this.setWorkspaceSel({ kind: 'workspace', workspaceId: ws.id })
+		);
+		this.registerDomEvent(wsBtn, 'dblclick', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.renameWorkspace(ws);
+		});
+		this.registerDomEvent(wsBtn, 'contextmenu', (evt: MouseEvent) => {
+			this.openWorkspaceContextMenu(evt, ws);
+		});
+		this.registerDomEvent(wsBtn, 'dragstart', (e: DragEvent) => {
+			this.wsTreeDragKind = 'workspace';
+			e.dataTransfer?.setData(WORKSPACE_DND_MIME, ws.id);
+			if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+			wsBtn.addClass('csn-dash-tree-item--dragging');
+		});
+		this.registerDomEvent(wsBtn, 'dragend', () => {
+			this.wsTreeDragKind = 'none';
+			wsBtn.removeClass('csn-dash-tree-item--dragging');
+			this.clearTreeDropTargets();
+		});
+		this.bindWorkspaceTreeDrop(wsBtn, {
+			acceptSticky: true,
+			onStickyDrop: paths => this.addStickyPathsToWorkspace(ws.id, paths),
+			acceptWorkspace: true,
+			onWorkspaceDrop: async draggedId => {
+				if (draggedId === ws.id) return;
+				this.ensureManualWsTreeSort();
+				await mgr.reorderWorkspaceBefore(draggedId, ws.id);
+				const targetGroup = resolveWorkspaceTabGroupId(ws, opts.tabGroups);
+				await mgr.moveWorkspaceToTabGroup(draggedId, targetGroup);
+				this.renderWorkspaceTree();
+			},
+			acceptGroup: opts.acceptGroupDrop,
+			onGroupDrop: opts.onGroupDrop
+		});
 	}
 
 	private resolveWorkspacePathFilter(): Set<string> | null {
@@ -3460,14 +3515,23 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 	}
 
-	/** 区域管理：未分类 / 未标签等（归档已由 archiveFilter 处理）。 */
+	/** 区域管理：未分组 / 未分类等（归档已由 archiveFilter 处理）。 */
 	private applyAreaModeFilters(files: TFile[]): TFile[] {
+		if (this.areaMode === 'ungrouped') {
+			const mgr = this.plugin.stickies;
+			const file = mgr.workspaces;
+			const paths = new Set<string>();
+			for (const ws of file.workspaces) {
+				if (resolveWorkspaceTabGroupId(ws, file.tabGroups) !== WS_TAB_GROUP_UNGROUPED_ID) {
+					continue;
+				}
+				for (const p of mgr.getWorkspaceMemberPathSet(ws)) paths.add(p);
+			}
+			return files.filter(f => paths.has(normalizePath(f.path)));
+		}
 		if (this.areaMode === 'uncategorized') {
 			const assigned = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
 			return files.filter(f => !assigned.has(normalizePath(f.path)));
-		}
-		if (this.areaMode === 'untagged') {
-			return files.filter(f => getStickyTagsForFile(this.app, f).length === 0);
 		}
 		return files;
 	}

@@ -2355,6 +2355,9 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 .csn-dash-tree-ws {
   padding-left: 24px;
 }
+.csn-dash-tree-ws--root {
+  padding-left: 8px;
+}
 .csn-dash-tree-icon,
 .csn-dash-tree-folder-toggle {
   display: inline-flex;

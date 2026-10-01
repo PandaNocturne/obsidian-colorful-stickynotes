@@ -72,8 +72,11 @@ export interface StickyWorkspace {
 /** 管理面板「全部」筛选（非持久化分组 id）。 */
 export const WS_TAB_FILTER_ALL = '@all';
 
-/** 内置默认分组 id（`tabGroupId` 缺省时归属此分组）。 */
+/** 内置默认分组 id（`tabGroupId` 缺省时归属此分组，兼容旧数据）。 */
 export const WS_TAB_GROUP_DEFAULT_ID = 'wsg_default';
+
+/** 未分组：工作区挂在树根目录（非任何 tab 分组）。 */
+export const WS_TAB_GROUP_UNGROUPED_ID = '@ungrouped';
 
 export interface WorkspacesFile {
 	version: 1;
