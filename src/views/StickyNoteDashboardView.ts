@@ -3296,10 +3296,9 @@ export class StickyNoteDashboardView extends ItemView {
 	private setWorkspaceSel(next: DashWorkspaceSel): void {
 		if (this.workspaceSelEquals(next)) return;
 		this.workspaceSel = next;
-		/* 点工作区树时退出智能区域（保留「全部」语义下的未归档筛选） */
+		/* 点工作区树时退出智能区域；归档筛选保持用户当前选择 */
 		if (next.kind !== 'all') {
 			this.areaMode = 'all';
-			this.archiveFilter = 'unarchived';
 			this.randomOrderPaths = null;
 		}
 		this.listPageIndex = 0;
