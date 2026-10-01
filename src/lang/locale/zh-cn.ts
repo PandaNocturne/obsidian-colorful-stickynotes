@@ -155,7 +155,7 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_BOTTOM_BAR_AUTO_HIDE_DESC: '鼠标离开底部区域时隐藏底栏（左侧文件名与便笺设置）；打开设置抽屉时也会保持显示。',
 
 	DISPLAY_STICKY_LIST: '便笺列表',
-	DISPLAY_STICKY_DASHBOARD: '多彩便笺',
+	DISPLAY_STICKY_DASHBOARD: 'Colorful StickyNotes',
 	DASH_COMPOSER_PLACEHOLDER: '输入框…',
 	DASH_COMPOSER_DONE: '完成',
 	DASH_CALENDAR_PREV: '上一月',

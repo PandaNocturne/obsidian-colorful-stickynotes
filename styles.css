@@ -1658,9 +1658,9 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   flex-direction: column;
   gap: 8px;
 }
-.csn-dash-filter-bar {
+.csn-dash-tool-bar {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
   flex-shrink: 0;
   min-width: 0;
@@ -1673,6 +1673,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   align-items: center;
   gap: 8px 12px;
   padding: 6px 8px;
+  box-sizing: border-box;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
 }
@@ -2322,7 +2323,9 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   gap: 2px;
   flex-shrink: 0;
   align-items: center;
-  padding: 4px;
+  align-self: stretch;
+  padding: 6px 8px;
+  box-sizing: border-box;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
 }

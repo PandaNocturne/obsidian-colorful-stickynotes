@@ -1418,8 +1418,8 @@ export class StickyNoteDashboardView extends ItemView {
 
 		const main = colRight.createDiv({ cls: 'csn-dash-main' });
 
-		const filterBar = main.createDiv({ cls: 'csn-dash-filter-bar' });
-		const filters = filterBar.createDiv({ cls: 'csn-dash-filters' });
+		const toolBar = main.createDiv({ cls: 'csn-dash-tool-bar' });
+		const filters = toolBar.createDiv({ cls: 'csn-dash-filters' });
 
 		const colorRow = filters.createDiv({ cls: 'csn-dash-colors' });
 		colorRow.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_COLOR_LABEL') });
@@ -1655,7 +1655,7 @@ export class StickyNoteDashboardView extends ItemView {
 			this.closeTagFilterPanel();
 		});
 
-		const toolbar = filterBar.createDiv({ cls: 'csn-dash-toolbar' });
+		const toolbar = toolBar.createDiv({ cls: 'csn-dash-toolbar' });
 		this.leftPaneToggleBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-dash-left-toggle-btn',
@@ -1683,6 +1683,16 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 		this.syncLeftPaneToggleBtn();
 		this.syncComposerToggleBtn();
+
+		const newStickyBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-dash-new-sticky-btn',
+			attr: { 'aria-label': t('NEW_STICKY_ARIA') }
+		});
+		setIcon(newStickyBtn, 'plus');
+		this.registerDomEvent(newStickyBtn, 'click', () => {
+			void this.createStickyFromToolbar();
+		});
 
 		this.sortDropdownBtn = toolbar.createEl('button', {
 			type: 'button',
@@ -3749,6 +3759,20 @@ export class StickyNoteDashboardView extends ItemView {
 			return;
 		}
 		if (this.composerFallbackEl) this.composerFallbackEl.value = '';
+	}
+
+	private async createStickyFromToolbar(): Promise<void> {
+		const created = await this.plugin.stickies.addStickyWindow({
+			color: this.selectedCreateColor()
+		});
+		if (!created) return;
+		if (this.workspaceSel.kind === 'selection') {
+			for (const wsId of this.workspaceSel.workspaceIds) {
+				await this.plugin.stickies.addFilesToWorkspace(wsId, [created]);
+			}
+		}
+		this.listPageIndex = 0;
+		void this.renderDash();
 	}
 
 	private async commitComposer(): Promise<void> {
