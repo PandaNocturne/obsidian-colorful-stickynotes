@@ -420,6 +420,7 @@ export const en = {
 	YAML_SHOW: 'Show YAML properties',
 	HEADER_ARCHIVE_CURRENT_STICKY: 'Archive current sticky',
 	HEADER_UNARCHIVE_CURRENT_STICKY: 'Unarchive current sticky',
+	HEADER_DELETE_CURRENT_STICKY: 'Delete current sticky',
 	HEADER_NEW_STICKY: 'New sticky note',
 	MODE_READ_CLICK_EDIT: 'Reading mode — click to edit',
 	MODE_EDIT_CLICK_READ: 'Editing mode — click to read',

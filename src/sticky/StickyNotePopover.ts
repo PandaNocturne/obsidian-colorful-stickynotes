@@ -434,18 +434,11 @@ export class StickyNotePopover {
 
 		const view = this.leaf?.view;
 		const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
+		let canArchiveOrDelete = false;
+		let archived = false;
 		if (file instanceof TFile && file.extension === 'md') {
-			const archived = await resolveStickyArchivedForFile(this.plugin.app, file);
-			menu.addItem(item => {
-				item
-					.setTitle(
-						archived ? t('HEADER_UNARCHIVE_CURRENT_STICKY') : t('HEADER_ARCHIVE_CURRENT_STICKY')
-					)
-					.setIcon('archive')
-					.onClick(() => {
-						this.options.onToggleArchiveCurrentSticky();
-					});
-			});
+			canArchiveOrDelete = true;
+			archived = await resolveStickyArchivedForFile(this.plugin.app, file);
 			const removeTargets = this.options.getWorkspacesForRemoveMenu();
 			if (removeTargets.length > 0) {
 				menu.addItem(item => {
@@ -465,9 +458,21 @@ export class StickyNotePopover {
 		}
 
 		menu.addSeparator();
+		if (canArchiveOrDelete) {
+			menu.addItem(item => {
+				item
+					.setTitle(
+						archived ? t('HEADER_UNARCHIVE_CURRENT_STICKY') : t('HEADER_ARCHIVE_CURRENT_STICKY')
+					)
+					.setIcon('archive')
+					.onClick(() => {
+						this.options.onToggleArchiveCurrentSticky();
+					});
+			});
+		}
 		menu.addItem(item => {
 			item
-				.setTitle(t('DELETE_STICKY_ACTION'))
+				.setTitle(t('HEADER_DELETE_CURRENT_STICKY'))
 				.setIcon('trash-2')
 				.onClick(() => {
 					this.options.onDeleteCurrentSticky();
