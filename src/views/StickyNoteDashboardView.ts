@@ -20,6 +20,7 @@ import {
 	clampDashLeftPaneWidth,
 	clampViewContentZoom,
 	DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
+	DASH_LEFT_PANE_AUTO_COLLAPSE_BELOW,
 	DASH_LEFT_PANE_WIDTH_DEFAULT
 } from '../settings';
 import {
@@ -271,6 +272,10 @@ export class StickyNoteDashboardView extends ItemView {
 	private listCardOverflowClipBtn: HTMLButtonElement | null = null;
 	private composerToggleBtn: HTMLButtonElement | null = null;
 	private leftPaneToggleBtn: HTMLButtonElement | null = null;
+	/** 因视口过窄而临时收起左侧栏（不写入用户设置）。 */
+	private leftPaneAutoCollapsedForWidth = false;
+	/** 窄宽度下用户主动展开左侧栏时，本轮窄布局内不再自动收起。 */
+	private leftPaneKeepOpenWhenNarrow = false;
 	/** 开启后卡片头部显示归档复选框，便于勾选修改。 */
 	private listArchiveCheckboxEditMode = false;
 
@@ -366,6 +371,15 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncCardOverflowClipToolbarBtn();
 	}
 
+	private isDashViewportNarrow(): boolean {
+		const w = this.contentEl.clientWidth;
+		return w > 0 && w < DASH_LEFT_PANE_AUTO_COLLAPSE_BELOW;
+	}
+
+	private isLeftPaneCollapsed(): boolean {
+		return !!this.plugin.settings.dashboardLeftPaneCollapsed || this.leftPaneAutoCollapsedForWidth;
+	}
+
 	/** 写入左右栏宽、输入区高到 CSS 变量，并同步折叠态 class。 */
 	applyDashPaneLayout(): void {
 		if (!this.contentEl.hasClass('csn-dash')) return;
@@ -375,10 +389,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.plugin.settings.dashboardComposerPaneHeight = composerH;
 		this.contentEl.style.setProperty('--csn-dash-left-width', `${leftW}px`);
 		this.contentEl.style.setProperty('--csn-dash-composer-height', `${composerH}px`);
-		this.contentEl.toggleClass(
-			'csn-dash--left-collapsed',
-			!!this.plugin.settings.dashboardLeftPaneCollapsed
-		);
+		this.contentEl.toggleClass('csn-dash--left-collapsed', this.isLeftPaneCollapsed());
 		this.contentEl.toggleClass(
 			'csn-dash--composer-hidden',
 			!!this.plugin.settings.dashboardComposerHidden
@@ -390,7 +401,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private syncLeftPaneToggleBtn(): void {
 		const btn = this.leftPaneToggleBtn;
 		if (!btn) return;
-		const collapsed = !!this.plugin.settings.dashboardLeftPaneCollapsed;
+		const collapsed = this.isLeftPaneCollapsed();
 		btn.toggleClass('is-active', !collapsed);
 		btn.setAttr('aria-pressed', collapsed ? 'false' : 'true');
 	}
@@ -403,8 +414,48 @@ export class StickyNoteDashboardView extends ItemView {
 		btn.setAttr('aria-pressed', hidden ? 'false' : 'true');
 	}
 
+	/** 视口过窄时自动收起左侧栏；变宽后若仅因窄宽而收起则恢复。 */
+	private syncLeftPaneForViewportWidth(): void {
+		if (!this.contentEl.hasClass('csn-dash')) return;
+		const narrow = this.isDashViewportNarrow();
+		if (narrow) {
+			if (
+				!this.plugin.settings.dashboardLeftPaneCollapsed &&
+				!this.leftPaneKeepOpenWhenNarrow &&
+				!this.leftPaneAutoCollapsedForWidth
+			) {
+				this.leftPaneAutoCollapsedForWidth = true;
+				this.applyDashPaneLayout();
+			}
+			return;
+		}
+		this.leftPaneKeepOpenWhenNarrow = false;
+		if (this.leftPaneAutoCollapsedForWidth) {
+			this.leftPaneAutoCollapsedForWidth = false;
+			this.applyDashPaneLayout();
+		}
+	}
+
+	private registerDashViewportWidthObserver(): void {
+		if (typeof ResizeObserver === 'undefined') return;
+		const ro = new ResizeObserver(() => {
+			this.syncLeftPaneForViewportWidth();
+		});
+		ro.observe(this.contentEl);
+		this.register(() => ro.disconnect());
+		this.syncLeftPaneForViewportWidth();
+	}
+
 	private async toggleLeftPaneCollapsed(): Promise<void> {
-		this.plugin.settings.dashboardLeftPaneCollapsed = !this.plugin.settings.dashboardLeftPaneCollapsed;
+		if (this.leftPaneAutoCollapsedForWidth) {
+			this.leftPaneAutoCollapsedForWidth = false;
+			this.leftPaneKeepOpenWhenNarrow = true;
+			this.plugin.settings.dashboardLeftPaneCollapsed = false;
+		} else {
+			const next = !this.plugin.settings.dashboardLeftPaneCollapsed;
+			this.plugin.settings.dashboardLeftPaneCollapsed = next;
+			this.leftPaneKeepOpenWhenNarrow = !next && this.isDashViewportNarrow();
+		}
 		this.applyDashPaneLayout();
 		await this.plugin.saveSettings();
 	}
@@ -429,7 +480,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 			const onMove = (e: PointerEvent) => {
 				if (orientation === 'vertical') {
-					if (this.plugin.settings.dashboardLeftPaneCollapsed) return;
+					if (this.isLeftPaneCollapsed()) return;
 					const next = clampDashLeftPaneWidth(startLeft + (e.clientX - startX));
 					this.plugin.settings.dashboardLeftPaneWidth = next;
 				} else {
@@ -1702,6 +1753,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncSearchClearVisibility();
 		this.renderCalendar();
 		this.renderWorkspaceTree();
+		this.registerDashViewportWidthObserver();
 		void this.renderDash();
 	}
 
@@ -4265,6 +4317,8 @@ export class StickyNoteDashboardView extends ItemView {
 	async onClose(): Promise<void> {
 		this.detachCalPickerDocClose();
 		this.calPicker = null;
+		this.leftPaneAutoCollapsedForWidth = false;
+		this.leftPaneKeepOpenWhenNarrow = false;
 		this.hideCanvasDragBehaviorHint();
 		this.cancelPendingRefresh();
 		this.debouncedStructureRefresh = null;

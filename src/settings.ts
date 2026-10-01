@@ -30,6 +30,8 @@ export function clampViewContentZoom(value: number): number {
 export const DASH_LEFT_PANE_WIDTH_MIN = 245;
 export const DASH_LEFT_PANE_WIDTH_MAX = 480;
 export const DASH_LEFT_PANE_WIDTH_DEFAULT = 280;
+/** 仪表盘内容区宽度低于此值时自动收起左侧栏（px）。 */
+export const DASH_LEFT_PANE_AUTO_COLLAPSE_BELOW = 720;
 
 export function clampDashLeftPaneWidth(value: number): number {
 	if (typeof value !== 'number' || !Number.isFinite(value)) return DASH_LEFT_PANE_WIDTH_DEFAULT;
