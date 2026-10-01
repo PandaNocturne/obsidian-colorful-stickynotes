@@ -3,6 +3,7 @@ import {
 	ItemView,
 	MarkdownRenderer,
 	Menu,
+	Notice,
 	TAbstractFile,
 	TFile,
 	TFolder,
@@ -37,9 +38,7 @@ import { ListBatchDeleteConfirmModal } from '../modals/ListBatchDeleteConfirmMod
 import {
 	DeleteStickyWorkspaceConfirmModal,
 	DeleteWorkspaceTabGroupConfirmModal,
-	EditStickyWorkspaceModal,
-	NewBlankWorkspaceModal,
-	RenameWorkspaceTabGroupModal
+	NewBlankWorkspaceModal
 } from '../modals/WorkspacePanelModal';
 import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-folder';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
@@ -3552,19 +3551,107 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private renameWorkspace(ws: StickyWorkspace): void {
-		const mgr = this.plugin.stickies;
-		new EditStickyWorkspaceModal(this.app, ws.name, ws.remark ?? '', async ({ name, remark }) => {
-			await mgr.updateWorkspace(ws.id, name, remark);
+		const row = this.treeEl?.querySelector(
+			`.csn-dash-tree-ws[data-csn-ws-id="${CSS.escape(ws.id)}"]`
+		);
+		if (!(row instanceof HTMLElement)) return;
+		this.beginInlineTreeRename(row, ws.name, async name => {
+			await this.plugin.stickies.updateWorkspace(ws.id, name, ws.remark ?? '');
 			this.renderWorkspaceTree();
-		}).open();
+			this.syncWorkspaceFilterBar();
+		});
 	}
 
 	private renameWorkspaceGroup(group: StickyWorkspaceTabGroup): void {
-		const mgr = this.plugin.stickies;
-		new RenameWorkspaceTabGroupModal(this.app, group.name, async name => {
-			await mgr.renameWorkspaceTabGroup(group.id, name);
+		const row = this.treeEl?.querySelector(
+			`.csn-dash-tree-group-btn[data-csn-ws-group="${CSS.escape(group.id)}"]`
+		);
+		if (!(row instanceof HTMLElement)) return;
+		this.beginInlineTreeRename(row, group.name, async name => {
+			await this.plugin.stickies.renameWorkspaceTabGroup(group.id, name);
 			this.renderWorkspaceTree();
-		}).open();
+			this.syncWorkspaceFilterBar();
+		});
+	}
+
+	/** 工作区树内联重命名：双击后在行内输入，Enter/失焦提交，Esc 取消。 */
+	private beginInlineTreeRename(
+		rowEl: HTMLElement,
+		initialName: string,
+		onCommit: (name: string) => void | Promise<void>
+	): void {
+		if (rowEl.querySelector('.csn-dash-tree-rename-input')) return;
+		const label = rowEl.querySelector('.csn-dash-tree-label');
+		if (!(label instanceof HTMLElement)) return;
+
+		const wasDraggable = rowEl.getAttr('draggable');
+		rowEl.removeAttribute('draggable');
+		rowEl.addClass('is-renaming');
+		label.addClass('csn-dash-tree-label--hidden');
+
+		const input = rowEl.createEl('input', {
+			type: 'text',
+			cls: 'csn-dash-tree-rename-input',
+			attr: {
+				value: initialName,
+				spellcheck: 'false',
+				autocomplete: 'off',
+				'aria-label': t('DASH_WS_MENU_RENAME')
+			}
+		});
+		const count = rowEl.querySelector('.csn-dash-tree-count');
+		if (count) count.before(input);
+		else label.after(input);
+		input.value = initialName;
+		input.focus();
+		input.select();
+
+		let finished = false;
+		const restoreChrome = (): void => {
+			input.remove();
+			label.removeClass('csn-dash-tree-label--hidden');
+			rowEl.removeClass('is-renaming');
+			if (wasDraggable != null) rowEl.setAttr('draggable', wasDraggable);
+		};
+		const finish = (save: boolean): void => {
+			if (finished) return;
+			finished = true;
+			const next = input.value.trim();
+			restoreChrome();
+			if (!save) return;
+			if (!next) {
+				new Notice(t('NOTICE_NAME_EMPTY'));
+				return;
+			}
+			if (next === initialName) return;
+			void onCommit(next);
+		};
+
+		this.registerDomEvent(input, 'keydown', (evt: KeyboardEvent) => {
+			if (evt.key === 'Enter') {
+				evt.preventDefault();
+				evt.stopPropagation();
+				finish(true);
+			} else if (evt.key === 'Escape') {
+				evt.preventDefault();
+				evt.stopPropagation();
+				finish(false);
+			}
+		});
+		this.registerDomEvent(input, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+		});
+		this.registerDomEvent(input, 'mousedown', (evt: MouseEvent) => {
+			evt.stopPropagation();
+		});
+		this.registerDomEvent(input, 'dblclick', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+		});
+		this.registerDomEvent(input, 'blur', () => {
+			finish(true);
+		});
 	}
 
 	private openWorkspaceContextMenu(evt: MouseEvent, ws: StickyWorkspace): void {
