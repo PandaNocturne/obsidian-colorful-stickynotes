@@ -25,9 +25,11 @@ import {
 import { registerStickyWorkspacePatches } from './sticky/registerStickyWorkspacePatches';
 import { StickyNoteManager } from './sticky/StickyNoteManager';
 import { StickyNoteListView } from './views/StickyNoteListView';
+import { StickyNoteDashboardView } from './views/StickyNoteDashboardView';
 import { registerSendToStickyMenus } from './register-send-to-sticky-menus';
 import {
 	VIEW_STICKY_NOTE_LIST,
+	VIEW_STICKY_NOTE_DASHBOARD,
 	type HeaderNewStickyAdjacentSide,
 	type NoteListArchiveFilter,
 	type NoteListFloatOpenFilter,
@@ -87,6 +89,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		await this.pruneNoteListWorkspaceFilterAfterWorkspacesLoad();
 
 		this.registerView(VIEW_STICKY_NOTE_LIST, leaf => new StickyNoteListView(leaf, this));
+		this.registerView(VIEW_STICKY_NOTE_DASHBOARD, leaf => new StickyNoteDashboardView(leaf, this));
 		this.syncNoteListGridMetricsToOpenViews();
 		this.app.workspace.onLayoutReady(() => {
 			this.syncNoteListGridMetricsToOpenViews();
@@ -98,6 +101,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addRibbonIcon('layout-list', t('RIBBON_STICKY_LIST'), () => {
 			void this.openNoteListView();
+		});
+
+		this.addRibbonIcon('layout-dashboard', t('RIBBON_STICKY_DASHBOARD'), () => {
+			void this.openStickyDashboardView();
 		});
 
 		this.addRibbonIcon('layers', t('RIBBON_WORKSPACE'), () => {
@@ -117,6 +124,14 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			name: t('CMD_OPEN_STICKY_LIST'),
 			callback: () => {
 				void this.openNoteListView();
+			}
+		});
+
+		this.addCommand({
+			id: 'open-sticky-note-dashboard',
+			name: t('CMD_OPEN_STICKY_DASHBOARD'),
+			callback: () => {
+				void this.openStickyDashboardView();
 			}
 		});
 
@@ -540,6 +555,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				v.cancelPendingListRefresh();
 			}
 		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
+				v.cancelPendingRefresh();
+			}
+		}
 	}
 
 	/**
@@ -570,13 +591,25 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				v.flushListRedraw();
 			}
 		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
+				v.flushDashRedraw();
+			}
+		}
 	}
 
-	/** 每页条数变更：回到第一页并重绘已打开的列表。 */
+	/** 每页条数变更：回到第一页并重绘已打开的列表与标签页仪表盘。 */
 	refreshStickyListPageSizeChanged(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) {
+				v.resetPageAndRedraw();
+			}
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
 				v.resetPageAndRedraw();
 			}
 		}
@@ -602,7 +635,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.stickies.updateLeafPinnedFromSettings();
 	}
 
-	/** 将列表预览缩放同步到已打开的便笺列表（不重渲 Markdown）。 */
+	/** 将列表预览缩放同步到已打开的便笺列表与标签页仪表盘（不重渲 Markdown）。 */
 	syncNoteListViewContentZoomToOpenViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
@@ -610,13 +643,25 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				v.syncViewContentZoomFromSettings();
 			}
 		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
+				v.syncViewContentZoomFromSettings();
+			}
+		}
 	}
 
-	/** 将列表网格的卡片高度、列最小宽度同步到已打开的便笺列表视图。 */
+	/** 将列表网格的卡片高度、列最小宽度同步到已打开的便笺列表与标签页仪表盘。 */
 	syncNoteListGridMetricsToOpenViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) {
+				v.syncListGridMetricsFromSettings();
+			}
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) {
 				v.syncListGridMetricsFromSettings();
 			}
 		}
@@ -654,6 +699,19 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 		await workspace.revealLeaf(leaf);
 		this.refreshStickyListOpenIndicatorsIfOpen();
+	}
+
+	async openStickyDashboardView(): Promise<void> {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)[0];
+		if (!leaf) {
+			const tab = workspace.getLeaf('tab');
+			await tab.setViewState({ type: VIEW_STICKY_NOTE_DASHBOARD, active: true });
+			leaf = tab;
+		} else {
+			await leaf.setViewState({ type: VIEW_STICKY_NOTE_DASHBOARD, active: true });
+		}
+		await workspace.revealLeaf(leaf);
 	}
 
 	/** 打开或聚焦指定文件的便笺窗口 */

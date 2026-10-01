@@ -1480,7 +1480,7 @@ export class StickyNoteManager {
 		}
 	}
 
-	async addStickyWindow(initial?: Partial<SerializedStickyWindow>, sourcePopover?: StickyNotePopover): Promise<void> {
+	async addStickyWindow(initial?: Partial<SerializedStickyWindow>, sourcePopover?: StickyNotePopover): Promise<TFile | null> {
 		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 		const defaultTplPath = (this.plugin.settings.defaultTemplatePath || '').trim();
 
@@ -1509,7 +1509,7 @@ export class StickyNoteManager {
 		const relativeFormatted = formatStickyNoteRelativePath(tmpl);
 		if (relativeFormatted === 'invalid-format') {
 			new Notice(t('NOTICE_INVALID_FILENAME_TEMPLATE'));
-			return;
+			return null;
 		}
 		let relativeNoExt = relativeFormatted;
 		let path = await this.pathForStickyRelative(folder, relativeNoExt);
@@ -1546,7 +1546,7 @@ export class StickyNoteManager {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
 			new Notice(t('NOTICE_CANNOT_CREATE_STICKY_FILE'));
-			return;
+			return null;
 		}
 
 		const f = this.app.vault.getAbstractFileByPath(path);
@@ -1555,7 +1555,7 @@ export class StickyNoteManager {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
 			new Notice(t('NOTICE_CANNOT_CREATE_STICKY_FILE'));
-			return;
+			return null;
 		}
 
 		/* `create` 会触发 vault 事件；在 openFile 与列表刷新交错前先取消防抖刷新，减少重复整表渲染。 */
@@ -1637,6 +1637,7 @@ export class StickyNoteManager {
 		this.persistOpenWindows();
 		await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
 		this.notifyStickyListOpenIndicators();
+		return f;
 	}
 
 	/**

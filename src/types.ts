@@ -90,6 +90,9 @@ export interface WorkspacesFile {
 
 export const VIEW_STICKY_NOTE_LIST = 'colorful-sticky-notes-list';
 
+/** 便笺标签页仪表盘（独立于侧栏列表）。 */
+export const VIEW_STICKY_NOTE_DASHBOARD = 'colorful-sticky-notes-dashboard';
+
 /** 便笺列表排序方式（时间均为 vault 文件 stat；按文件名称时为 `TFile.basename`，含扩展名，`localeCompare` 带 numeric）。 */
 export type NoteListSort =
 	| 'ctime-desc'

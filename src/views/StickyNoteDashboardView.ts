@@ -1,0 +1,2302 @@
+import {
+	Component,
+	ItemView,
+	MarkdownRenderer,
+	Menu,
+	TAbstractFile,
+	TFile,
+	TFolder,
+	WorkspaceLeaf,
+	debounce,
+	normalizePath,
+	setIcon,
+	type Debouncer
+} from 'obsidian';
+import type ColorfulStickyNotesPlugin from '../main';
+import { t } from '../lang/helpers';
+import type { MessageKey } from '../lang/locale/en';
+import { clampViewContentZoom } from '../settings';
+import {
+	VIEW_STICKY_NOTE_DASHBOARD,
+	WS_TAB_GROUP_DEFAULT_ID,
+	type NoteListArchiveFilter,
+	type NoteListSort,
+	type StickyColorId
+} from '../types';
+import { ListBatchDeleteConfirmModal } from '../modals/ListBatchDeleteConfirmModal';
+import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-folder';
+import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
+import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
+import {
+	buildPaginationEntries,
+	ctimeDateKeysForFiles,
+	filterStickyFilesByArchiveFilter,
+	filterStickyFilesByColors,
+	filterStickyFilesByDateFilter,
+	filterStickyFilesByKeywords,
+	injectMarkdownAfterFrontmatter,
+	isoWeekPartsFromMs,
+	localDateKeyFromMs,
+	sortStickyListFiles,
+	stickyDateFilterKey,
+	stickyDateFiltersEqual,
+	type StickyDateFilter
+} from '../utils/query-sticky-list';
+import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
+import { resolveWorkspaceTabGroupId } from '../workspace-store';
+
+type DashWorkspaceSel =
+	| { kind: 'all' }
+	| { kind: 'group'; groupId: string }
+	| { kind: 'workspace'; workspaceId: string };
+
+/** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
+function listPreviewEmbedMarkdown(file: TFile): string {
+	const pathNoExt = file.path.replace(/\.md$/i, '');
+	return `![[${pathNoExt}]]\n`;
+}
+
+/** 展开/紧凑工具栏上的排序按钮默认图标（时间类排序共用；文件名称排序另设 `toolbarIcon`）。 */
+const NOTE_LIST_SORT_TOOLBAR_ICON = 'arrow-down-wide-narrow';
+
+/** 排序模式：`menuIcon` 用于菜单行；`toolbarIcon` 省略时工具栏按钮用 `NOTE_LIST_SORT_TOOLBAR_ICON`。 */
+const NOTE_LIST_SORT_SPECS: readonly {
+	mode: NoteListSort;
+	menuIcon: string;
+	toolbarIcon?: string;
+	titleKey: MessageKey;
+}[] = [
+	{ mode: 'ctime-desc', menuIcon: 'calendar-arrow-down', titleKey: 'SORT_CTIME_DESC_NEW' },
+	{ mode: 'ctime-asc', menuIcon: 'calendar-arrow-up', titleKey: 'SORT_CTIME_ASC_OLD' },
+	{ mode: 'mtime-desc', menuIcon: 'clock-arrow-down', titleKey: 'SORT_MTIME_DESC_NEW' },
+	{ mode: 'mtime-asc', menuIcon: 'clock-arrow-up', titleKey: 'SORT_MTIME_ASC_OLD' },
+	{
+		mode: 'basename-asc',
+		menuIcon: 'arrow-up-narrow-wide',
+		toolbarIcon: 'arrow-up-narrow-wide',
+		titleKey: 'SORT_BASENAME_AZ'
+	},
+	{
+		mode: 'basename-desc',
+		menuIcon: 'arrow-down-narrow-wide',
+		toolbarIcon: 'arrow-down-narrow-wide',
+		titleKey: 'SORT_BASENAME_ZA'
+	}
+];
+
+function buildStickyBgSubmenuTitle(
+	doc: Document,
+	colorId: StickyColorId,
+	label: string,
+	selected: boolean
+): DocumentFragment {
+	const frag = doc.createDocumentFragment();
+	const row = doc.createElement('span');
+	row.className = 'csn-list-bg-menu-row';
+	row.dataset.csnBg = colorId;
+	const lab = doc.createElement('span');
+	lab.className = 'csn-list-bg-menu-label';
+	lab.textContent = label;
+	row.appendChild(lab);
+	if (selected) {
+		const check = doc.createElement('span');
+		check.className = 'csn-list-bg-menu-check';
+		setIcon(check, 'check');
+		row.appendChild(check);
+	}
+	frag.appendChild(row);
+	return frag;
+}
+
+function weekdayMinLabels(): string[] {
+	try {
+		const m = (window as Window & { moment?: { weekdaysMin?: () => string[] } }).moment;
+		const labels = m?.weekdaysMin?.();
+		if (Array.isArray(labels) && labels.length === 7) return labels;
+	} catch {
+		/* fall through */
+	}
+	return ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+}
+
+function monthShortLabels(): string[] {
+	try {
+		const m = (window as Window & { moment?: { monthsShort?: () => string[] } }).moment;
+		const labels = m?.monthsShort?.();
+		if (Array.isArray(labels) && labels.length === 12) return labels;
+	} catch {
+		/* fall through */
+	}
+	return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+}
+
+/** 以周日为一周起点，生成当月完整周行（含邻月日期）。 */
+function buildMonthWeekRows(
+	year: number,
+	month0: number
+): Array<{ weekYear: number; week: number; days: Array<{ y: number; m0: number; d: number; inMonth: boolean }> }> {
+	const first = new Date(year, month0, 1);
+	const start = new Date(first);
+	start.setDate(1 - first.getDay());
+	const rows: Array<{
+		weekYear: number;
+		week: number;
+		days: Array<{ y: number; m0: number; d: number; inMonth: boolean }>;
+	}> = [];
+	const cursor = new Date(start);
+	for (let r = 0; r < 6; r++) {
+		const days: Array<{ y: number; m0: number; d: number; inMonth: boolean }> = [];
+		for (let i = 0; i < 7; i++) {
+			days.push({
+				y: cursor.getFullYear(),
+				m0: cursor.getMonth(),
+				d: cursor.getDate(),
+				inMonth: cursor.getFullYear() === year && cursor.getMonth() === month0
+			});
+			cursor.setDate(cursor.getDate() + 1);
+		}
+		const mid = days[3]!;
+		const iso = isoWeekPartsFromMs(new Date(mid.y, mid.m0, mid.d).getTime());
+		rows.push({ weekYear: iso.year, week: iso.week, days });
+		if (cursor.getMonth() !== month0 && cursor.getDay() === 0) break;
+	}
+	return rows;
+}
+
+export class StickyNoteDashboardView extends ItemView {
+	private calendarEl: HTMLElement | null = null;
+	private composerEl: HTMLTextAreaElement | null = null;
+	private treeEl: HTMLElement | null = null;
+	private searchInput: HTMLInputElement | null = null;
+	private searchInnerEl: HTMLElement | null = null;
+	private searchClearBtn: HTMLButtonElement | null = null;
+	private archiveBtns = new Map<NoteListArchiveFilter, HTMLButtonElement>();
+	private colorBtns = new Map<StickyColorId, HTMLButtonElement>();
+	private gridEl: HTMLElement | null = null;
+	private paginationEl: HTMLElement | null = null;
+	private paginationRowEl: HTMLElement | null = null;
+	private paginationPagesEl: HTMLElement | null = null;
+	private paginationPrevBtn: HTMLButtonElement | null = null;
+	private paginationNextBtn: HTMLButtonElement | null = null;
+	private paginationMetaEl: HTMLElement | null = null;
+
+	private sortDropdownBtn: HTMLButtonElement | null = null;
+	private listBulkEditBtn: HTMLButtonElement | null = null;
+	private listCardOverflowClipBtn: HTMLButtonElement | null = null;
+	/** 开启后卡片头部显示归档复选框，便于勾选修改。 */
+	private listArchiveCheckboxEditMode = false;
+
+	/** 每张列表卡片嵌入预览各自一个 Component，便于翻页时按路径卸载/复用。 */
+	private readonly listCardMarkdownHosts = new Map<string, Component>();
+	private gridDelegatedEvents = false;
+	/** 上次渲染的仪表盘结构指纹；一致时翻页可走 DOM 增量。 */
+	private lastDashStructureKey = '';
+	private lastRenderedPageIndex: number | null = null;
+	private listPageIndex = 0;
+	private archiveFilter: NoteListArchiveFilter = 'all';
+	private colorFilters: StickyColorId[] = [];
+	private workspaceSel: DashWorkspaceSel = { kind: 'all' };
+	private collapsedGroupIds = new Set<string>();
+	private calYear: number;
+	private calMonth0: number;
+	private selectedDateFilter: StickyDateFilter | null = null;
+	private noteDateKeys = new Set<string>();
+	private composing = false;
+
+	/** 列表卡片多选：当前选中的便笺路径（normalizePath）。 */
+	private readonly selectedListNotePaths = new Set<string>();
+	/** Shift 范围选择的锚点（最后一次显式选择）。 */
+	private lastSelectedListNotePath: string | null = null;
+	/** 从拖拽手柄拖拽时，附着在 `document.body` 上的 Canvas 行为说明浮层。 */
+	private canvasDragCanvasHintEl: HTMLElement | null = null;
+
+	private dashRenderChain: Promise<void> = Promise.resolve();
+	private debouncedStructureRefresh: Debouncer<[], void> | null = null;
+	private debouncedContentRefresh: Debouncer<[], void> | null = null;
+
+	constructor(
+		leaf: WorkspaceLeaf,
+		private readonly plugin: ColorfulStickyNotesPlugin
+	) {
+		super(leaf);
+		const now = new Date();
+		this.calYear = now.getFullYear();
+		this.calMonth0 = now.getMonth();
+	}
+
+	getViewType(): string {
+		return VIEW_STICKY_NOTE_DASHBOARD;
+	}
+
+	getDisplayText(): string {
+		return t('DISPLAY_STICKY_DASHBOARD');
+	}
+
+	getIcon(): string {
+		return 'layout-dashboard';
+	}
+
+	/** 从设置写入根节点 CSS 变量（网格列最小宽度、卡片高度）及预览区 overflow。 */
+	syncListGridMetricsFromSettings(): void {
+		if (!this.contentEl.hasClass('csn-dash')) return;
+		const h = this.plugin.settings.noteListCardHeight.trim();
+		const w = this.plugin.settings.noteListGridMinWidth.trim();
+		this.contentEl.style.setProperty('--csn-list-card-height', h);
+		this.contentEl.style.setProperty('--csn-list-grid-min-width', w);
+		this.contentEl.toggleClass(
+			'csn-list-view--card-overflow-visible',
+			!this.plugin.settings.noteListCardOverflowHidden
+		);
+		this.syncCardOverflowClipToolbarBtn();
+	}
+
+	/** 同步卡片预览区内容缩放（不重渲 Markdown）。 */
+	syncViewContentZoomFromSettings(): void {
+		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
+		this.gridEl?.querySelectorAll('.csn-list-card').forEach(card => {
+			if (card instanceof HTMLElement) {
+				card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
+			}
+		});
+	}
+
+	requestRedraw(): void {
+		void this.renderDash();
+	}
+
+	/** 设置「每页条数」变更：回到第一页并立即重绘。 */
+	resetPageAndRedraw(): void {
+		this.listPageIndex = 0;
+		this.flushDashRedraw();
+	}
+
+	flushDashRedraw(): void {
+		this.cancelPendingRefresh();
+		void this.renderDash();
+	}
+
+	cancelPendingRefresh(): void {
+		this.debouncedStructureRefresh?.cancel();
+		this.debouncedContentRefresh?.cancel();
+	}
+
+	private syncPinButton(card: HTMLElement, path: string, pinnedSet: ReadonlySet<string>): void {
+		const pinBtn = card.querySelector('.csn-list-card-pin-btn');
+		if (!(pinBtn instanceof HTMLButtonElement)) return;
+		const on = pinnedSet.has(normalizePath(path));
+		pinBtn.toggleClass('is-active', on);
+		pinBtn.setAttr('aria-pressed', on ? 'true' : 'false');
+		pinBtn.setAttr('aria-label', on ? t('UNPIN_ARIA') : t('PIN_ARIA'));
+	}
+
+	/** 根节点类名控制归档复选框是否可见（与「编辑」按钮联动）。 */
+	private syncListArchiveCheckboxEditUI(): void {
+		this.contentEl.toggleClass('csn-list-view--archive-checkbox-edit', this.listArchiveCheckboxEditMode);
+		if (this.listBulkEditBtn) {
+			this.listBulkEditBtn.toggleClass('is-active', this.listArchiveCheckboxEditMode);
+			this.listBulkEditBtn.setAttr(
+				'aria-pressed',
+				this.listArchiveCheckboxEditMode ? 'true' : 'false'
+			);
+		}
+	}
+
+	private syncArchiveChromeOnCard(card: HTMLElement, archived: boolean): void {
+		card.setAttr('data-csn-archived', archived ? 'true' : 'false');
+		const wrap = card.querySelector('.csn-list-card-archive-wrap');
+		const input = card.querySelector('.csn-list-card-archive-checkbox');
+		if (wrap instanceof HTMLElement) wrap.toggleClass('is-archived', archived);
+		if (input instanceof HTMLInputElement) {
+			input.checked = archived;
+			input.setAttr(
+				'aria-label',
+				archived ? t('LIST_CARD_ARCHIVE_CBOX_ARIA_CHECKED') : t('LIST_CARD_ARCHIVE_CBOX_ARIA_UNCHECKED')
+			);
+		}
+	}
+
+	/** 仪表盘本地归档筛选（非 `settings.noteListArchiveFilter`）。 */
+	private listShouldRerenderForArchiveState(archived: boolean): boolean {
+		const m = this.archiveFilter;
+		if (m === 'all') return false;
+		if (m === 'unarchived') return archived;
+		return !archived;
+	}
+
+	private async togglePinForPath(path: string): Promise<void> {
+		const p = normalizePath(path);
+		const cur = this.plugin.settings.noteListPinnedPaths.map(x => normalizePath(x));
+		const i = cur.indexOf(p);
+		if (i >= 0) cur.splice(i, 1);
+		else cur.unshift(p);
+		this.plugin.settings.noteListPinnedPaths = cur;
+		await this.plugin.saveSettings();
+		this.listPageIndex = 0;
+		void this.renderDash();
+	}
+
+	private syncCardOverflowClipToolbarBtn(): void {
+		if (!this.listCardOverflowClipBtn) return;
+		const clip = this.plugin.settings.noteListCardOverflowHidden;
+		this.listCardOverflowClipBtn.toggleClass('is-active', clip);
+		this.listCardOverflowClipBtn.setAttr('aria-pressed', clip ? 'true' : 'false');
+	}
+
+	private syncSortToolbarBtn(): void {
+		const sortSpec =
+			NOTE_LIST_SORT_SPECS.find(s => s.mode === this.plugin.settings.noteListSort) ??
+			NOTE_LIST_SORT_SPECS[0]!;
+		if (!this.sortDropdownBtn) return;
+		this.sortDropdownBtn.empty();
+		setIcon(this.sortDropdownBtn, sortSpec.toolbarIcon ?? NOTE_LIST_SORT_TOOLBAR_ICON);
+		const sortTitle = t(sortSpec.titleKey);
+		this.sortDropdownBtn.setAttr('aria-label', t('LIST_TOOLBAR_SORT_PREFIX', { title: sortTitle }));
+	}
+
+	private openSortDropdownMenu(evt: MouseEvent): void {
+		const menu = new Menu();
+		const cur = this.plugin.settings.noteListSort;
+		for (const spec of NOTE_LIST_SORT_SPECS) {
+			menu.addItem(item => {
+				item
+					.setTitle(t(spec.titleKey))
+					.setIcon(spec.menuIcon)
+					.setChecked(spec.mode === cur)
+					.onClick(() => {
+						void this.setListSort(spec.mode);
+					});
+			});
+		}
+		menu.showAtMouseEvent(evt);
+	}
+
+	private async setListSort(sort: NoteListSort): Promise<void> {
+		if (this.plugin.settings.noteListSort === sort) return;
+		this.plugin.settings.noteListSort = sort;
+		await this.plugin.saveSettings();
+		this.syncSortToolbarBtn();
+		this.listPageIndex = 0;
+		void this.renderDash();
+	}
+
+	private disposeMarkdownHostForPath(path: string): void {
+		const c = this.listCardMarkdownHosts.get(path);
+		if (c) {
+			this.removeChild(c);
+			this.listCardMarkdownHosts.delete(path);
+		}
+	}
+
+	private disposeAllMarkdownHosts(): void {
+		for (const p of [...this.listCardMarkdownHosts.keys()]) {
+			this.disposeMarkdownHostForPath(p);
+		}
+	}
+
+	private ensureMarkdownHostForPath(path: string): Component {
+		let c = this.listCardMarkdownHosts.get(path);
+		if (!c) {
+			c = new Component();
+			this.listCardMarkdownHosts.set(path, c);
+			this.addChild(c);
+		}
+		return c;
+	}
+
+	private hideCanvasDragBehaviorHint(): void {
+		this.canvasDragCanvasHintEl?.remove();
+		this.canvasDragCanvasHintEl = null;
+	}
+
+	private updateCanvasDragBehaviorHintPos(clientX: number, clientY: number): void {
+		const el = this.canvasDragCanvasHintEl;
+		if (!el) return;
+		const m = 16;
+		const w = window.innerWidth;
+		const h = window.innerHeight;
+		const x = Math.min(Math.max(m, clientX + 18), Math.max(m, w - m));
+		const y = Math.min(Math.max(m, clientY + 18), Math.max(m, h - m));
+		el.style.left = `${x}px`;
+		el.style.top = `${y}px`;
+	}
+
+	private updateCanvasDragBehaviorHintState(ctrlOrCmd: boolean, shift: boolean): void {
+		const wrap = this.canvasDragCanvasHintEl;
+		if (!wrap) return;
+		const plainEl = wrap.querySelector('[data-csn-drag-mode="plain"]');
+		const fileRefEl = wrap.querySelector('[data-csn-drag-mode="fileRef"]');
+		const shiftEl = wrap.querySelector('[data-csn-drag-mode="deleteOriginal"]');
+		if (!(plainEl instanceof HTMLElement)) return;
+		if (!(fileRefEl instanceof HTMLElement)) return;
+		if (!(shiftEl instanceof HTMLElement)) return;
+		const isDeleteOriginal = shift && !ctrlOrCmd;
+		const isFileRefOnly = ctrlOrCmd && !shift;
+		const isPlain = !isDeleteOriginal && !isFileRefOnly;
+		plainEl.toggleClass('is-active', isPlain);
+		fileRefEl.toggleClass('is-active', isFileRefOnly);
+		shiftEl.toggleClass('is-active', isDeleteOriginal);
+	}
+
+	/** 从仪表盘拖向 Canvas（或编辑器）期间的按键说明：跟随指针，不拦截指针。 */
+	private showCanvasDragBehaviorHint(selectedCount: number, evt?: DragEvent): void {
+		this.hideCanvasDragBehaviorHint();
+		const wrap = document.body.createDiv({ cls: 'csn-canvas-drag-hint', attr: { 'aria-live': 'polite' } });
+		this.canvasDragCanvasHintEl = wrap;
+		wrap.createDiv({ cls: 'csn-canvas-drag-hint-title', text: t('LIST_DRAG_CANVAS_HINT_TITLE') });
+		if (selectedCount > 1) {
+			wrap.createDiv({
+				cls: 'csn-canvas-drag-hint-batch',
+				text: t('LIST_DRAG_CANVAS_HINT_BATCH', { n: selectedCount })
+			});
+		}
+		const ul = wrap.createEl('ul', { cls: 'csn-canvas-drag-hint-list' });
+		ul.createEl('li', { text: t('LIST_DRAG_CANVAS_HINT_PLAIN'), attr: { 'data-csn-drag-mode': 'plain' } });
+		ul.createEl('li', {
+			text: t('LIST_DRAG_CANVAS_HINT_CTRL_OR_CMD'),
+			attr: { 'data-csn-drag-mode': 'fileRef' }
+		});
+		ul.createEl('li', {
+			text: t('LIST_DRAG_CANVAS_HINT_SHIFT'),
+			attr: { 'data-csn-drag-mode': 'deleteOriginal' }
+		});
+		wrap.createDiv({ cls: 'csn-canvas-drag-hint-note', text: t('LIST_DRAG_CANVAS_HINT_NOTE_LINK') });
+		if (evt) {
+			this.updateCanvasDragBehaviorHintPos(evt.clientX, evt.clientY);
+			this.updateCanvasDragBehaviorHintState(evt.ctrlKey || evt.metaKey, evt.shiftKey);
+		} else {
+			this.updateCanvasDragBehaviorHintState(false, false);
+		}
+	}
+
+	private beginCanvasDropSessionForFiles(items: Array<{ file: TFile; color: StickyColorId }>): void {
+		const CANVAS_COLOR_BY_STICKY: Record<StickyColorId, string | null> = {
+			default: null,
+			yellow: '#f5e6a3',
+			pink: '#f5c2d6',
+			mint: '#a8e6cf',
+			blue: '#a8d4f0',
+			lavender: '#d4c4f5',
+			gray: '#d8d8d8'
+		};
+		type CanvasViewLike = {
+			containerEl?: HTMLElement;
+			file?: TFile;
+			canvas?: {
+				posFromEvt: (evt: DragEvent) => unknown;
+				createTextNode?: (arg: {
+					text: string;
+					pos: unknown;
+					save: boolean;
+					size?: { width: number; height: number };
+					focus?: boolean;
+				}) => {
+					color?: string;
+					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
+				};
+				createFileNode: (arg: {
+					file: TFile;
+					pos: unknown;
+					save: boolean;
+					size?: { width: number; height: number };
+					focus?: boolean;
+				}) => {
+					color?: string;
+					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
+				};
+				requestSave?: () => Promise<void>;
+				requestFrame?: () => Promise<void>;
+				selection?: Set<unknown>;
+				zoomToSelection?: () => void;
+			};
+		};
+		const maybeApplyCanvasNodeColor = (
+			node: { color?: string } | null | undefined,
+			stickyColor: StickyColorId
+		): void => {
+			const canvasColor = this.plugin.settings.canvasLinkMatchColor
+				? CANVAS_COLOR_BY_STICKY[stickyColor]
+				: null;
+			if (!node || !canvasColor) return;
+			node.color = canvasColor;
+		};
+		const autoFitHeightForNodes = async (
+			v: CanvasViewLike,
+			nodes: Array<{ onResizeDblclick?: (e: MouseEvent, pos: 'top' | 'bottom' | 'left' | 'right') => void }>
+		): Promise<void> => {
+			if (!this.plugin.settings.canvasLinkAutoFitHeight) return;
+			if (nodes.length > 1) return;
+			const fitTargets = nodes.filter(n => typeof n.onResizeDblclick === 'function');
+			if (fitTargets.length === 0) return;
+			for (let fr = 0; fr < 2; fr++) {
+				await new Promise<void>(r => requestAnimationFrame(() => r()));
+			}
+			for (const n of fitTargets) {
+				n.onResizeDblclick?.(new MouseEvent('dblclick'), 'bottom');
+				await v.canvas?.requestFrame?.();
+			}
+			await v.canvas?.requestSave?.();
+		};
+		const offsetPos = (pos: unknown, dx: number, dy: number): unknown => {
+			if (!pos || typeof pos !== 'object') return pos;
+			const anyPos = pos as { x?: unknown; y?: unknown };
+			if (typeof anyPos.x === 'number' && typeof anyPos.y === 'number') {
+				return { x: anyPos.x + dx, y: anyPos.y + dy };
+			}
+			return pos;
+		};
+		const getCanvasViewFromDropEvent = (evt: DragEvent): CanvasViewLike | null => {
+			const target = evt.target;
+			if (!(target instanceof Node)) return null;
+			for (const leaf of this.app.workspace.getLeavesOfType('canvas')) {
+				const v = leaf.view as CanvasViewLike;
+				if (v.containerEl instanceof HTMLElement && v.containerEl.contains(target)) return v;
+			}
+			return null;
+		};
+		const cleanup = (): void => {
+			window.removeEventListener('drop', onDropCapture, true);
+			window.removeEventListener('dragend', onDragEndCapture, true);
+			window.removeEventListener('dragover', onDragOverCapture, true);
+		};
+		const onDragOverCapture = (evt: DragEvent): void => {
+			if (!this.plugin.settings.canvasLinkShowDragHint) return;
+			this.updateCanvasDragBehaviorHintPos(evt.clientX, evt.clientY);
+			this.updateCanvasDragBehaviorHintState(evt.ctrlKey || evt.metaKey, evt.shiftKey);
+		};
+		const onDropCapture = (evt: DragEvent): void => {
+			const v = getCanvasViewFromDropEvent(evt);
+			if (!v?.canvas) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			const pos = v.canvas.posFromEvt(evt);
+			const size = {
+				width: this.plugin.settings.canvasLinkNodeWidth,
+				height: this.plugin.settings.canvasLinkNodeHeight
+			};
+
+			void (async () => {
+				const ctrlOrCmd = evt.ctrlKey || evt.metaKey;
+				const isDeleteOriginal = evt.shiftKey && !ctrlOrCmd;
+				const isFileRefOnly = ctrlOrCmd && !evt.shiftKey;
+
+				const createdNodes: Array<{
+					onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void;
+				}> = [];
+				const gap = Math.max(0, Math.min(500, Math.round(this.plugin.settings.canvasLinkBatchGridGap)));
+				const maxPerRow = Math.max(1, Math.min(50, Math.round(this.plugin.settings.canvasLinkBatchMaxPerRow)));
+				const cellW = Math.max(1, Math.round(size.width)) + gap;
+				const cellH = Math.max(1, Math.round(size.height)) + gap;
+				for (let i = 0; i < items.length; i++) {
+					const it = items[i]!;
+					const col = i % maxPerRow;
+					const row = Math.floor(i / maxPerRow);
+					const p2 = offsetPos(pos, col * cellW, row * cellH);
+					let node:
+						| {
+								color?: string;
+								onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void;
+						  }
+						| undefined;
+
+					if (isFileRefOnly) {
+						node = v.canvas?.createFileNode({
+							file: it.file,
+							pos: p2,
+							size,
+							focus: false,
+							save: true
+						});
+					} else {
+						const text = await this.app.vault.cachedRead(it.file);
+						node = v.canvas?.createTextNode?.({
+							text,
+							pos: p2,
+							size,
+							focus: false,
+							save: true
+						});
+					}
+
+					maybeApplyCanvasNodeColor(node, it.color);
+					if (node) createdNodes.push(node);
+				}
+
+				try {
+					v.canvas?.selection?.clear();
+					for (const n of createdNodes) {
+						v.canvas?.selection?.add(n);
+					}
+					await v.canvas?.requestFrame?.();
+				} catch {
+					// ignore
+				}
+
+				void v.canvas?.requestSave?.();
+				await autoFitHeightForNodes(v, createdNodes);
+
+				if (
+					this.plugin.settings.canvasLinkZoomToSelection &&
+					createdNodes.length > 0 &&
+					v.canvas?.zoomToSelection
+				) {
+					for (let fr = 0; fr < 3; fr++) {
+						await new Promise<void>(r => requestAnimationFrame(() => r()));
+					}
+					try {
+						await v.canvas.requestFrame?.();
+						v.canvas.zoomToSelection();
+						await v.canvas.requestFrame?.();
+					} catch {
+						// ignore
+					}
+				}
+
+				if (isDeleteOriginal) {
+					for (const it of items) {
+						await this.app.fileManager.trashFile(it.file);
+					}
+				}
+			})()
+				.catch(() => undefined)
+				.finally(() => {
+					cleanup();
+				});
+			return;
+			cleanup();
+		};
+		const onDragEndCapture = (): void => {
+			cleanup();
+		};
+		window.addEventListener('dragover', onDragOverCapture, true);
+		window.addEventListener('drop', onDropCapture, true);
+		window.addEventListener('dragend', onDragEndCapture, true);
+	}
+
+	private getRenderedListCardPathsInOrder(): string[] {
+		const container = this.gridEl;
+		if (!container) return [];
+		const out: string[] = [];
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (p) out.push(normalizePath(p));
+		}
+		return out;
+	}
+
+	private syncListCardSelectionChrome(): void {
+		const container = this.gridEl;
+		if (!container) return;
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (!p) continue;
+			el.toggleClass('is-selected', this.selectedListNotePaths.has(normalizePath(p)));
+		}
+	}
+
+	private isListCardHeadMenuHitExcluded(hit: Element): boolean {
+		return !!(
+			hit.closest('.csn-list-card-pin-btn') ||
+			hit.closest('.csn-list-card-menu-btn') ||
+			hit.closest('.csn-list-card-archive-wrap') ||
+			hit.closest('.csn-list-card-drag-handle')
+		);
+	}
+
+	private getCardElForPath(path: string): HTMLElement | null {
+		const norm = normalizePath(path);
+		const el = this.gridEl?.querySelector(`.csn-list-card[data-csn-note-path="${CSS.escape(norm)}"]`);
+		return el instanceof HTMLElement ? el : null;
+	}
+
+	private titleWithBatchCount(base: string, n: number): string {
+		return n > 1 ? `${base} (${n})` : base;
+	}
+
+	private resolveMenuTargetFiles(anchorPath: string): TFile[] {
+		const norm = normalizePath(anchorPath);
+		const paths =
+			this.selectedListNotePaths.size > 0 && this.selectedListNotePaths.has(norm)
+				? [...this.selectedListNotePaths]
+				: [norm];
+		const files: TFile[] = [];
+		for (const p of paths) {
+			const abs = this.app.vault.getAbstractFileByPath(p);
+			if (abs instanceof TFile) files.push(abs);
+		}
+		return files;
+	}
+
+	private getListCardColorFromDom(file: TFile): StickyColorId | null {
+		const card = this.getCardElForPath(file.path);
+		if (!card) return null;
+		const raw = card.dataset.csnListColor;
+		return raw && raw.length > 0 ? (raw as StickyColorId) : null;
+	}
+
+	private getListCardArchivedFromDom(file: TFile): boolean | null {
+		const card = this.getCardElForPath(file.path);
+		if (!card) return null;
+		return card.dataset.csnArchived === 'true';
+	}
+
+	private ensureListSelectionForContextMenu(anchorPath: string): void {
+		const norm = normalizePath(anchorPath);
+		if (!this.selectedListNotePaths.has(norm)) {
+			this.selectedListNotePaths.clear();
+			this.selectedListNotePaths.add(norm);
+			this.lastSelectedListNotePath = norm;
+			this.syncListCardSelectionChrome();
+		}
+	}
+
+	private async trashMenuTargetFiles(files: TFile[]): Promise<void> {
+		for (const f of files) {
+			this.selectedListNotePaths.delete(normalizePath(f.path));
+			await this.plugin.stickies.trashStickyNoteFile(f);
+		}
+	}
+
+	private registerGridDelegatedEvents(): void {
+		if (this.gridDelegatedEvents || !this.gridEl) return;
+		this.gridDelegatedEvents = true;
+
+		this.registerDomEvent(this.gridEl, 'dragstart', (evt: DragEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const dragHandleEl = hit.closest('.csn-list-card-drag-handle');
+			if (!dragHandleEl || !this.gridEl?.contains(dragHandleEl)) return;
+			const card = dragHandleEl.closest('.csn-list-card');
+			if (!card) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const normPath = normalizePath(path);
+			const selected =
+				this.selectedListNotePaths.size > 0 && this.selectedListNotePaths.has(normPath)
+					? [...this.selectedListNotePaths]
+					: [normPath];
+
+			const items: Array<{ file: TFile; color: StickyColorId }> = [];
+			for (const p of selected) {
+				const abs = this.app.vault.getAbstractFileByPath(p);
+				if (!(abs instanceof TFile)) continue;
+				const el = this.gridEl?.querySelector(`.csn-list-card[data-csn-note-path="${CSS.escape(p)}"]`);
+				const rawColor =
+					el instanceof HTMLElement ? (el.dataset.csnListColor as StickyColorId | undefined) : undefined;
+				items.push({ file: abs, color: rawColor ?? 'default' });
+			}
+			if (items.length === 0) return;
+			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
+			const md = this.app.fileManager.generateMarkdownLink(items[0]!.file, sourcePath);
+			const dt = evt.dataTransfer;
+			if (!dt) return;
+			dt.setData('text/plain', md);
+			dt.effectAllowed = 'copy';
+			if (this.plugin.settings.canvasLinkShowDragHint) {
+				this.showCanvasDragBehaviorHint(items.length, evt);
+			}
+			this.beginCanvasDropSessionForFiles(items);
+		});
+
+		this.registerDomEvent(this.gridEl, 'dragend', () => {
+			this.hideCanvasDragBehaviorHint();
+		});
+
+		this.registerDomEvent(this.gridEl, 'click', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const pinBtn = hit.closest('.csn-list-card-pin-btn');
+			if (pinBtn && this.gridEl?.contains(pinBtn)) {
+				const card = pinBtn.closest('.csn-list-card');
+				if (!card) return;
+				const path = (card as HTMLElement).dataset.csnNotePath;
+				if (!path) return;
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.togglePinForPath(path);
+				return;
+			}
+			const btn = hit.closest('.csn-list-card-menu-btn');
+			if (!btn || !this.gridEl?.contains(btn)) return;
+			const card = btn.closest('.csn-list-card');
+			if (!card) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			void this.showCardMenu(evt, path, card as HTMLElement);
+		});
+
+		this.registerDomEvent(this.gridEl, 'contextmenu', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			if (this.isListCardHeadMenuHitExcluded(hit)) return;
+			const head = hit.closest('.csn-list-card-head');
+			if (!head || !this.gridEl?.contains(head)) return;
+			const card = head.closest('.csn-list-card');
+			if (!card) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.ensureListSelectionForContextMenu(path);
+			void this.showCardMenu(evt, path, card as HTMLElement);
+		});
+
+		this.registerDomEvent(this.gridEl, 'mousedown', (evt: MouseEvent) => {
+			if (evt.button !== 0) return;
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			if (
+				hit.closest('.csn-list-card-pin-btn') ||
+				hit.closest('.csn-list-card-menu-btn') ||
+				hit.closest('.csn-list-card-archive-wrap') ||
+				hit.closest('.csn-list-card-drag-handle')
+			) {
+				return;
+			}
+			const card = hit.closest('.csn-list-card');
+			if (!card || !this.gridEl?.contains(card)) {
+				if (this.selectedListNotePaths.size > 0) {
+					this.selectedListNotePaths.clear();
+					this.lastSelectedListNotePath = null;
+					this.syncListCardSelectionChrome();
+				}
+				return;
+			}
+			const rawPath = (card as HTMLElement).dataset.csnNotePath;
+			if (!rawPath) return;
+			const path = normalizePath(rawPath);
+
+			const ctrl = evt.ctrlKey || evt.metaKey;
+			const shift = evt.shiftKey;
+			const order = this.getRenderedListCardPathsInOrder();
+
+			if (shift && this.lastSelectedListNotePath) {
+				const a = order.indexOf(this.lastSelectedListNotePath);
+				const b = order.indexOf(path);
+				if (a !== -1 && b !== -1) {
+					const [s, e] = a <= b ? [a, b] : [b, a];
+					this.selectedListNotePaths.clear();
+					for (let i = s; i <= e; i++) this.selectedListNotePaths.add(order[i]!);
+				} else {
+					this.selectedListNotePaths.clear();
+					this.selectedListNotePaths.add(path);
+				}
+			} else if (ctrl) {
+				if (this.selectedListNotePaths.has(path)) this.selectedListNotePaths.delete(path);
+				else this.selectedListNotePaths.add(path);
+				this.lastSelectedListNotePath = path;
+			} else {
+				this.selectedListNotePaths.clear();
+				this.selectedListNotePaths.add(path);
+				this.lastSelectedListNotePath = path;
+			}
+			this.syncListCardSelectionChrome();
+		});
+
+		this.registerDomEvent(this.gridEl, 'change', (evt: Event) => {
+			const t = evt.target;
+			if (!(t instanceof HTMLInputElement) || !t.classList.contains('csn-list-card-archive-checkbox')) return;
+			const card = t.closest('.csn-list-card');
+			if (!card || !this.gridEl?.contains(card)) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			const wantArchived = t.checked;
+			void this.plugin.stickies.setStickyArchivedForFile(f, wantArchived).then(() => {
+				if (this.listShouldRerenderForArchiveState(wantArchived)) {
+					void this.renderDash();
+				} else {
+					this.syncArchiveChromeOnCard(card as HTMLElement, wantArchived);
+				}
+			});
+		});
+
+		this.registerDomEvent(this.gridEl, 'dblclick', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			if (
+				hit.closest('.csn-list-card-pin-btn') ||
+				hit.closest('.csn-list-card-menu-btn') ||
+				hit.closest('.csn-list-card-archive-wrap')
+			) {
+				return;
+			}
+			const card = hit.closest('.csn-list-card');
+			if (!card || !this.gridEl?.contains(card)) return;
+			const path = (card as HTMLElement).dataset.csnNotePath;
+			if (!path) return;
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (!(f instanceof TFile)) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			void this.plugin.openStickyForFile(f);
+		});
+	}
+
+	private pathUnderStickyFolder(path: string): boolean {
+		const root = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+		const p = normalizePath(path);
+		return p === root || p.startsWith(`${root}/`);
+	}
+
+	private registerVaultRefresh(): void {
+		this.debouncedStructureRefresh = debounce(
+			() => {
+				this.listPageIndex = 0;
+				void this.renderDash();
+			},
+			80,
+			false
+		);
+		this.debouncedContentRefresh = debounce(() => {
+			void this.renderDash();
+		}, 280, false);
+		this.register(() => this.cancelPendingRefresh());
+		this.registerEvent(
+			this.app.vault.on('create', (f: TAbstractFile) => {
+				if (this.pathUnderStickyFolder(f.path)) this.debouncedStructureRefresh?.();
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on('delete', (f: TAbstractFile) => {
+				if (this.pathUnderStickyFolder(f.path)) this.debouncedStructureRefresh?.();
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on('rename', (f: TAbstractFile, oldPath: string) => {
+				if (this.pathUnderStickyFolder(f.path) || this.pathUnderStickyFolder(oldPath)) {
+					this.debouncedStructureRefresh?.();
+				}
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on('modify', (f: TAbstractFile) => {
+				if (f instanceof TFile && f.extension === 'md' && this.pathUnderStickyFolder(f.path)) {
+					if (this.plugin.muteStickyListModifyPaths.has(f.path)) return;
+					this.debouncedContentRefresh?.();
+				}
+			})
+		);
+		this.registerEvent(
+			this.app.metadataCache.on('changed', file => {
+				if (!(file instanceof TFile) || file.extension !== 'md') return;
+				if (!this.pathUnderStickyFolder(file.path)) return;
+				if (this.plugin.muteStickyListModifyPaths.has(file.path)) return;
+				this.debouncedContentRefresh?.();
+			})
+		);
+	}
+
+	async onOpen(): Promise<void> {
+		const root = this.contentEl;
+		root.empty();
+		root.addClass('csn-dash');
+
+		const calendar = root.createDiv({ cls: 'csn-dash-calendar' });
+		this.calendarEl = calendar;
+
+		const composerWrap = root.createDiv({ cls: 'csn-dash-composer' });
+		this.composerEl = composerWrap.createEl('textarea', {
+			cls: 'csn-dash-composer-input',
+			attr: {
+				placeholder: t('DASH_COMPOSER_PLACEHOLDER'),
+				spellcheck: 'false',
+				rows: '5',
+				'aria-label': t('DASH_COMPOSER_PLACEHOLDER')
+			}
+		});
+		const doneBtn = composerWrap.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-composer-done',
+			text: t('DASH_COMPOSER_DONE')
+		});
+		this.registerDomEvent(doneBtn, 'click', () => {
+			void this.commitComposer();
+		});
+		this.registerDomEvent(this.composerEl, 'keydown', (evt: KeyboardEvent) => {
+			if ((evt.ctrlKey || evt.metaKey) && evt.key === 'Enter') {
+				evt.preventDefault();
+				void this.commitComposer();
+			}
+		});
+
+		const left = root.createDiv({ cls: 'csn-dash-left' });
+		left.createDiv({ cls: 'csn-dash-ws-title', text: t('DASH_WS_TREE_TITLE') });
+		this.treeEl = left.createDiv({ cls: 'csn-dash-ws-tree' });
+
+		const main = root.createDiv({ cls: 'csn-dash-main' });
+
+		const filterBar = main.createDiv({ cls: 'csn-dash-filter-bar' });
+		const filters = filterBar.createDiv({ cls: 'csn-dash-filters' });
+
+		const attrRow = filters.createDiv({ cls: 'csn-dash-attr' });
+		attrRow.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_ATTR_LABEL') });
+		const archiveModes: {
+			mode: NoteListArchiveFilter;
+			key: 'ARCHIVE_FILTER_ALL' | 'ARCHIVE_FILTER_ARCHIVED' | 'ARCHIVE_FILTER_UNARCHIVED';
+		}[] = [
+			{ mode: 'all', key: 'ARCHIVE_FILTER_ALL' },
+			{ mode: 'archived', key: 'ARCHIVE_FILTER_ARCHIVED' },
+			{ mode: 'unarchived', key: 'ARCHIVE_FILTER_UNARCHIVED' }
+		];
+		archiveModes.forEach((spec, i) => {
+			if (i > 0) attrRow.createSpan({ cls: 'csn-dash-attr-sep', text: '|' });
+			const btn = attrRow.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-attr-btn',
+				text: t(spec.key)
+			});
+			this.archiveBtns.set(spec.mode, btn);
+			this.registerDomEvent(btn, 'click', () => {
+				this.archiveFilter = spec.mode;
+				this.listPageIndex = 0;
+				this.syncArchiveButtons();
+				void this.renderDash();
+			});
+		});
+		const colorRow = filters.createDiv({ cls: 'csn-dash-colors' });
+		colorRow.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_COLOR_LABEL') });
+		const strip = colorRow.createDiv({ cls: 'csn-list-color-filter-btns' });
+		for (const c of SHEET_COLOR_ORDER) {
+			const btn = strip.createEl('button', {
+				type: 'button',
+				cls: 'csn-list-color-filter-btn csn-list-color-filter-swatch',
+				attr: {
+					'data-csn-list-color': c.id,
+					'aria-label': t('LIST_COLOR_SWATCH_FILTER_HINT', { label: t(c.labelKey) })
+				}
+			});
+			this.colorBtns.set(c.id, btn);
+			this.registerDomEvent(btn, 'click', () => {
+				const i = this.colorFilters.indexOf(c.id);
+				if (i >= 0) this.colorFilters.splice(i, 1);
+				else this.colorFilters.push(c.id);
+				this.listPageIndex = 0;
+				this.syncColorButtons();
+				void this.renderDash();
+			});
+		}
+
+		const searchWrap = filters.createDiv({ cls: 'csn-dash-search' });
+		searchWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_SEARCH_LABEL') });
+		const searchInner = searchWrap.createDiv({ cls: 'csn-dash-search-inner' });
+		this.searchInnerEl = searchInner;
+		const searchIcon = searchInner.createSpan({ cls: 'csn-dash-search-icon', attr: { 'aria-hidden': 'true' } });
+		setIcon(searchIcon, 'search');
+		this.searchInput = searchInner.createEl('input', {
+			type: 'text',
+			cls: 'csn-dash-search-input',
+			attr: {
+				placeholder: t('DASH_SEARCH_PLACEHOLDER'),
+				spellcheck: 'false',
+				'aria-label': t('SEARCH_ARIA'),
+				role: 'searchbox',
+				autocomplete: 'off'
+			}
+		});
+		this.searchClearBtn = searchInner.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-search-clear csn-dash-search-clear--hidden',
+			attr: {
+				'aria-label': t('CLEAR_SEARCH_ARIA'),
+				'aria-hidden': 'true',
+				tabindex: '-1'
+			}
+		});
+		setIcon(this.searchClearBtn, 'x');
+		const debouncedSearch = debounce(
+			() => {
+				this.listPageIndex = 0;
+				void this.renderDash();
+			},
+			120,
+			true
+		);
+		this.registerDomEvent(this.searchInput, 'input', () => {
+			this.syncSearchClearVisibility();
+			debouncedSearch();
+		});
+		this.registerDomEvent(this.searchClearBtn, 'click', () => {
+			if (!this.searchInput) return;
+			this.searchInput.value = '';
+			this.syncSearchClearVisibility();
+			this.listPageIndex = 0;
+			void this.renderDash();
+			this.searchInput.focus();
+		});
+
+		const toolbar = filterBar.createDiv({ cls: 'csn-dash-toolbar' });
+		this.sortDropdownBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn',
+			attr: { 'aria-haspopup': 'menu' }
+		});
+		this.registerDomEvent(this.sortDropdownBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openSortDropdownMenu(evt);
+		});
+
+		this.listBulkEditBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-list-bulk-edit-btn',
+			attr: {
+				'aria-label': t('LIST_EDIT_CARDS_TOGGLE_ARIA'),
+				'aria-pressed': 'false'
+			}
+		});
+		setIcon(this.listBulkEditBtn, 'pencil');
+		this.registerDomEvent(this.listBulkEditBtn, 'click', () => {
+			this.listArchiveCheckboxEditMode = !this.listArchiveCheckboxEditMode;
+			this.syncListArchiveCheckboxEditUI();
+		});
+
+		this.listCardOverflowClipBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-list-card-overflow-clip-btn',
+			attr: {
+				'aria-label': t('SETTINGS_LIST_CARD_OVERFLOW_NAME'),
+				'aria-pressed': this.plugin.settings.noteListCardOverflowHidden ? 'true' : 'false'
+			}
+		});
+		setIcon(this.listCardOverflowClipBtn, 'crop');
+		this.registerDomEvent(this.listCardOverflowClipBtn, 'click', async () => {
+			this.plugin.settings.noteListCardOverflowHidden = !this.plugin.settings.noteListCardOverflowHidden;
+			await this.plugin.saveSettings();
+			this.plugin.syncNoteListGridMetricsToOpenViews();
+		});
+
+		this.gridEl = main.createDiv({ cls: 'csn-dash-grid' });
+		this.registerGridDelegatedEvents();
+		this.paginationEl = main.createDiv({ cls: 'csn-list-pagination csn-dash-pagination' });
+		this.paginationRowEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-row' });
+		this.paginationPrevBtn = this.paginationRowEl.createEl('button', {
+			type: 'button',
+			text: t('PREV_PAGE'),
+			cls: 'csn-list-pagination-btn csn-list-pagination-btn--nav'
+		});
+		this.paginationPagesEl = this.paginationRowEl.createDiv({ cls: 'csn-list-pagination-pages' });
+		this.paginationNextBtn = this.paginationRowEl.createEl('button', {
+			type: 'button',
+			text: t('NEXT_PAGE'),
+			cls: 'csn-list-pagination-btn csn-list-pagination-btn--nav'
+		});
+		this.paginationMetaEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-meta' });
+		this.registerDomEvent(this.paginationPrevBtn, 'click', () => {
+			if (this.listPageIndex <= 0) return;
+			this.listPageIndex -= 1;
+			void this.renderDash();
+		});
+		this.registerDomEvent(this.paginationNextBtn, 'click', () => {
+			this.listPageIndex += 1;
+			void this.renderDash();
+		});
+		this.registerDomEvent(this.paginationEl, 'click', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const btn = hit.closest('button[data-csn-list-page]');
+			if (!btn || !this.paginationEl?.contains(btn)) return;
+			const raw = (btn as HTMLButtonElement).dataset.csnListPage;
+			const p0 = raw !== undefined ? parseInt(raw, 10) : NaN;
+			if (!Number.isFinite(p0) || p0 < 0) return;
+			evt.preventDefault();
+			this.listPageIndex = p0;
+			void this.renderDash();
+		});
+
+		this.registerVaultRefresh();
+		this.syncListGridMetricsFromSettings();
+		this.syncArchiveButtons();
+		this.syncColorButtons();
+		this.syncSortToolbarBtn();
+		this.syncListArchiveCheckboxEditUI();
+		this.syncCardOverflowClipToolbarBtn();
+		this.syncSearchClearVisibility();
+		this.renderCalendar();
+		this.renderWorkspaceTree();
+		void this.renderDash();
+	}
+
+	private syncSearchClearVisibility(): void {
+		const has = (this.searchInput?.value ?? '').length > 0;
+		this.searchInnerEl?.toggleClass('csn-dash-search-inner--has-clear', has);
+		this.searchClearBtn?.toggleClass('csn-dash-search-clear--hidden', !has);
+		this.searchClearBtn?.setAttr('aria-hidden', has ? 'false' : 'true');
+		this.searchClearBtn?.setAttr('tabindex', has ? '0' : '-1');
+	}
+
+	private syncArchiveButtons(): void {
+		for (const [mode, btn] of this.archiveBtns) {
+			btn.toggleClass('is-active', mode === this.archiveFilter);
+		}
+	}
+
+	private syncColorButtons(): void {
+		const sel = new Set(this.colorFilters);
+		for (const [id, btn] of this.colorBtns) {
+			btn.toggleClass('is-active', sel.has(id));
+		}
+	}
+
+	private setDateFilter(next: StickyDateFilter | null): void {
+		if (stickyDateFiltersEqual(this.selectedDateFilter, next)) {
+			this.selectedDateFilter = null;
+		} else {
+			this.selectedDateFilter = next;
+		}
+		this.listPageIndex = 0;
+		this.renderCalendar();
+		void this.renderDash();
+	}
+
+	private clearDateFilter(): void {
+		if (!this.selectedDateFilter) return;
+		this.selectedDateFilter = null;
+		this.listPageIndex = 0;
+		this.renderCalendar();
+		void this.renderDash();
+	}
+
+	private renderCalendar(): void {
+		const host = this.calendarEl;
+		if (!host) return;
+		host.empty();
+
+		const head = host.createDiv({ cls: 'csn-dash-cal-head' });
+		const prev = head.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-cal-nav',
+			attr: { 'aria-label': t('DASH_CALENDAR_PREV') }
+		});
+		setIcon(prev, 'chevron-left');
+
+		const pickers = head.createDiv({ cls: 'csn-dash-cal-pickers' });
+		const yearSel = pickers.createEl('select', {
+			cls: 'csn-dash-cal-select csn-dash-cal-year',
+			attr: { 'aria-label': t('DASH_CALENDAR_YEAR_ARIA') }
+		});
+		const nowY = new Date().getFullYear();
+		const yearMin = Math.min(this.calYear, nowY) - 8;
+		const yearMax = Math.max(this.calYear, nowY) + 4;
+		for (let y = yearMin; y <= yearMax; y++) {
+			yearSel.createEl('option', {
+				text: String(y),
+				attr: { value: String(y), ...(y === this.calYear ? { selected: 'selected' } : {}) }
+			});
+		}
+		const monthSel = pickers.createEl('select', {
+			cls: 'csn-dash-cal-select csn-dash-cal-month',
+			attr: { 'aria-label': t('DASH_CALENDAR_MONTH_ARIA') }
+		});
+		const monthLabels = monthShortLabels();
+		for (let m = 0; m < 12; m++) {
+			monthSel.createEl('option', {
+				text: monthLabels[m] ?? String(m + 1),
+				attr: { value: String(m), ...(m === this.calMonth0 ? { selected: 'selected' } : {}) }
+			});
+		}
+
+		const yearFilterBtn = pickers.createEl('button', {
+			type: 'button',
+			cls: `csn-dash-cal-scope-btn csn-dash-cal-scope-year${
+				this.selectedDateFilter?.kind === 'year' && this.selectedDateFilter.year === this.calYear
+					? ' is-active'
+					: ''
+			}`,
+			text: t('DASH_CALENDAR_SCOPE_YEAR'),
+			attr: { 'aria-label': t('DASH_CALENDAR_SELECT_YEAR', { year: this.calYear }) }
+		});
+		const monthFilterBtn = pickers.createEl('button', {
+			type: 'button',
+			cls: `csn-dash-cal-scope-btn csn-dash-cal-scope-month${
+				this.selectedDateFilter?.kind === 'month' &&
+				this.selectedDateFilter.year === this.calYear &&
+				this.selectedDateFilter.month0 === this.calMonth0
+					? ' is-active'
+					: ''
+			}`,
+			text: t('DASH_CALENDAR_SCOPE_MONTH'),
+			attr: {
+				'aria-label': t('DASH_CALENDAR_SELECT_MONTH', {
+					year: this.calYear,
+					month: String(this.calMonth0 + 1).padStart(2, '0')
+				})
+			}
+		});
+
+		const next = head.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-cal-nav',
+			attr: { 'aria-label': t('DASH_CALENDAR_NEXT') }
+		});
+		setIcon(next, 'chevron-right');
+
+		this.registerDomEvent(prev, 'click', () => {
+			if (this.calMonth0 === 0) {
+				this.calMonth0 = 11;
+				this.calYear -= 1;
+			} else {
+				this.calMonth0 -= 1;
+			}
+			this.renderCalendar();
+		});
+		this.registerDomEvent(next, 'click', () => {
+			if (this.calMonth0 === 11) {
+				this.calMonth0 = 0;
+				this.calYear += 1;
+			} else {
+				this.calMonth0 += 1;
+			}
+			this.renderCalendar();
+		});
+		this.registerDomEvent(yearSel, 'change', () => {
+			const y = parseInt(yearSel.value, 10);
+			if (!Number.isFinite(y)) return;
+			this.calYear = y;
+			this.renderCalendar();
+		});
+		this.registerDomEvent(monthSel, 'change', () => {
+			const m = parseInt(monthSel.value, 10);
+			if (!Number.isFinite(m) || m < 0 || m > 11) return;
+			this.calMonth0 = m;
+			this.renderCalendar();
+		});
+		this.registerDomEvent(yearFilterBtn, 'click', () => {
+			this.setDateFilter({ kind: 'year', year: this.calYear });
+		});
+		this.registerDomEvent(monthFilterBtn, 'click', () => {
+			this.setDateFilter({ kind: 'month', year: this.calYear, month0: this.calMonth0 });
+		});
+
+		const weekHead = host.createDiv({ cls: 'csn-dash-cal-week' });
+		weekHead.createSpan({
+			cls: 'csn-dash-cal-weekday csn-dash-cal-weeknum-head',
+			text: t('DASH_CALENDAR_WEEK_HEADER')
+		});
+		for (const d of weekdayMinLabels()) {
+			weekHead.createSpan({ cls: 'csn-dash-cal-weekday', text: d });
+		}
+
+		const grid = host.createDiv({ cls: 'csn-dash-cal-grid' });
+		const todayKey = localDateKeyFromMs(Date.now());
+		const rows = buildMonthWeekRows(this.calYear, this.calMonth0);
+		for (const row of rows) {
+			const weekBtn = grid.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-cal-cell csn-dash-cal-weeknum',
+				text: String(row.week),
+				attr: {
+					'aria-label': t('DASH_CALENDAR_WEEK_ARIA', { week: row.week }),
+					'data-csn-week-year': String(row.weekYear),
+					'data-csn-week': String(row.week)
+				}
+			});
+			if (
+				this.selectedDateFilter?.kind === 'week' &&
+				this.selectedDateFilter.year === row.weekYear &&
+				this.selectedDateFilter.week === row.week
+			) {
+				weekBtn.addClass('is-selected');
+			}
+			if (
+				row.days.some(day => {
+					const key = localDateKeyFromMs(new Date(day.y, day.m0, day.d).getTime());
+					return this.noteDateKeys.has(key);
+				})
+			) {
+				weekBtn.addClass('has-notes');
+			}
+			this.registerDomEvent(weekBtn, 'click', () => {
+				this.setDateFilter({ kind: 'week', year: row.weekYear, week: row.week });
+			});
+
+			for (const day of row.days) {
+				const key = localDateKeyFromMs(new Date(day.y, day.m0, day.d).getTime());
+				const cell = grid.createEl('button', {
+					type: 'button',
+					cls: `csn-dash-cal-cell${day.inMonth ? '' : ' is-outside'}`,
+					text: String(day.d),
+					attr: { 'data-csn-date': key }
+				});
+				if (key === todayKey) cell.addClass('is-today');
+				if (
+					this.selectedDateFilter?.kind === 'day' &&
+					this.selectedDateFilter.dateKey === key
+				) {
+					cell.addClass('is-selected');
+				}
+				if (this.noteDateKeys.has(key)) cell.addClass('has-notes');
+				this.registerDomEvent(cell, 'click', () => {
+					if (!day.inMonth) {
+						this.calYear = day.y;
+						this.calMonth0 = day.m0;
+					}
+					this.setDateFilter({ kind: 'day', dateKey: key });
+				});
+			}
+		}
+
+		if (this.selectedDateFilter) {
+			const clear = host.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-cal-clear',
+				text: t('DASH_CALENDAR_CLEAR')
+			});
+			this.registerDomEvent(clear, 'click', () => this.clearDateFilter());
+		}
+		this.updateCalendarMarks();
+	}
+
+	private updateCalendarMarks(): void {
+		const host = this.calendarEl;
+		if (!host) return;
+
+		for (const el of Array.from(host.querySelectorAll('button.csn-dash-cal-cell[data-csn-date]'))) {
+			if (!(el instanceof HTMLElement)) continue;
+			const key = el.dataset.csnDate;
+			if (!key) continue;
+			el.toggleClass('has-notes', this.noteDateKeys.has(key));
+			el.toggleClass(
+				'is-selected',
+				this.selectedDateFilter?.kind === 'day' && this.selectedDateFilter.dateKey === key
+			);
+		}
+
+		const gridChildren = Array.from(host.querySelectorAll('.csn-dash-cal-grid > *'));
+		for (let i = 0; i < gridChildren.length; i++) {
+			const el = gridChildren[i];
+			if (!(el instanceof HTMLElement) || !el.classList.contains('csn-dash-cal-weeknum')) continue;
+			const wy = parseInt(el.dataset.csnWeekYear ?? '', 10);
+			const w = parseInt(el.dataset.csnWeek ?? '', 10);
+			el.toggleClass(
+				'is-selected',
+				this.selectedDateFilter?.kind === 'week' &&
+					this.selectedDateFilter.year === wy &&
+					this.selectedDateFilter.week === w
+			);
+			let has = false;
+			for (let j = 1; j <= 7; j++) {
+				const dayEl = gridChildren[i + j];
+				if (!(dayEl instanceof HTMLElement)) continue;
+				const key = dayEl.dataset.csnDate;
+				if (key && this.noteDateKeys.has(key)) has = true;
+			}
+			el.toggleClass('has-notes', has);
+		}
+
+		host.querySelector('.csn-dash-cal-scope-year')?.toggleClass(
+			'is-active',
+			this.selectedDateFilter?.kind === 'year' && this.selectedDateFilter.year === this.calYear
+		);
+		host.querySelector('.csn-dash-cal-scope-month')?.toggleClass(
+			'is-active',
+			this.selectedDateFilter?.kind === 'month' &&
+				this.selectedDateFilter.year === this.calYear &&
+				this.selectedDateFilter.month0 === this.calMonth0
+		);
+
+		const existing = host.querySelector('.csn-dash-cal-clear');
+		if (this.selectedDateFilter && !existing) {
+			const clear = host.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-cal-clear',
+				text: t('DASH_CALENDAR_CLEAR')
+			});
+			this.registerDomEvent(clear, 'click', () => this.clearDateFilter());
+		} else if (!this.selectedDateFilter && existing) {
+			existing.remove();
+		}
+	}
+
+	private workspaceSelEquals(other: DashWorkspaceSel): boolean {
+		if (this.workspaceSel.kind !== other.kind) return false;
+		if (other.kind === 'all') return true;
+		if (other.kind === 'group' && this.workspaceSel.kind === 'group') {
+			return this.workspaceSel.groupId === other.groupId;
+		}
+		if (other.kind === 'workspace' && this.workspaceSel.kind === 'workspace') {
+			return this.workspaceSel.workspaceId === other.workspaceId;
+		}
+		return false;
+	}
+
+	private setWorkspaceSel(next: DashWorkspaceSel): void {
+		if (this.workspaceSelEquals(next)) return;
+		this.workspaceSel = next;
+		this.listPageIndex = 0;
+		this.renderWorkspaceTree();
+		void this.renderDash();
+	}
+
+	private renderWorkspaceTree(): void {
+		const host = this.treeEl;
+		if (!host) return;
+		host.empty();
+		const file = this.plugin.stickies.workspaces;
+		const groups =
+			file.tabGroups.length > 0
+				? file.tabGroups
+				: [{ id: WS_TAB_GROUP_DEFAULT_ID, name: t('WS_TAB_GROUP_DEFAULT') }];
+
+		const allBtn = host.createEl('button', {
+			type: 'button',
+			cls: `csn-dash-tree-item csn-dash-tree-all${this.workspaceSel.kind === 'all' ? ' is-active' : ''}`
+		});
+		setIcon(allBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'folder');
+		allBtn.createSpan({ text: t('DASH_WS_FILTER_ALL') });
+		this.registerDomEvent(allBtn, 'click', () => this.setWorkspaceSel({ kind: 'all' }));
+
+		for (const g of groups) {
+			const groupWorkspaces = file.workspaces.filter(
+				ws => resolveWorkspaceTabGroupId(ws, groups) === g.id
+			);
+			const collapsed = this.collapsedGroupIds.has(g.id);
+			const groupRow = host.createDiv({ cls: 'csn-dash-tree-group' });
+			const groupBtn = groupRow.createEl('button', {
+				type: 'button',
+				cls: `csn-dash-tree-item csn-dash-tree-group-btn${
+					this.workspaceSel.kind === 'group' && this.workspaceSel.groupId === g.id ? ' is-active' : ''
+				}`
+			});
+			const chevron = groupBtn.createSpan({ cls: 'csn-dash-tree-chevron' });
+			setIcon(chevron, collapsed ? 'chevron-right' : 'chevron-down');
+			setIcon(groupBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'folder');
+			groupBtn.createSpan({ text: g.name });
+			this.registerDomEvent(groupBtn, 'click', (evt: MouseEvent) => {
+				const hit = evt.target;
+				if (hit instanceof Element && hit.closest('.csn-dash-tree-chevron')) {
+					if (collapsed) this.collapsedGroupIds.delete(g.id);
+					else this.collapsedGroupIds.add(g.id);
+					this.renderWorkspaceTree();
+					return;
+				}
+				this.setWorkspaceSel({ kind: 'group', groupId: g.id });
+			});
+			if (collapsed) continue;
+			for (const ws of groupWorkspaces) {
+				const wsBtn = host.createEl('button', {
+					type: 'button',
+					cls: `csn-dash-tree-item csn-dash-tree-ws${
+						this.workspaceSel.kind === 'workspace' && this.workspaceSel.workspaceId === ws.id
+							? ' is-active'
+							: ''
+					}`
+				});
+				setIcon(wsBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'layers');
+				wsBtn.createSpan({ text: ws.name });
+				this.registerDomEvent(wsBtn, 'click', () =>
+					this.setWorkspaceSel({ kind: 'workspace', workspaceId: ws.id })
+				);
+			}
+		}
+	}
+
+	private resolveWorkspacePathFilter(): Set<string> | null {
+		const file = this.plugin.stickies.workspaces;
+		const sel = this.workspaceSel;
+		if (sel.kind === 'all') return null;
+		if (sel.kind === 'workspace') {
+			const ws = file.workspaces.find(w => w.id === sel.workspaceId);
+			return ws ? this.plugin.stickies.getWorkspaceMemberPathSet(ws) : new Set();
+		}
+		const groups = file.tabGroups;
+		const union = new Set<string>();
+		for (const ws of file.workspaces) {
+			if (resolveWorkspaceTabGroupId(ws, groups) !== sel.groupId) continue;
+			for (const p of this.plugin.stickies.getWorkspaceMemberPathSet(ws)) union.add(p);
+		}
+		return union;
+	}
+
+	private selectedCreateColor(): StickyColorId {
+		if (this.colorFilters.length === 1) return this.colorFilters[0]!;
+		return this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
+	}
+
+	private async commitComposer(): Promise<void> {
+		if (this.composing) return;
+		this.composing = true;
+		try {
+			const extra = (this.composerEl?.value ?? '').trimEnd();
+			const created = await this.plugin.stickies.addStickyWindow({ color: this.selectedCreateColor() });
+			if (!created) return;
+			if (extra) {
+				this.plugin.muteStickyListModifyPaths.add(created.path);
+				try {
+					const cur = await this.app.vault.read(created);
+					await this.app.vault.modify(created, injectMarkdownAfterFrontmatter(cur, extra));
+				} finally {
+					window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(created.path), 400);
+				}
+			}
+			if (this.workspaceSel.kind === 'workspace') {
+				await this.plugin.stickies.addFilesToWorkspace(this.workspaceSel.workspaceId, [created]);
+			}
+			if (this.composerEl) this.composerEl.value = '';
+			this.listPageIndex = 0;
+			void this.renderDash();
+		} finally {
+			this.composing = false;
+		}
+	}
+
+	private async showCardMenu(evt: MouseEvent, anchorPath: string, anchorCard: HTMLElement): Promise<void> {
+		const files = this.resolveMenuTargetFiles(anchorPath);
+		if (files.length === 0) return;
+		const n = files.length;
+		const isBatch = n > 1;
+		const openPaths = this.plugin.stickies.getOpenStickyNotePaths();
+
+		const colors = files.map(f => this.getListCardColorFromDom(f));
+		const allSameColor = colors.length > 0 && colors.every(c => c === colors[0]) && colors[0] !== null;
+		const sharedColor = allSameColor ? colors[0]! : null;
+
+		const archiveStates: boolean[] = [];
+		for (const f of files) {
+			if (files.length === 1) {
+				archiveStates.push(anchorCard.dataset.csnArchived === 'true');
+			} else {
+				const fromDom = this.getListCardArchivedFromDom(f);
+				archiveStates.push(
+					fromDom !== null ? fromDom : await resolveStickyArchivedForFile(this.app, f)
+				);
+			}
+		}
+		const archivedCount = archiveStates.filter(Boolean).length;
+		const allArchived = archivedCount === n;
+		const allUnarchived = archivedCount === 0;
+		const anyFloatOpen = files.some(f => openPaths.has(f.path));
+
+		const menu = new Menu();
+		menu.addItem(item => {
+			item.setTitle(this.titleWithBatchCount(t('CHANGE_BG'), n)).setIcon('palette');
+			const sub = item.setSubmenu();
+			for (const c of SHEET_COLOR_ORDER) {
+				const selected = sharedColor !== null && c.id === sharedColor;
+				sub.addItem(si => {
+					si.setTitle(buildStickyBgSubmenuTitle(document, c.id, t(c.labelKey), selected));
+					si.setIcon(null);
+					queueMicrotask(() => {
+						si.dom?.classList.add('csn-list-bg-menu-item', `csn-list-bg-menu-item--${c.id}`);
+						if (selected) si.dom?.classList.add('csn-list-bg-menu-item--selected');
+					});
+					si.onClick(() => {
+						void (async () => {
+							for (const f of files) {
+								await this.plugin.stickies.setStickyBackgroundColorForFile(f, c.id);
+								this.getCardElForPath(f.path)?.setAttr('data-csn-list-color', c.id);
+							}
+						})();
+					});
+				});
+			}
+		});
+		menu.addItem(item => {
+			item
+				.setTitle(this.titleWithBatchCount(t('OPEN_STICKY_FLOAT'), n))
+				.setIcon('square-pen')
+				.onClick(() => {
+					void (async () => {
+						for (const f of files) await this.plugin.stickies.openStickyForFile(f);
+					})();
+				});
+		});
+		if (!isBatch) {
+			menu.addItem(item => {
+				item
+					.setTitle(t('OPEN_NOTE'))
+					.setIcon('file-text')
+					.onClick(() => {
+						void this.app.workspace.getLeaf('tab').openFile(files[0]!);
+					});
+			});
+		}
+		menu.addItem(item => {
+			item
+				.setTitle(this.titleWithBatchCount(t('CLOSE_STICKY_FLOAT'), n))
+				.setIcon('x')
+				.setDisabled(!anyFloatOpen)
+				.onClick(() => {
+					if (!anyFloatOpen) return;
+					void (async () => {
+						for (const f of files) {
+							if (this.plugin.stickies.getOpenStickyNotePaths().has(f.path)) {
+								await this.plugin.stickies.closeStickyWindowForFile(f);
+							}
+						}
+					})();
+				});
+		});
+		const activeWs = this.plugin.stickies.activeWorkspace();
+		this.appendListCardWorkspaceTransferMenus(menu, files, activeWs ?? null, n);
+		menu.addSeparator();
+
+		const applyArchive = (targets: TFile[], next: boolean) => {
+			void (async () => {
+				let needRerender = false;
+				for (const f of targets) {
+					await this.plugin.stickies.setStickyArchivedForFile(f, next);
+					if (this.listShouldRerenderForArchiveState(next)) needRerender = true;
+				}
+				if (needRerender) {
+					void this.renderDash();
+				} else {
+					for (const f of targets) {
+						const cardEl = this.getCardElForPath(f.path);
+						if (cardEl) this.syncArchiveChromeOnCard(cardEl, next);
+					}
+				}
+			})();
+		};
+
+		if (allArchived) {
+			menu.addItem(item => {
+				item
+					.setTitle(this.titleWithBatchCount(t('LIST_UNARCHIVE_CARD'), n))
+					.setIcon('archive-restore')
+					.onClick(() => applyArchive(files, false));
+			});
+		} else if (allUnarchived) {
+			menu.addItem(item => {
+				item
+					.setTitle(this.titleWithBatchCount(t('LIST_ARCHIVE_CARD'), n))
+					.setIcon('archive')
+					.onClick(() => applyArchive(files, true));
+			});
+		} else {
+			const unarchivedFiles = files.filter((_, i) => !archiveStates[i]);
+			const archivedFiles = files.filter((_, i) => archiveStates[i]);
+			menu.addItem(item => {
+				item
+					.setTitle(
+						this.titleWithBatchCount(t('LIST_BATCH_ARCHIVE_UNARCHIVED'), unarchivedFiles.length)
+					)
+					.setIcon('archive')
+					.onClick(() => applyArchive(unarchivedFiles, true));
+			});
+			menu.addItem(item => {
+				item
+					.setTitle(
+						this.titleWithBatchCount(t('LIST_BATCH_UNARCHIVE_ARCHIVED'), archivedFiles.length)
+					)
+					.setIcon('archive-restore')
+					.onClick(() => applyArchive(archivedFiles, false));
+			});
+		}
+
+		menu.addSeparator();
+		menu.addItem(item => {
+			item
+				.setTitle(this.titleWithBatchCount(t('DELETE_NOTE'), n))
+				.setIcon('trash-2')
+				.onClick(() => {
+					if (isBatch) {
+						new ListBatchDeleteConfirmModal(this.app, {
+							count: n,
+							onConfirm: () => {
+								void this.trashMenuTargetFiles(files);
+							}
+						}).open();
+					} else {
+						void this.plugin.stickies.trashStickyNoteFile(files[0]!);
+					}
+				});
+		});
+		menu.showAtMouseEvent(evt);
+	}
+
+	private appendListCardWorkspaceTransferMenus(
+		menu: Menu,
+		files: TFile[],
+		activeWs: { id: string; name: string } | null,
+		batchCount: number
+	): void {
+		const workspaces = this.plugin.stickies.workspaces.workspaces;
+		if (workspaces.length === 0) return;
+
+		menu.addItem(item => {
+			item.setTitle(this.titleWithBatchCount(t('LIST_ADD_TO_WORKSPACE'), batchCount)).setIcon('folder-plus');
+			const sub = item.setSubmenu();
+			for (const ws of workspaces) {
+				const allIn = files.every(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id));
+				sub.addItem(si => {
+					si.setTitle(ws.name)
+						.setIcon('layers')
+						.setChecked(allIn)
+						.setDisabled(allIn)
+						.onClick(() => {
+							void this.plugin.stickies.addFilesToWorkspace(ws.id, files);
+						});
+				});
+			}
+		});
+
+		const removeTargets = workspaces.filter(ws =>
+			files.some(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id))
+		);
+		if (removeTargets.length > 0) {
+			menu.addItem(item => {
+				item
+					.setTitle(this.titleWithBatchCount(t('REMOVE_FROM_WORKSPACE'), batchCount))
+					.setIcon('folder-minus');
+				const sub = item.setSubmenu();
+				for (const ws of removeTargets) {
+					const targets = files.filter(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id));
+					sub.addItem(si => {
+						si.setTitle(ws.name)
+							.setIcon('layers')
+							.onClick(() => {
+								void this.plugin.stickies.removeFilesFromWorkspace(ws.id, targets);
+							});
+					});
+				}
+			});
+		}
+
+		if (!activeWs) return;
+		const moveTargets = workspaces.filter(ws => ws.id !== activeWs.id);
+		if (moveTargets.length === 0) return;
+
+		menu.addItem(item => {
+			item.setTitle(this.titleWithBatchCount(t('LIST_MOVE_TO_WORKSPACE'), batchCount)).setIcon('folder-input');
+			const sub = item.setSubmenu();
+			for (const ws of moveTargets) {
+				sub.addItem(si => {
+					si.setTitle(ws.name).setIcon('layers').onClick(() => {
+						void this.plugin.stickies.moveFilesFromActiveWorkspaceTo(ws.id, files);
+					});
+				});
+			}
+		});
+	}
+
+	private async renderCardPreview(previewEl: HTMLElement, f: TFile): Promise<void> {
+		previewEl.empty();
+		const md = listPreviewEmbedMarkdown(f);
+		const host = this.ensureMarkdownHostForPath(f.path);
+		await MarkdownRenderer.render(this.app, md, previewEl, f.path, host);
+	}
+
+	private updateCardChrome(
+		card: HTMLElement,
+		f: TFile,
+		color: StickyColorId | null,
+		pinnedSet: ReadonlySet<string>,
+		archived: boolean
+	): void {
+		card.setAttr('data-csn-note-path', f.path);
+		if (color == null) card.removeAttribute('data-csn-list-color');
+		else card.setAttr('data-csn-list-color', color);
+		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
+		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
+		const titleEl = card.querySelector('.csn-list-card-title');
+		if (titleEl) titleEl.setText(f.basename);
+		this.syncPinButton(card, f.path, pinnedSet);
+		this.syncArchiveChromeOnCard(card, archived);
+	}
+
+	private async createCard(
+		f: TFile,
+		color: StickyColorId | null,
+		pinnedSet: ReadonlySet<string>,
+		archived: boolean
+	): Promise<HTMLElement> {
+		const cardAttr: Record<string, string> = {
+			'data-csn-note-path': f.path,
+			'data-csn-archived': archived ? 'true' : 'false',
+			title: t('DOUBLE_CLICK_OPEN_TITLE')
+		};
+		if (color != null) cardAttr['data-csn-list-color'] = color;
+		const card = this.contentEl.createDiv({
+			cls: 'csn-list-card csn-dash-card',
+			attr: cardAttr
+		});
+		card.remove();
+		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
+		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
+		const head = card.createDiv({ cls: 'csn-list-card-head' });
+		const headLeft = head.createDiv({ cls: 'csn-list-card-head-left' });
+		const archiveWrap = headLeft.createEl('label', {
+			cls: `csn-list-card-archive-wrap${archived ? ' is-archived' : ''}`,
+			attr: { 'aria-hidden': 'false' }
+		});
+		const archiveCb = archiveWrap.createEl('input', {
+			type: 'checkbox',
+			cls: 'csn-list-card-archive-checkbox',
+			attr: {
+				'aria-label': archived
+					? t('LIST_CARD_ARCHIVE_CBOX_ARIA_CHECKED')
+					: t('LIST_CARD_ARCHIVE_CBOX_ARIA_UNCHECKED')
+			}
+		});
+		archiveCb.checked = archived;
+		headLeft.createDiv(
+			{
+				cls: 'csn-list-card-drag-handle',
+				attr: {
+					draggable: 'true',
+					'aria-label': t('LIST_CARD_TITLE_DRAG_ARIA'),
+					title: t('LIST_CARD_TITLE_DRAG_TITLE')
+				}
+			},
+			(el: HTMLDivElement) => setIcon(el, 'grip-vertical')
+		);
+		headLeft.createDiv({
+			cls: 'csn-list-card-title',
+			text: f.basename,
+			attr: { title: f.basename }
+		});
+		const headRight = head.createDiv({ cls: 'csn-list-card-head-right' });
+		const isPinned = pinnedSet.has(normalizePath(f.path));
+		headRight.createEl(
+			'button',
+			{
+				type: 'button',
+				cls: `clickable-icon csn-list-card-pin-btn${isPinned ? ' is-active' : ''}`,
+				attr: {
+					'aria-label': isPinned ? t('UNPIN_ARIA') : t('PIN_ARIA'),
+					'aria-pressed': isPinned ? 'true' : 'false'
+				}
+			},
+			(btn: HTMLButtonElement) => setIcon(btn, 'pin')
+		);
+		headRight.createEl(
+			'button',
+			{
+				type: 'button',
+				cls: 'clickable-icon csn-list-card-menu-btn',
+				attr: { 'aria-label': t('MORE_ACTIONS_ARIA'), 'aria-haspopup': 'true' }
+			},
+			(btn: HTMLButtonElement) => setIcon(btn, 'more-horizontal')
+		);
+		const main = card.createDiv({ cls: 'csn-list-card-main' });
+		const previewEl = main.createDiv({
+			cls: 'csn-list-card-body csn-list-card-body--rendered csn-list-card-body--embed markdown-rendered'
+		});
+		await this.renderCardPreview(previewEl, f);
+		card.dataset.csnEmbedMtime = String(f.stat.mtime);
+		this.syncPinButton(card, f.path, pinnedSet);
+		return card;
+	}
+
+	private async maybeRefreshCardPreview(card: HTMLElement, f: TFile): Promise<void> {
+		const cur = card.dataset.csnEmbedMtime ?? '';
+		const next = String(f.stat.mtime);
+		if (cur === next) return;
+		const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
+		if (!(previewEl instanceof HTMLElement)) return;
+		await this.renderCardPreview(previewEl, f);
+		card.dataset.csnEmbedMtime = next;
+	}
+
+	private async renderCardsFull(
+		container: HTMLElement,
+		pageFiles: TFile[],
+		pinnedSet: ReadonlySet<string>
+	): Promise<void> {
+		for (const f of pageFiles) {
+			const color = await resolveStickyBgColorForFile(this.app, f);
+			const archived = await resolveStickyArchivedForFile(this.app, f);
+			const card = await this.createCard(f, color, pinnedSet, archived);
+			container.appendChild(card);
+		}
+	}
+
+	private async syncPageIncremental(
+		container: HTMLElement,
+		pageFiles: TFile[],
+		pinnedSet: ReadonlySet<string>
+	): Promise<void> {
+		const wantedPaths = new Set(pageFiles.map(x => x.path));
+		const pool = new Map<string, HTMLElement>();
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (!p) continue;
+			if (!wantedPaths.has(p)) {
+				this.disposeMarkdownHostForPath(p);
+				el.remove();
+			} else {
+				pool.set(p, el);
+				el.remove();
+			}
+		}
+		for (const f of pageFiles) {
+			let card = pool.get(f.path);
+			pool.delete(f.path);
+			const color = await resolveStickyBgColorForFile(this.app, f);
+			const archived = await resolveStickyArchivedForFile(this.app, f);
+			if (!card) {
+				card = await this.createCard(f, color, pinnedSet, archived);
+			} else {
+				this.updateCardChrome(card, f, color, pinnedSet, archived);
+				await this.maybeRefreshCardPreview(card, f);
+			}
+			container.appendChild(card);
+		}
+		for (const [p, el] of pool) {
+			this.disposeMarkdownHostForPath(p);
+			el.remove();
+		}
+	}
+
+	private async syncPageContentOnly(
+		container: HTMLElement,
+		pageFiles: TFile[],
+		pinnedSet: ReadonlySet<string>
+	): Promise<void> {
+		const byPath = new Map<string, HTMLElement>();
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (p) byPath.set(p, el);
+		}
+		if (byPath.size !== pageFiles.length) {
+			this.disposeAllMarkdownHosts();
+			container.empty();
+			await this.renderCardsFull(container, pageFiles, pinnedSet);
+			return;
+		}
+		for (const f of pageFiles) {
+			const card = byPath.get(f.path);
+			if (!card) {
+				this.disposeAllMarkdownHosts();
+				container.empty();
+				await this.renderCardsFull(container, pageFiles, pinnedSet);
+				return;
+			}
+			const color = await resolveStickyBgColorForFile(this.app, f);
+			const archived = await resolveStickyArchivedForFile(this.app, f);
+			this.updateCardChrome(card, f, color, pinnedSet, archived);
+			await this.maybeRefreshCardPreview(card, f);
+		}
+	}
+
+	private buildDashStructureKey(
+		workspaceSel: DashWorkspaceSel,
+		dateFilter: StickyDateFilter | null,
+		query: string,
+		colorFilters: readonly StickyColorId[],
+		archiveFilter: NoteListArchiveFilter,
+		sortMode: NoteListSort,
+		pageSize: number,
+		prioPath: string | null,
+		filtered: TFile[],
+		pinnedPaths: readonly string[]
+	): string {
+		return JSON.stringify({
+			workspaceSel,
+			dateFilter: stickyDateFilterKey(dateFilter),
+			search: query,
+			colors: [...colorFilters].sort(),
+			archive: archiveFilter,
+			sort: sortMode,
+			pageSize,
+			prio: prioPath ?? '',
+			paths: filtered.map(f => f.path),
+			pinned: [...pinnedPaths]
+		});
+	}
+
+	async renderDash(): Promise<void> {
+		const run = this.dashRenderChain.catch(() => undefined).then(() => this.renderDashImpl());
+		this.dashRenderChain = run;
+		await run;
+	}
+
+	private async renderDashImpl(): Promise<void> {
+		const container = this.gridEl;
+		if (!container || !this.paginationEl || !this.paginationMetaEl) return;
+
+		const query = (this.searchInput?.value ?? '').trim();
+
+		try {
+			const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+			const folderAbs = this.app.vault.getAbstractFileByPath(folder);
+			if (!folderAbs || !(folderAbs instanceof TFolder)) {
+				this.disposeAllMarkdownHosts();
+				this.lastDashStructureKey = '';
+				this.lastRenderedPageIndex = null;
+				container.empty();
+				container.createDiv({
+					text: t('DASH_FOLDER_MISSING', { folder }),
+					cls: 'csn-list-empty'
+				});
+				this.paginationPagesEl?.empty();
+				this.paginationMetaEl.setText('');
+				this.paginationEl.hide();
+				return;
+			}
+
+			let files = collectMarkdownUnderFolder(folderAbs);
+			const wsPaths = this.resolveWorkspacePathFilter();
+			if (wsPaths) files = files.filter(f => wsPaths.has(normalizePath(f.path)));
+
+			const keywords = query
+				.split(/\s+/)
+				.filter(Boolean)
+				.map(k => k.toLowerCase());
+			if (keywords.length > 0) {
+				files = await filterStickyFilesByKeywords(this.app, files, keywords);
+			}
+
+			files = await filterStickyFilesByColors(this.app, files, this.colorFilters);
+			files = await filterStickyFilesByArchiveFilter(this.app, files, this.archiveFilter);
+
+			this.noteDateKeys = ctimeDateKeysForFiles(files);
+			this.updateCalendarMarks();
+
+			files = filterStickyFilesByDateFilter(files, this.selectedDateFilter);
+			const pinnedNorm = this.plugin.settings.noteListPinnedPaths.map(p => normalizePath(p));
+			const pinnedSet = new Set(pinnedNorm);
+			const prio = this.plugin.listPrioritizeStickyPath;
+			const sortMode = this.plugin.settings.noteListSort;
+			files = sortStickyListFiles(files, sortMode, pinnedNorm, prio);
+
+			if (files.length === 0) {
+				this.disposeAllMarkdownHosts();
+				this.lastDashStructureKey = '';
+				this.lastRenderedPageIndex = null;
+				container.empty();
+				container.createDiv({ text: t('DASH_EMPTY'), cls: 'csn-list-empty' });
+				this.paginationPagesEl?.empty();
+				this.paginationMetaEl.setText('');
+				this.paginationEl.hide();
+				return;
+			}
+
+			const pageSize = Math.max(4, Math.min(48, Math.round(this.plugin.settings.noteListPageSize)));
+			const totalPages = Math.max(1, Math.ceil(files.length / pageSize));
+			if (this.listPageIndex >= totalPages) this.listPageIndex = totalPages - 1;
+			if (this.listPageIndex < 0) this.listPageIndex = 0;
+			const start = this.listPageIndex * pageSize;
+			const pageFiles = files.slice(start, start + pageSize);
+
+			const structureKey = this.buildDashStructureKey(
+				this.workspaceSel,
+				this.selectedDateFilter,
+				query,
+				this.colorFilters,
+				this.archiveFilter,
+				sortMode,
+				pageSize,
+				prio,
+				files,
+				pinnedNorm
+			);
+
+			const structureChanged = structureKey !== this.lastDashStructureKey;
+			const paginationOnly =
+				!structureChanged &&
+				this.lastRenderedPageIndex !== null &&
+				this.lastRenderedPageIndex !== this.listPageIndex;
+			const samePageContentTouch =
+				!structureChanged &&
+				this.lastRenderedPageIndex !== null &&
+				this.lastRenderedPageIndex === this.listPageIndex;
+
+			if (structureChanged) {
+				this.lastDashStructureKey = structureKey;
+				this.disposeAllMarkdownHosts();
+				container.empty();
+				await this.renderCardsFull(container, pageFiles, pinnedSet);
+			} else if (paginationOnly) {
+				await this.syncPageIncremental(container, pageFiles, pinnedSet);
+			} else if (samePageContentTouch) {
+				await this.syncPageContentOnly(container, pageFiles, pinnedSet);
+			} else {
+				this.disposeAllMarkdownHosts();
+				container.empty();
+				await this.renderCardsFull(container, pageFiles, pinnedSet);
+			}
+			this.syncListCardSelectionChrome();
+			this.lastRenderedPageIndex = this.listPageIndex;
+
+			this.paginationEl.show();
+			this.paginationMetaEl.setText(
+				t('LIST_PAGINATION_META', { pageCount: pageFiles.length, totalCount: files.length })
+			);
+			if (totalPages <= 1) {
+				this.paginationPagesEl?.empty();
+				this.paginationRowEl?.hide();
+			} else {
+				this.paginationRowEl?.show();
+				this.paginationPrevBtn!.disabled = this.listPageIndex <= 0;
+				this.paginationNextBtn!.disabled = this.listPageIndex >= totalPages - 1;
+				const pagesWrap = this.paginationPagesEl;
+				if (pagesWrap) {
+					pagesWrap.empty();
+					const entries = buildPaginationEntries(totalPages, this.listPageIndex);
+					const cur1 = this.listPageIndex + 1;
+					for (const ent of entries) {
+						if (ent === 'gap') {
+							pagesWrap.createSpan({
+								cls: 'csn-list-pagination-ellipsis',
+								text: '…',
+								attr: { 'aria-hidden': 'true' }
+							});
+							continue;
+						}
+						const isActive = ent === cur1;
+						const btn = pagesWrap.createEl('button', {
+							type: 'button',
+							cls: `csn-list-pagination-page${isActive ? ' is-active' : ''}`,
+							text: String(ent),
+							attr: {
+								'data-csn-list-page': String(ent - 1),
+								'aria-label': t('LIST_PAGINATION_PAGE_ARIA', { page: ent }),
+								...(isActive ? { 'aria-current': 'page' as const } : {})
+							}
+						});
+						if (isActive) btn.disabled = true;
+					}
+				}
+			}
+
+			container.scrollTop = 0;
+		} finally {
+			if (this.plugin.listPrioritizeStickyPath) {
+				this.plugin.listPrioritizeStickyPath = null;
+			}
+		}
+	}
+
+	async onClose(): Promise<void> {
+		this.hideCanvasDragBehaviorHint();
+		this.cancelPendingRefresh();
+		this.debouncedStructureRefresh = null;
+		this.debouncedContentRefresh = null;
+		this.disposeAllMarkdownHosts();
+		this.gridDelegatedEvents = false;
+		this.lastDashStructureKey = '';
+		this.lastRenderedPageIndex = null;
+		this.selectedListNotePaths.clear();
+		this.lastSelectedListNotePath = null;
+		this.calendarEl = null;
+		this.composerEl = null;
+		this.treeEl = null;
+		this.searchInput = null;
+		this.searchInnerEl = null;
+		this.searchClearBtn = null;
+		this.sortDropdownBtn = null;
+		this.listBulkEditBtn = null;
+		this.listCardOverflowClipBtn = null;
+		this.gridEl = null;
+		this.paginationEl = null;
+		this.paginationRowEl = null;
+		this.paginationPagesEl = null;
+		this.paginationPrevBtn = null;
+		this.paginationNextBtn = null;
+		this.paginationMetaEl = null;
+		this.archiveBtns.clear();
+		this.colorBtns.clear();
+		this.contentEl.empty();
+	}
+}
