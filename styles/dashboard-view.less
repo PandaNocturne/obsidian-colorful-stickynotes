@@ -419,11 +419,25 @@
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 8px 12px;
-	padding: 6px 8px;
+	gap: 6px 0;
+	padding: 4px 6px;
 	box-sizing: border-box;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
+}
+
+.csn-dash-filters > * {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	min-width: 0;
+	padding: 2px 10px;
+	box-sizing: border-box;
+}
+
+.csn-dash-filters > * + * {
+	border-left: 1px solid var(--background-modifier-border);
 }
 
 .csn-dash-search {
@@ -434,36 +448,24 @@
 	flex: 0 1 260px;
 	min-width: 160px;
 	max-width: 320px;
+	padding-left: 10px;
 }
 
 .csn-dash-tag-wrap {
 	position: relative;
-	display: flex;
-	align-items: center;
-	gap: 6px;
 	flex: 0 1 auto;
-	min-width: 0;
-	flex-wrap: wrap;
 }
 
 .csn-dash-date-filter {
 	position: relative;
-	display: flex;
-	align-items: center;
-	gap: 4px;
 	flex: 0 1 auto;
-	min-width: 0;
-	flex-wrap: wrap;
+	gap: 4px;
 }
 
 .csn-dash-ws-filter-bar {
 	position: relative;
-	display: flex;
-	align-items: center;
-	gap: 4px;
 	flex: 0 1 auto;
-	min-width: 0;
-	flex-wrap: wrap;
+	gap: 4px;
 }
 
 .csn-dash-ws-filter-chips {
@@ -1402,10 +1404,7 @@
 
 .csn-dash-attr,
 .csn-dash-colors {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
+	flex: 0 1 auto;
 }
 
 .csn-dash-filter-label {
