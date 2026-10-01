@@ -11,11 +11,11 @@ export const zhCn: Record<MessageKey, string> = {
 
 	RIBBON_OPEN_STICKY: '打开便笺',
 	RIBBON_STICKY_LIST: '便笺列表',
-	RIBBON_STICKY_DASHBOARD: '便笺标签页',
+	RIBBON_STICKY_DASHBOARD: '便笺仪表盘',
 	RIBBON_WORKSPACE: '便笺工作区',
 	CMD_TOGGLE_STICKY_WINDOWS: '打开/关闭当前便笺工作区的便笺',
 	CMD_OPEN_STICKY_LIST: '打开便笺列表',
-	CMD_OPEN_STICKY_DASHBOARD: '打开便笺标签页',
+	CMD_OPEN_STICKY_DASHBOARD: '打开便笺仪表盘',
 	CMD_NEW_STICKY: '新建便笺',
 	CMD_HIDE_CURRENT: '隐藏当前便笺',
 	CMD_TOGGLE_HIDE_OTHERS: '隐藏其他便笺/取消',
@@ -155,7 +155,7 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_BOTTOM_BAR_AUTO_HIDE_DESC: '鼠标离开底部区域时隐藏底栏（左侧文件名与便笺设置）；打开设置抽屉时也会保持显示。',
 
 	DISPLAY_STICKY_LIST: '便笺列表',
-	DISPLAY_STICKY_DASHBOARD: '便笺',
+	DISPLAY_STICKY_DASHBOARD: '多彩便笺',
 	DASH_COMPOSER_PLACEHOLDER: '输入框…',
 	DASH_COMPOSER_DONE: '完成',
 	DASH_CALENDAR_PREV: '上一月',
