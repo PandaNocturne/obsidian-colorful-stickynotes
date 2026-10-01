@@ -396,6 +396,19 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				? [...new Set(rawIds.filter((id): id is string => typeof id === 'string' && id.length > 0))]
 				: [];
 		}
+		{
+			const allowed = new Set(['calendar', 'area', 'workspace']);
+			const rawIds = this.settings.dashboardCollapsedLeftPanelIds;
+			this.settings.dashboardCollapsedLeftPanelIds = Array.isArray(rawIds)
+				? [
+						...new Set(
+							rawIds.filter(
+								(id): id is string => typeof id === 'string' && allowed.has(id)
+							)
+						)
+					]
+				: [];
+		}
 
 		const nls = this.settings.noteListSort;
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.some(s => s === nls)) {

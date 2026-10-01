@@ -64,6 +64,7 @@ import {
 	collectStickyTagCatalog,
 	displayStickyTag,
 	filterStickyFilesByTags,
+	getStickyTagsForFile,
 	normalizeStickyTag,
 	type StickyTagCount
 } from '../utils/sticky-tags-from-file';
@@ -80,6 +81,31 @@ type DashWorkspaceSel =
 	| { kind: 'all' }
 	| { kind: 'group'; groupId: string }
 	| { kind: 'workspace'; workspaceId: string };
+
+/** 仪表盘文件列表顶部「区域管理」互斥模式。 */
+type DashAreaMode =
+	| 'all'
+	| 'uncategorized'
+	| 'untagged'
+	| 'recent'
+	| 'random'
+	| 'archived';
+
+const DASH_AREA_MODE_SPECS: Array<{
+	mode: DashAreaMode;
+	titleKey: MessageKey;
+	icon: string;
+	showCount: boolean;
+}> = [
+	{ mode: 'all', titleKey: 'DASH_AREA_ALL', icon: 'inbox', showCount: true },
+	{ mode: 'uncategorized', titleKey: 'DASH_AREA_UNCATEGORIZED', icon: 'folder-x', showCount: true },
+	{ mode: 'untagged', titleKey: 'DASH_AREA_UNTAGGED', icon: 'bookmark', showCount: true },
+	{ mode: 'recent', titleKey: 'DASH_AREA_RECENT', icon: 'clock', showCount: false },
+	{ mode: 'random', titleKey: 'DASH_AREA_RANDOM', icon: 'shuffle', showCount: false },
+	{ mode: 'archived', titleKey: 'DASH_AREA_ARCHIVED', icon: 'archive', showCount: true }
+];
+
+type DashLeftPanelId = 'calendar' | 'area' | 'workspace';
 
 type DashWsTreeSort = 'manual' | 'name-asc' | 'name-desc' | 'mtime-desc';
 
@@ -209,10 +235,18 @@ function buildMonthWeekRows(
 
 export class StickyNoteDashboardView extends ItemView {
 	private calendarEl: HTMLElement | null = null;
+	private calendarPanelEl: HTMLElement | null = null;
 	private composerHostEl: HTMLElement | null = null;
 	private composerFallbackEl: HTMLTextAreaElement | null = null;
 	private composerEditor: EmbeddedMarkdownEditorHost | null = null;
 	private treeEl: HTMLElement | null = null;
+	private areaNavEl: HTMLElement | null = null;
+	private areaPanelEl: HTMLElement | null = null;
+	private wsPanelEl: HTMLElement | null = null;
+	private leftPanelTitleBtns = new Map<DashLeftPanelId, HTMLButtonElement>();
+	private collapsedLeftPanels = new Set<DashLeftPanelId>();
+	private areaBtns = new Map<DashAreaMode, HTMLButtonElement>();
+	private areaCounts: Partial<Record<DashAreaMode, number>> = {};
 	private wsTreeFilterInput: HTMLInputElement | null = null;
 	private wsTreeFilterQuery = '';
 	private wsTreeSortMode: DashWsTreeSort = 'manual';
@@ -223,7 +257,6 @@ export class StickyNoteDashboardView extends ItemView {
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
 	private searchClearBtn: HTMLButtonElement | null = null;
-	private archiveBtns = new Map<NoteListArchiveFilter, HTMLButtonElement>();
 	private colorBtns = new Map<StickyColorId, HTMLButtonElement>();
 	private gridEl: HTMLElement | null = null;
 	private paginationEl: HTMLElement | null = null;
@@ -246,7 +279,10 @@ export class StickyNoteDashboardView extends ItemView {
 	private lastDashStructureKey = '';
 	private lastRenderedPageIndex: number | null = null;
 	private listPageIndex = 0;
-	private archiveFilter: NoteListArchiveFilter = 'all';
+	private areaMode: DashAreaMode = 'all';
+	/** 随机模式锁定的路径顺序（进入模式或刷新时重建）。 */
+	private randomOrderPaths: string[] | null = null;
+	private archiveFilter: NoteListArchiveFilter = 'unarchived';
 	private colorFilters: StickyColorId[] = [];
 	/** 包含筛选的标签（规范化 `#tag`）。 */
 	private tagIncludeFilters: string[] = [];
@@ -1146,41 +1182,63 @@ export class StickyNoteDashboardView extends ItemView {
 		root.addClass('csn-dash');
 		this.applyDashPaneLayout();
 
-		/* 先左右栏，再各自上下：左=日历+工作区树；右=输入区+网格 */
+		/* 先左右栏，再各自上下：左=日历+区域管理+工作区树；右=输入区+网格 */
 		const colLeft = root.createDiv({ cls: 'csn-dash-col csn-dash-col-left' });
-		this.calendarEl = colLeft.createDiv({ cls: 'csn-dash-calendar' });
-		const left = colLeft.createDiv({ cls: 'csn-dash-left' });
-		const wsHead = left.createDiv({ cls: 'csn-dash-ws-head' });
-		wsHead.createDiv({ cls: 'csn-dash-ws-title', text: t('DASH_WS_TREE_TITLE') });
-		const wsActions = wsHead.createDiv({ cls: 'csn-dash-ws-actions' });
-		this.wsTreeSortBtn = wsActions.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-dash-ws-action-btn',
-			attr: { 'aria-label': t('DASH_WS_SORT_ARIA'), 'aria-haspopup': 'menu' }
+
+		const calMount = this.mountLeftPanel(colLeft, 'calendar', t('DASH_LEFT_PANEL_CALENDAR'));
+		this.calendarPanelEl = calMount.panel;
+		this.calendarEl = calMount.body;
+		this.calendarEl.addClass('csn-dash-calendar');
+
+		const areaMount = this.mountLeftPanel(colLeft, 'area', t('DASH_AREA_LABEL'));
+		this.areaPanelEl = areaMount.panel;
+		this.areaNavEl = areaMount.body;
+		this.areaNavEl.addClass('csn-dash-area-nav');
+		this.areaNavEl.setAttr('role', 'navigation');
+		this.areaNavEl.setAttr('aria-label', t('DASH_AREA_LABEL'));
+
+		const wsMount = this.mountLeftPanel(colLeft, 'workspace', t('DASH_WS_TREE_TITLE'), {
+			grow: true,
+			headExtra: head => {
+				const wsActions = head.createDiv({ cls: 'csn-dash-ws-actions' });
+				this.wsTreeSortBtn = wsActions.createEl('button', {
+					type: 'button',
+					cls: 'clickable-icon csn-dash-ws-action-btn',
+					attr: { 'aria-label': t('DASH_WS_SORT_ARIA'), 'aria-haspopup': 'menu' }
+				});
+				setIcon(this.wsTreeSortBtn, 'arrow-up-down');
+				this.registerDomEvent(this.wsTreeSortBtn, 'click', (evt: MouseEvent) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.openWsTreeSortMenu(evt);
+				});
+				this.wsTreeCollapseBtn = wsActions.createEl('button', {
+					type: 'button',
+					cls: 'clickable-icon csn-dash-ws-action-btn',
+					attr: { 'aria-label': t('DASH_WS_COLLAPSE_ALL_ARIA') }
+				});
+				setIcon(this.wsTreeCollapseBtn, 'chevrons-down-up');
+				this.registerDomEvent(this.wsTreeCollapseBtn, 'click', (evt: MouseEvent) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.toggleWsTreeCollapseAll();
+				});
+				const newWsBtn = wsActions.createEl('button', {
+					type: 'button',
+					cls: 'clickable-icon csn-dash-ws-add-btn',
+					attr: { 'aria-label': t('DASH_WS_NEW_ARIA') }
+				});
+				setIcon(newWsBtn, 'plus');
+				this.registerDomEvent(newWsBtn, 'click', (evt: MouseEvent) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					void this.openNewWorkspaceModal();
+				});
+			}
 		});
-		setIcon(this.wsTreeSortBtn, 'arrow-up-down');
-		this.registerDomEvent(this.wsTreeSortBtn, 'click', (evt: MouseEvent) => {
-			evt.preventDefault();
-			this.openWsTreeSortMenu(evt);
-		});
-		this.wsTreeCollapseBtn = wsActions.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-dash-ws-action-btn',
-			attr: { 'aria-label': t('DASH_WS_COLLAPSE_ALL_ARIA') }
-		});
-		setIcon(this.wsTreeCollapseBtn, 'chevrons-down-up');
-		this.registerDomEvent(this.wsTreeCollapseBtn, 'click', () => {
-			this.toggleWsTreeCollapseAll();
-		});
-		const newWsBtn = wsActions.createEl('button', {
-			type: 'button',
-			cls: 'clickable-icon csn-dash-ws-add-btn',
-			attr: { 'aria-label': t('DASH_WS_NEW_ARIA') }
-		});
-		setIcon(newWsBtn, 'plus');
-		this.registerDomEvent(newWsBtn, 'click', () => {
-			void this.openNewWorkspaceModal();
-		});
+		this.wsPanelEl = wsMount.panel;
+		const left = wsMount.body;
+		left.addClass('csn-dash-left');
 		this.syncWsTreeCollapseBtn();
 		this.treeEl = left.createDiv({ cls: 'csn-dash-ws-tree' });
 		const wsFilter = left.createDiv({ cls: 'csn-dash-ws-filter' });
@@ -1264,31 +1322,6 @@ export class StickyNoteDashboardView extends ItemView {
 		const filterBar = main.createDiv({ cls: 'csn-dash-filter-bar' });
 		const filters = filterBar.createDiv({ cls: 'csn-dash-filters' });
 
-		const attrRow = filters.createDiv({ cls: 'csn-dash-attr' });
-		attrRow.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_ATTR_LABEL') });
-		const archiveModes: {
-			mode: NoteListArchiveFilter;
-			key: 'ARCHIVE_FILTER_ALL' | 'ARCHIVE_FILTER_ARCHIVED' | 'ARCHIVE_FILTER_UNARCHIVED';
-		}[] = [
-			{ mode: 'all', key: 'ARCHIVE_FILTER_ALL' },
-			{ mode: 'archived', key: 'ARCHIVE_FILTER_ARCHIVED' },
-			{ mode: 'unarchived', key: 'ARCHIVE_FILTER_UNARCHIVED' }
-		];
-		archiveModes.forEach((spec, i) => {
-			if (i > 0) attrRow.createSpan({ cls: 'csn-dash-attr-sep', text: '|' });
-			const btn = attrRow.createEl('button', {
-				type: 'button',
-				cls: 'csn-dash-attr-btn',
-				text: t(spec.key)
-			});
-			this.archiveBtns.set(spec.mode, btn);
-			this.registerDomEvent(btn, 'click', () => {
-				this.archiveFilter = spec.mode;
-				this.listPageIndex = 0;
-				this.syncArchiveButtons();
-				void this.renderDash();
-			});
-		});
 		const colorRow = filters.createDiv({ cls: 'csn-dash-colors' });
 		colorRow.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_COLOR_LABEL') });
 		const strip = colorRow.createDiv({ cls: 'csn-list-color-filter-btns' });
@@ -1525,9 +1558,11 @@ export class StickyNoteDashboardView extends ItemView {
 
 		this.registerVaultRefresh();
 		this.loadCollapsedGroupsFromSettings();
+		this.loadCollapsedLeftPanelsFromSettings();
 		this.syncListGridMetricsFromSettings();
 		this.syncViewContentZoomFromSettings();
-		this.syncArchiveButtons();
+		this.renderAreaNav();
+		this.applyAllLeftPanelCollapsedClasses();
 		this.syncColorButtons();
 		this.syncTagFilterButton();
 		this.syncSortToolbarBtn();
@@ -1548,10 +1583,86 @@ export class StickyNoteDashboardView extends ItemView {
 		this.searchClearBtn?.setAttr('tabindex', has ? '0' : '-1');
 	}
 
-	private syncArchiveButtons(): void {
-		for (const [mode, btn] of this.archiveBtns) {
-			btn.toggleClass('is-active', mode === this.archiveFilter);
+	private setAreaMode(mode: DashAreaMode): void {
+		const same = this.areaMode === mode && this.workspaceSel.kind === 'all';
+		if (same && mode !== 'random') return;
+		this.areaMode = mode;
+		this.archiveFilter = mode === 'archived' ? 'archived' : 'unarchived';
+		this.workspaceSel = { kind: 'all' };
+		/* 进入/再次点击随机模式时重新洗牌 */
+		this.randomOrderPaths = null;
+		this.listPageIndex = 0;
+		this.renderAreaNav();
+		this.renderWorkspaceTree();
+		void this.renderDash();
+	}
+
+	private isAreaNavActive(mode: DashAreaMode): boolean {
+		if (mode === 'all') return this.areaMode === 'all' && this.workspaceSel.kind === 'all';
+		return this.areaMode === mode;
+	}
+
+	private renderAreaNav(): void {
+		const host = this.areaNavEl;
+		if (!host) return;
+		host.empty();
+		this.areaBtns.clear();
+		for (const spec of DASH_AREA_MODE_SPECS) {
+			const btn = host.createEl('button', {
+				type: 'button',
+				cls: `csn-dash-area-item${this.isAreaNavActive(spec.mode) ? ' is-active' : ''}`
+			});
+			this.areaBtns.set(spec.mode, btn);
+			setIcon(btn.createSpan({ cls: 'csn-dash-area-item-icon' }), spec.icon);
+			btn.createSpan({ cls: 'csn-dash-area-item-label', text: t(spec.titleKey) });
+			if (spec.showCount) {
+				const n = this.areaCounts[spec.mode];
+				btn.createSpan({
+					cls: 'csn-dash-area-item-count',
+					text: typeof n === 'number' ? String(n) : ''
+				});
+			}
+			this.registerDomEvent(btn, 'click', () => {
+				this.setAreaMode(spec.mode);
+			});
 		}
+	}
+
+	private syncAreaButtons(): void {
+		for (const [mode, btn] of this.areaBtns) {
+			btn.toggleClass('is-active', this.isAreaNavActive(mode));
+		}
+	}
+
+	private syncAreaCountLabels(): void {
+		for (const spec of DASH_AREA_MODE_SPECS) {
+			if (!spec.showCount) continue;
+			const btn = this.areaBtns.get(spec.mode);
+			const countEl = btn?.querySelector('.csn-dash-area-item-count');
+			if (!(countEl instanceof HTMLElement)) continue;
+			const n = this.areaCounts[spec.mode];
+			countEl.setText(typeof n === 'number' ? String(n) : '');
+		}
+	}
+
+	private async refreshAreaCounts(allFiles: TFile[]): Promise<void> {
+		const assigned = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
+		let all = 0;
+		let uncategorized = 0;
+		let untagged = 0;
+		let archived = 0;
+		for (const f of allFiles) {
+			const isArchived = await resolveStickyArchivedForFile(this.app, f);
+			if (isArchived) {
+				archived++;
+				continue;
+			}
+			all++;
+			if (!assigned.has(normalizePath(f.path))) uncategorized++;
+			if (getStickyTagsForFile(this.app, f).length === 0) untagged++;
+		}
+		this.areaCounts = { all, uncategorized, untagged, archived };
+		this.syncAreaCountLabels();
 	}
 
 	private syncColorButtons(): void {
@@ -2226,6 +2337,94 @@ export class StickyNoteDashboardView extends ItemView {
 		void this.plugin.saveSettings();
 	}
 
+	private loadCollapsedLeftPanelsFromSettings(): void {
+		const allowed: DashLeftPanelId[] = ['calendar', 'area', 'workspace'];
+		const ids = this.plugin.settings.dashboardCollapsedLeftPanelIds;
+		this.collapsedLeftPanels = new Set(
+			(Array.isArray(ids) ? ids : []).filter((id): id is DashLeftPanelId =>
+				allowed.includes(id as DashLeftPanelId)
+			)
+		);
+	}
+
+	private persistCollapsedLeftPanels(): void {
+		this.plugin.settings.dashboardCollapsedLeftPanelIds = [...this.collapsedLeftPanels];
+		void this.plugin.saveSettings();
+	}
+
+	private leftPanelEl(id: DashLeftPanelId): HTMLElement | null {
+		if (id === 'calendar') return this.calendarPanelEl;
+		if (id === 'area') return this.areaPanelEl;
+		return this.wsPanelEl;
+	}
+
+	private leftPanelTitle(id: DashLeftPanelId): string {
+		if (id === 'calendar') return t('DASH_LEFT_PANEL_CALENDAR');
+		if (id === 'area') return t('DASH_AREA_LABEL');
+		return t('DASH_WS_TREE_TITLE');
+	}
+
+	private mountLeftPanel(
+		parent: HTMLElement,
+		id: DashLeftPanelId,
+		title: string,
+		opts?: {
+			grow?: boolean;
+			headExtra?: (head: HTMLElement) => void;
+		}
+	): { panel: HTMLElement; body: HTMLElement; titleBtn: HTMLButtonElement } {
+		const panel = parent.createDiv({
+			cls: `csn-dash-panel csn-dash-panel--${id}${opts?.grow ? ' csn-dash-panel--grow' : ''}`
+		});
+		const head = panel.createDiv({ cls: 'csn-dash-panel-head' });
+		const titleBtn = head.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-panel-title',
+			attr: {
+				'aria-expanded': 'true',
+				'aria-label': t('DASH_LEFT_PANEL_TOGGLE_ARIA', { title })
+			}
+		});
+		const chevron = titleBtn.createSpan({ cls: 'csn-dash-panel-chevron', attr: { 'aria-hidden': 'true' } });
+		setIcon(chevron, 'chevron-down');
+		titleBtn.createSpan({ cls: 'csn-dash-panel-title-text', text: title });
+		this.leftPanelTitleBtns.set(id, titleBtn);
+		opts?.headExtra?.(head);
+		const body = panel.createDiv({ cls: 'csn-dash-panel-body' });
+		this.registerDomEvent(titleBtn, 'click', () => this.toggleLeftPanel(id));
+		return { panel, body, titleBtn };
+	}
+
+	private toggleLeftPanel(id: DashLeftPanelId): void {
+		if (this.collapsedLeftPanels.has(id)) this.collapsedLeftPanels.delete(id);
+		else this.collapsedLeftPanels.add(id);
+		this.persistCollapsedLeftPanels();
+		this.applyLeftPanelCollapsedClass(id);
+	}
+
+	private applyLeftPanelCollapsedClass(id: DashLeftPanelId): void {
+		const panel = this.leftPanelEl(id);
+		const titleBtn = this.leftPanelTitleBtns.get(id);
+		const collapsed = this.collapsedLeftPanels.has(id);
+		panel?.toggleClass('is-collapsed', collapsed);
+		titleBtn?.setAttr('aria-expanded', collapsed ? 'false' : 'true');
+		const chevron = titleBtn?.querySelector('.csn-dash-panel-chevron');
+		if (chevron instanceof HTMLElement) {
+			chevron.empty();
+			setIcon(chevron, collapsed ? 'chevron-right' : 'chevron-down');
+		}
+		titleBtn?.setAttr(
+			'aria-label',
+			t('DASH_LEFT_PANEL_TOGGLE_ARIA', { title: this.leftPanelTitle(id) })
+		);
+	}
+
+	private applyAllLeftPanelCollapsedClasses(): void {
+		for (const id of ['calendar', 'area', 'workspace'] as const) {
+			this.applyLeftPanelCollapsedClass(id);
+		}
+	}
+
 	private sortWorkspacesForTree(list: StickyWorkspace[]): StickyWorkspace[] {
 		if (this.wsTreeSortMode === 'manual') return list;
 		const arr = [...list];
@@ -2267,7 +2466,14 @@ export class StickyNoteDashboardView extends ItemView {
 	private setWorkspaceSel(next: DashWorkspaceSel): void {
 		if (this.workspaceSelEquals(next)) return;
 		this.workspaceSel = next;
+		/* 点工作区树时退出智能区域（保留「全部」语义下的未归档筛选） */
+		if (next.kind !== 'all') {
+			this.areaMode = 'all';
+			this.archiveFilter = 'unarchived';
+			this.randomOrderPaths = null;
+		}
 		this.listPageIndex = 0;
+		this.syncAreaButtons();
 		this.renderWorkspaceTree();
 		void this.renderDash();
 	}
@@ -2459,19 +2665,6 @@ export class StickyNoteDashboardView extends ItemView {
 
 		const q = this.wsTreeFilterQuery.trim().toLowerCase();
 		const matchText = (s: string) => !q || s.toLowerCase().includes(q);
-
-		const allCount = file.workspaces.reduce(
-			(n, ws) => n + mgr.getWorkspaceMemberPathSet(ws).size,
-			0
-		);
-		const allBtn = host.createEl('button', {
-			type: 'button',
-			cls: `csn-dash-tree-item csn-dash-tree-all${this.workspaceSel.kind === 'all' ? ' is-active' : ''}`
-		});
-		setIcon(allBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'layout-grid');
-		allBtn.createSpan({ cls: 'csn-dash-tree-label', text: t('DASH_WS_FILTER_ALL') });
-		allBtn.createSpan({ cls: 'csn-dash-tree-count', text: String(allCount) });
-		this.registerDomEvent(allBtn, 'click', () => this.setWorkspaceSel({ kind: 'all' }));
 
 		for (const g of groups) {
 			let groupWorkspaces = file.workspaces.filter(
@@ -3206,6 +3399,7 @@ export class StickyNoteDashboardView extends ItemView {
 		dateFilter: StickyDateFilter | null,
 		query: string,
 		colorFilters: readonly StickyColorId[],
+		areaMode: DashAreaMode,
 		archiveFilter: NoteListArchiveFilter,
 		tagInclude: readonly string[],
 		tagExclude: readonly string[],
@@ -3221,6 +3415,7 @@ export class StickyNoteDashboardView extends ItemView {
 			dateFilter: stickyDateFilterKey(dateFilter),
 			search: query,
 			colors: [...colorFilters].sort(),
+			area: areaMode,
 			archive: archiveFilter,
 			tagInclude: [...tagInclude].sort(),
 			tagExclude: [...tagExclude].sort(),
@@ -3231,6 +3426,49 @@ export class StickyNoteDashboardView extends ItemView {
 			paths: filtered.map(f => f.path),
 			pinned: [...pinnedPaths]
 		});
+	}
+
+	/** 区域管理：未分类 / 未标签等（归档已由 archiveFilter 处理）。 */
+	private applyAreaModeFilters(files: TFile[]): TFile[] {
+		if (this.areaMode === 'uncategorized') {
+			const assigned = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
+			return files.filter(f => !assigned.has(normalizePath(f.path)));
+		}
+		if (this.areaMode === 'untagged') {
+			return files.filter(f => getStickyTagsForFile(this.app, f).length === 0);
+		}
+		return files;
+	}
+
+	/** 随机模式：锁定路径顺序，新增便笺追加到末尾。 */
+	private applyRandomOrder(files: TFile[]): TFile[] {
+		const byPath = new Map(files.map(f => [normalizePath(f.path), f] as const));
+		if (!this.randomOrderPaths) {
+			const shuffled = [...files];
+			for (let i = shuffled.length - 1; i > 0; i--) {
+				const j = Math.floor(Math.random() * (i + 1));
+				const tmp = shuffled[i]!;
+				shuffled[i] = shuffled[j]!;
+				shuffled[j] = tmp;
+			}
+			this.randomOrderPaths = shuffled.map(f => normalizePath(f.path));
+			return shuffled;
+		}
+		const ordered: TFile[] = [];
+		const seen = new Set<string>();
+		for (const p of this.randomOrderPaths) {
+			const f = byPath.get(p);
+			if (!f) continue;
+			ordered.push(f);
+			seen.add(p);
+		}
+		for (const f of files) {
+			const p = normalizePath(f.path);
+			if (seen.has(p)) continue;
+			ordered.push(f);
+			this.randomOrderPaths.push(p);
+		}
+		return ordered;
 	}
 
 	async renderDash(): Promise<void> {
@@ -3264,6 +3502,7 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 
 			let files = collectMarkdownUnderFolder(folderAbs);
+			await this.refreshAreaCounts(files);
 			const wsPaths = this.resolveWorkspacePathFilter();
 			if (wsPaths) files = files.filter(f => wsPaths.has(normalizePath(f.path)));
 
@@ -3284,6 +3523,7 @@ export class StickyNoteDashboardView extends ItemView {
 				this.tagExcludeFilters,
 				this.tagFilterLogic
 			);
+			files = this.applyAreaModeFilters(files);
 
 			this.noteDateKeys = ctimeDateKeysForFiles(files);
 			this.updateCalendarMarks();
@@ -3292,8 +3532,13 @@ export class StickyNoteDashboardView extends ItemView {
 			const pinnedNorm = this.plugin.settings.noteListPinnedPaths.map(p => normalizePath(p));
 			const pinnedSet = new Set(pinnedNorm);
 			const prio = this.plugin.listPrioritizeStickyPath;
-			const sortMode = this.plugin.settings.noteListSort;
-			files = sortStickyListFiles(files, sortMode, pinnedNorm, prio);
+			const sortMode =
+				this.areaMode === 'recent' ? 'mtime-desc' : this.plugin.settings.noteListSort;
+			if (this.areaMode === 'random') {
+				files = this.applyRandomOrder(files);
+			} else {
+				files = sortStickyListFiles(files, sortMode, pinnedNorm, prio);
+			}
 
 			if (files.length === 0) {
 				this.disposeAllMarkdownHosts();
@@ -3319,6 +3564,7 @@ export class StickyNoteDashboardView extends ItemView {
 				this.selectedDateFilter,
 				query,
 				this.colorFilters,
+				this.areaMode,
 				this.archiveFilter,
 				this.tagIncludeFilters,
 				this.tagExcludeFilters,
@@ -3418,11 +3664,17 @@ export class StickyNoteDashboardView extends ItemView {
 		this.selectedListNotePaths.clear();
 		this.lastSelectedListNotePath = null;
 		this.calendarEl = null;
+		this.calendarPanelEl = null;
 		this.composerEditor?.destroy();
 		this.composerEditor = null;
 		this.composerHostEl = null;
 		this.composerFallbackEl = null;
 		this.treeEl = null;
+		this.areaNavEl = null;
+		this.areaPanelEl = null;
+		this.wsPanelEl = null;
+		this.leftPanelTitleBtns.clear();
+		this.wsTreeFilterInput = null;
 		this.searchInput = null;
 		this.searchInnerEl = null;
 		this.searchClearBtn = null;
@@ -3436,7 +3688,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.paginationPrevBtn = null;
 		this.paginationNextBtn = null;
 		this.paginationMetaEl = null;
-		this.archiveBtns.clear();
+		this.areaBtns.clear();
 		this.colorBtns.clear();
 		this.contentEl.empty();
 	}

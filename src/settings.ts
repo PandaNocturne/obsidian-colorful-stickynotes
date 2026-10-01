@@ -146,6 +146,8 @@ export interface ColorfulStickyNotesSettings {
 	dashboardComposerPaneHeight: number;
 	/** 仪表盘工作区树中已折叠的分组 id。 */
 	dashboardCollapsedWorkspaceGroupIds: string[];
+	/** 仪表盘左侧面板折叠：`calendar` | `area` | `workspace`。 */
+	dashboardCollapsedLeftPanelIds: string[];
 	/** 便笺列表排序（默认：创建时间新在前）。 */
 	noteListSort: NoteListSort;
 	/** 便笺列表置顶路径（靠前优先显示；顺序即置顶顺序）。 */
@@ -217,6 +219,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	dashboardLeftPaneWidth: DASH_LEFT_PANE_WIDTH_DEFAULT,
 	dashboardComposerPaneHeight: DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
 	dashboardCollapsedWorkspaceGroupIds: [],
+	dashboardCollapsedLeftPanelIds: [],
 	noteListSort: 'ctime-desc',
 	noteListPinnedPaths: [],
 	noteListColorFilters: [],
