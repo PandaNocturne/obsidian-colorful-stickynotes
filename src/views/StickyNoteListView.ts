@@ -1188,6 +1188,7 @@ export class StickyNoteListView extends ItemView {
 
 		this.registerEvent(
 			this.app.vault.on('create', (f: TAbstractFile) => {
+				if (this.plugin.muteStickyListModifyPaths.has(f.path)) return;
 				if (!this.pathUnderStickyFolder(f.path)) return;
 				/* 与 delete/rename 一致走结构防抖；插件新建末尾会 `flushListRedraw` 取消防抖并立刻重绘，避免双次整表渲染 */
 				this.debouncedListStructureRefresh?.();
@@ -1195,11 +1196,18 @@ export class StickyNoteListView extends ItemView {
 		);
 		this.registerEvent(
 			this.app.vault.on('delete', (f: TAbstractFile) => {
+				if (this.plugin.muteStickyListModifyPaths.has(f.path)) return;
 				if (this.pathUnderStickyFolder(f.path)) this.debouncedListStructureRefresh?.();
 			})
 		);
 		this.registerEvent(
 			this.app.vault.on('rename', (f: TAbstractFile, oldPath: string) => {
+				if (
+					this.plugin.muteStickyListModifyPaths.has(f.path) ||
+					this.plugin.muteStickyListModifyPaths.has(oldPath)
+				) {
+					return;
+				}
 				if (this.pathUnderStickyFolder(f.path) || this.pathUnderStickyFolder(oldPath)) {
 					this.debouncedListStructureRefresh?.();
 				}

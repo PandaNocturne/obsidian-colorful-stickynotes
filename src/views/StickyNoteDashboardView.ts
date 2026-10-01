@@ -301,6 +301,8 @@ export class StickyNoteDashboardView extends ItemView {
 	private gridDelegatedEvents = false;
 	/** 上次渲染的仪表盘结构指纹；一致时翻页可走 DOM 增量。 */
 	private lastDashStructureKey = '';
+	/** 筛选上下文指纹（不含 paths/pinned）；不变时新建/删除走卡片增量，避免整表闪烁。 */
+	private lastDashFilterKey = '';
 	private lastRenderedPageIndex: number | null = null;
 	private listPageIndex = 0;
 	private areaMode: DashAreaMode = 'all';
@@ -1049,7 +1051,22 @@ export class StickyNoteDashboardView extends ItemView {
 	private async trashMenuTargetFiles(files: TFile[]): Promise<void> {
 		for (const f of files) {
 			this.selectedListNotePaths.delete(normalizePath(f.path));
-			await this.plugin.stickies.trashStickyNoteFile(f);
+		}
+		if (files.length === 0) return;
+		for (const f of files) {
+			this.plugin.muteStickyListModifyPaths.add(f.path);
+		}
+		this.plugin.cancelStickyListDebouncedRefresh();
+		try {
+			for (const f of files) {
+				await this.plugin.stickies.trashStickyNoteFile(f, { skipListRefresh: true });
+			}
+			this.plugin.refreshStickyListIfOpen({ tree: 'counts' });
+		} finally {
+			for (const f of files) {
+				const p = f.path;
+				window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(p), 400);
+			}
 		}
 	}
 
@@ -1261,16 +1278,24 @@ export class StickyNoteDashboardView extends ItemView {
 		this.register(() => this.cancelPendingRefresh());
 		this.registerEvent(
 			this.app.vault.on('create', (f: TAbstractFile) => {
+				if (this.plugin.muteStickyListModifyPaths.has(f.path)) return;
 				if (this.pathUnderStickyFolder(f.path)) this.debouncedStructureRefresh?.();
 			})
 		);
 		this.registerEvent(
 			this.app.vault.on('delete', (f: TAbstractFile) => {
+				if (this.plugin.muteStickyListModifyPaths.has(f.path)) return;
 				if (this.pathUnderStickyFolder(f.path)) this.debouncedStructureRefresh?.();
 			})
 		);
 		this.registerEvent(
 			this.app.vault.on('rename', (f: TAbstractFile, oldPath: string) => {
+				if (
+					this.plugin.muteStickyListModifyPaths.has(f.path) ||
+					this.plugin.muteStickyListModifyPaths.has(oldPath)
+				) {
+					return;
+				}
 				if (this.pathUnderStickyFolder(f.path) || this.pathUnderStickyFolder(oldPath)) {
 					this.debouncedStructureRefresh?.();
 				}
@@ -3109,6 +3134,25 @@ export class StickyNoteDashboardView extends ItemView {
 		this.renderWorkspaceTree();
 	}
 
+	/** 仅更新树节点成员数量，避免 `treeEl.empty()` 造成侧栏闪烁。 */
+	syncWorkspaceTreeMemberCounts(): void {
+		const host = this.treeEl;
+		if (!host) return;
+		const mgr = this.plugin.stickies;
+		const file = mgr.workspaces;
+		for (const el of Array.from(host.querySelectorAll<HTMLElement>('[data-csn-ws-id]'))) {
+			const id = el.dataset.csnWsId;
+			if (!id) continue;
+			const ws =
+				file.workspaces.find(w => w.id === id) ?? file.trash.find(w => w.id === id);
+			if (!ws) continue;
+			const countEl = el.querySelector('.csn-dash-tree-count:not(.csn-dash-tree-count--toggle)');
+			if (countEl instanceof HTMLElement) {
+				countEl.setText(String(mgr.getWorkspaceMemberPathSet(ws).size));
+			}
+		}
+	}
+
 	private openWsTreeSortMenu(evt: MouseEvent): void {
 		const menu = new Menu();
 		for (const spec of DASH_WS_TREE_SORT_SPECS) {
@@ -4317,17 +4361,25 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private async createStickyFromToolbar(): Promise<void> {
-		const created = await this.plugin.stickies.addStickyWindow({
-			color: this.selectedCreateColor()
-		});
+		const created = await this.plugin.stickies.addStickyWindow(
+			{ color: this.selectedCreateColor() },
+			undefined,
+			{ deferListRefresh: true }
+		);
 		if (!created) return;
-		if (this.workspaceSel.kind === 'selection') {
-			for (const wsId of this.workspaceSel.workspaceIds) {
-				await this.plugin.stickies.addFilesToWorkspace(wsId, [created]);
+		try {
+			if (this.workspaceSel.kind === 'selection') {
+				for (const wsId of this.workspaceSel.workspaceIds) {
+					await this.plugin.stickies.addFilesToWorkspace(wsId, [created], {
+						skipListRefresh: true
+					});
+				}
 			}
+			this.listPageIndex = 0;
+			this.plugin.refreshStickyListIfOpen({ tree: 'counts' });
+		} finally {
+			window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(created.path), 400);
 		}
-		this.listPageIndex = 0;
-		void this.renderDash();
 	}
 
 	private async commitComposer(): Promise<void> {
@@ -4339,24 +4391,25 @@ export class StickyNoteDashboardView extends ItemView {
 			const created = await this.plugin.stickies.addStickyWindow(
 				{ color: this.selectedCreateColor() },
 				undefined,
-				{ openFloating: false }
+				{ openFloating: false, deferListRefresh: true }
 			);
 			if (!created) return;
-			this.plugin.muteStickyListModifyPaths.add(created.path);
 			try {
 				const cur = await this.app.vault.read(created);
 				await this.app.vault.modify(created, injectMarkdownAfterFrontmatter(cur, extra));
+				if (this.workspaceSel.kind === 'selection') {
+					for (const wsId of this.workspaceSel.workspaceIds) {
+						await this.plugin.stickies.addFilesToWorkspace(wsId, [created], {
+							skipListRefresh: true
+						});
+					}
+				}
+				this.clearComposer();
+				this.listPageIndex = 0;
+				this.plugin.refreshStickyListIfOpen({ tree: 'counts' });
 			} finally {
 				window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(created.path), 400);
 			}
-			if (this.workspaceSel.kind === 'selection') {
-				for (const wsId of this.workspaceSel.workspaceIds) {
-					await this.plugin.stickies.addFilesToWorkspace(wsId, [created]);
-				}
-			}
-			this.clearComposer();
-			this.listPageIndex = 0;
-			void this.renderDash();
 		} finally {
 			this.composing = false;
 		}
@@ -4718,36 +4771,34 @@ export class StickyNoteDashboardView extends ItemView {
 		pageFiles: TFile[],
 		pinnedSet: ReadonlySet<string>
 	): Promise<void> {
-		const wantedPaths = new Set(pageFiles.map(x => x.path));
-		const pool = new Map<string, HTMLElement>();
+		const wantedSet = new Set(pageFiles.map(x => x.path));
+		const existing = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
 			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (!p) continue;
-			if (!wantedPaths.has(p)) {
+			if (!wantedSet.has(p)) {
 				this.disposeMarkdownHostForPath(p);
 				el.remove();
 			} else {
-				pool.set(p, el);
-				el.remove();
+				existing.set(p, el);
 			}
 		}
-		for (const f of pageFiles) {
-			let card = pool.get(f.path);
-			pool.delete(f.path);
+		for (let i = 0; i < pageFiles.length; i++) {
+			const f = pageFiles[i]!;
 			const color = await resolveStickyBgColorForFile(this.app, f);
 			const archived = await resolveStickyArchivedForFile(this.app, f);
+			let card = existing.get(f.path);
 			if (!card) {
 				card = await this.createCard(f, color, pinnedSet, archived);
 			} else {
 				this.updateCardChrome(card, f, color, pinnedSet, archived);
 				await this.maybeRefreshCardPreview(card, f);
 			}
-			container.appendChild(card);
-		}
-		for (const [p, el] of pool) {
-			this.disposeMarkdownHostForPath(p);
-			el.remove();
+			const at = container.children[i] ?? null;
+			if (card !== at) {
+				container.insertBefore(card, at);
+			}
 		}
 	}
 
@@ -4783,6 +4834,34 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 	}
 
+	private buildDashFilterKey(
+		workspaceSel: DashWorkspaceSel,
+		dateFilter: StickyDateFilter | null,
+		query: string,
+		colorFilters: readonly StickyColorId[],
+		areaMode: DashAreaMode,
+		archiveFilter: NoteListArchiveFilter,
+		tagInclude: readonly string[],
+		tagExclude: readonly string[],
+		tagLogic: 'and' | 'or',
+		sortMode: NoteListSort,
+		pageSize: number
+	): string {
+		return JSON.stringify({
+			workspaceSel,
+			dateFilter: stickyDateFilterKey(dateFilter),
+			search: query,
+			colors: [...colorFilters].sort(),
+			area: areaMode,
+			archive: archiveFilter,
+			tagInclude: [...tagInclude].sort(),
+			tagExclude: [...tagExclude].sort(),
+			tagLogic,
+			sort: sortMode,
+			pageSize
+		});
+	}
+
 	private buildDashStructureKey(
 		workspaceSel: DashWorkspaceSel,
 		dateFilter: StickyDateFilter | null,
@@ -4800,17 +4879,19 @@ export class StickyNoteDashboardView extends ItemView {
 		pinnedPaths: readonly string[]
 	): string {
 		return JSON.stringify({
-			workspaceSel,
-			dateFilter: stickyDateFilterKey(dateFilter),
-			search: query,
-			colors: [...colorFilters].sort(),
-			area: areaMode,
-			archive: archiveFilter,
-			tagInclude: [...tagInclude].sort(),
-			tagExclude: [...tagExclude].sort(),
-			tagLogic,
-			sort: sortMode,
-			pageSize,
+			filter: this.buildDashFilterKey(
+				workspaceSel,
+				dateFilter,
+				query,
+				colorFilters,
+				areaMode,
+				archiveFilter,
+				tagInclude,
+				tagExclude,
+				tagLogic,
+				sortMode,
+				pageSize
+			),
 			prio: prioPath ?? '',
 			paths: filtered.map(f => f.path),
 			pinned: [...pinnedPaths]
@@ -4887,6 +4968,7 @@ export class StickyNoteDashboardView extends ItemView {
 			if (!folderAbs || !(folderAbs instanceof TFolder)) {
 				this.disposeAllMarkdownHosts();
 				this.lastDashStructureKey = '';
+				this.lastDashFilterKey = '';
 				this.lastRenderedPageIndex = null;
 				container.empty();
 				container.createDiv({
@@ -4942,6 +5024,7 @@ export class StickyNoteDashboardView extends ItemView {
 			if (files.length === 0) {
 				this.disposeAllMarkdownHosts();
 				this.lastDashStructureKey = '';
+				this.lastDashFilterKey = '';
 				this.lastRenderedPageIndex = null;
 				container.empty();
 				container.createDiv({ text: t('DASH_EMPTY'), cls: 'csn-list-empty' });
@@ -4958,6 +5041,19 @@ export class StickyNoteDashboardView extends ItemView {
 			const start = this.listPageIndex * pageSize;
 			const pageFiles = files.slice(start, start + pageSize);
 
+			const filterKey = this.buildDashFilterKey(
+				this.workspaceSel,
+				this.selectedDateFilter,
+				query,
+				this.colorFilters,
+				this.areaMode,
+				this.archiveFilter,
+				this.tagIncludeFilters,
+				this.tagExcludeFilters,
+				this.tagFilterLogic,
+				sortMode,
+				pageSize
+			);
 			const structureKey = this.buildDashStructureKey(
 				this.workspaceSel,
 				this.selectedDateFilter,
@@ -4975,6 +5071,7 @@ export class StickyNoteDashboardView extends ItemView {
 				pinnedNorm
 			);
 
+			const filterChanged = filterKey !== this.lastDashFilterKey;
 			const structureChanged = structureKey !== this.lastDashStructureKey;
 			const paginationOnly =
 				!structureChanged &&
@@ -4984,13 +5081,17 @@ export class StickyNoteDashboardView extends ItemView {
 				!structureChanged &&
 				this.lastRenderedPageIndex !== null &&
 				this.lastRenderedPageIndex === this.listPageIndex;
+			const membershipOnlyChanged = structureChanged && !filterChanged;
 
-			if (structureChanged) {
-				this.lastDashStructureKey = structureKey;
+			this.lastDashFilterKey = filterKey;
+			this.lastDashStructureKey = structureKey;
+
+			if (filterChanged) {
 				this.disposeAllMarkdownHosts();
 				container.empty();
 				await this.renderCardsFull(container, pageFiles, pinnedSet);
-			} else if (paginationOnly) {
+			} else if (membershipOnlyChanged || paginationOnly) {
+				/* 新建/删除/翻页：复用未变动卡片的 Markdown 宿主，避免整表闪烁 */
 				await this.syncPageIncremental(container, pageFiles, pinnedSet);
 			} else if (samePageContentTouch) {
 				await this.syncPageContentOnly(container, pageFiles, pinnedSet);
@@ -5000,6 +5101,8 @@ export class StickyNoteDashboardView extends ItemView {
 				await this.renderCardsFull(container, pageFiles, pinnedSet);
 			}
 			this.syncListCardSelectionChrome();
+			const pageIndexChanged =
+				this.lastRenderedPageIndex !== null && this.lastRenderedPageIndex !== this.listPageIndex;
 			this.lastRenderedPageIndex = this.listPageIndex;
 
 			this.paginationEl.show();
@@ -5043,7 +5146,10 @@ export class StickyNoteDashboardView extends ItemView {
 				}
 			}
 
-			container.scrollTop = 0;
+			/* 仅筛选变更或翻页时回顶；成员增减保持滚动位置，减少闪动感 */
+			if (filterChanged || pageIndexChanged) {
+				container.scrollTop = 0;
+			}
 		} finally {
 			if (this.plugin.listPrioritizeStickyPath) {
 				this.plugin.listPrioritizeStickyPath = null;
@@ -5063,6 +5169,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.disposeAllMarkdownHosts();
 		this.gridDelegatedEvents = false;
 		this.lastDashStructureKey = '';
+		this.lastDashFilterKey = '';
 		this.lastRenderedPageIndex = null;
 		this.selectedListNotePaths.clear();
 		this.lastSelectedListNotePath = null;

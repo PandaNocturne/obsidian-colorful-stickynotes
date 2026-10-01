@@ -82,7 +82,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	/** 便笺列表排序：插件新建的便笺路径临时置顶，`StickyNoteListView` 渲染后清空 */
 	listPrioritizeStickyPath: string | null = null;
 
-	/** 写入 frontmatter 等触发的 `modify`：跳过防抖列表刷新，由新建流程末尾主动 `refreshStickyListIfOpen` 一次，避免连刷卡顿 */
+	/**
+	 * 写入 frontmatter / 插件自管的 create·delete：跳过 vault 防抖列表刷新，
+	 * 由流程末尾主动 `refreshStickyListIfOpen` 一次，避免仪表盘连闪。
+	 */
 	muteStickyListModifyPaths: Set<string> = new Set();
 
 	/**
@@ -92,6 +95,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	markdownEditorClass: ObsidianMarkdownEditorCtor | null = null;
 
 	private listOpenIndicatorRaf: number | null = null;
+	/** 合并同一帧内多次 `refreshStickyListIfOpen`（新建后 workspace 同步 + 主动刷新）。 */
+	private stickyListRefreshRaf: number | null = null;
+	/** 排队中的 dashboard 树刷新模式；同帧多次调用时 `full` 优先于 `counts`。 */
+	private pendingStickyListTree: 'full' | 'counts' = 'full';
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -632,8 +639,34 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		});
 	}
 
-	/** 若便笺列表已打开：取消 create 等已排队的防抖并立即重绘，避免与 vault 事件叠成两次整表渲染 */
-	refreshStickyListIfOpen(): void {
+	/**
+	 * 若便笺列表已打开：取消 create 等已排队的防抖并重绘；同帧多次调用合并为一次。
+	 * @param opts.tree `full` 重建工作区树（默认）；`counts` 仅更新成员数，避免侧栏闪烁。
+	 */
+	refreshStickyListIfOpen(opts?: { tree?: 'full' | 'counts' }): void {
+		this.cancelStickyListDebouncedRefresh();
+		const tree = opts?.tree ?? 'full';
+		if (this.stickyListRefreshRaf !== null) {
+			if (tree === 'full') this.pendingStickyListTree = 'full';
+			return;
+		}
+		this.pendingStickyListTree = tree;
+		this.stickyListRefreshRaf = window.requestAnimationFrame(() => {
+			this.stickyListRefreshRaf = null;
+			const mode = this.pendingStickyListTree;
+			this.pendingStickyListTree = 'full';
+			this.flushStickyListRefreshNow({ tree: mode });
+		});
+	}
+
+	/** 立即重绘已打开的列表/仪表盘（不排队）。 */
+	flushStickyListRefreshNow(opts?: { tree?: 'full' | 'counts' }): void {
+		if (this.stickyListRefreshRaf !== null) {
+			window.cancelAnimationFrame(this.stickyListRefreshRaf);
+			this.stickyListRefreshRaf = null;
+		}
+		this.cancelStickyListDebouncedRefresh();
+		const treeMode = opts?.tree ?? 'full';
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) {
@@ -643,7 +676,11 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteDashboardView) {
-				v.refreshWorkspaceTree();
+				if (treeMode === 'counts') {
+					v.syncWorkspaceTreeMemberCounts();
+				} else {
+					v.refreshWorkspaceTree();
+				}
 				v.flushDashRedraw();
 			}
 		}
