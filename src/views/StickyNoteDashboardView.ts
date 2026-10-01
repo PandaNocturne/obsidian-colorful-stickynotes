@@ -4360,21 +4360,43 @@ export class StickyNoteDashboardView extends ItemView {
 		if (this.composerFallbackEl) this.composerFallbackEl.value = '';
 	}
 
+	/**
+	 * 仪表盘新建归属：按当前工作区筛选加入；「全部」或无选中工作区时保持未分类。
+	 * 选中分组时加入该分组下全部工作区。
+	 */
+	private resolveCreateTargetWorkspaceIds(): string[] {
+		if (this.areaMode === 'uncategorized') return [];
+		const sel = this.workspaceSel;
+		if (sel.kind !== 'selection') return [];
+		const file = this.plugin.stickies.workspaces;
+		const ids = new Set<string>();
+		for (const wsId of sel.workspaceIds) {
+			if (file.workspaces.some(w => w.id === wsId)) ids.add(wsId);
+		}
+		for (const gId of sel.groupIds) {
+			for (const ws of file.workspaces) {
+				if (resolveWorkspaceTabGroupId(ws, file.tabGroups) === gId) ids.add(ws.id);
+			}
+		}
+		return [...ids];
+	}
+
+	private async assignCreatedStickyToFilterWorkspaces(file: TFile): Promise<void> {
+		const wsIds = this.resolveCreateTargetWorkspaceIds();
+		for (const wsId of wsIds) {
+			await this.plugin.stickies.addFilesToWorkspace(wsId, [file], { skipListRefresh: true });
+		}
+	}
+
 	private async createStickyFromToolbar(): Promise<void> {
 		const created = await this.plugin.stickies.addStickyWindow(
 			{ color: this.selectedCreateColor() },
 			undefined,
-			{ deferListRefresh: true }
+			{ deferListRefresh: true, skipActiveWorkspace: true }
 		);
 		if (!created) return;
 		try {
-			if (this.workspaceSel.kind === 'selection') {
-				for (const wsId of this.workspaceSel.workspaceIds) {
-					await this.plugin.stickies.addFilesToWorkspace(wsId, [created], {
-						skipListRefresh: true
-					});
-				}
-			}
+			await this.assignCreatedStickyToFilterWorkspaces(created);
 			this.listPageIndex = 0;
 			this.plugin.refreshStickyListIfOpen({ tree: 'counts' });
 		} finally {
@@ -4391,19 +4413,13 @@ export class StickyNoteDashboardView extends ItemView {
 			const created = await this.plugin.stickies.addStickyWindow(
 				{ color: this.selectedCreateColor() },
 				undefined,
-				{ openFloating: false, deferListRefresh: true }
+				{ openFloating: false, deferListRefresh: true, skipActiveWorkspace: true }
 			);
 			if (!created) return;
 			try {
 				const cur = await this.app.vault.read(created);
 				await this.app.vault.modify(created, injectMarkdownAfterFrontmatter(cur, extra));
-				if (this.workspaceSel.kind === 'selection') {
-					for (const wsId of this.workspaceSel.workspaceIds) {
-						await this.plugin.stickies.addFilesToWorkspace(wsId, [created], {
-							skipListRefresh: true
-						});
-					}
-				}
+				await this.assignCreatedStickyToFilterWorkspaces(created);
 				this.clearComposer();
 				this.listPageIndex = 0;
 				this.plugin.refreshStickyListIfOpen({ tree: 'counts' });

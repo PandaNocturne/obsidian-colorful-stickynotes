@@ -1499,10 +1499,16 @@ export class StickyNoteManager {
 	async addStickyWindow(
 		initial?: Partial<SerializedStickyWindow>,
 		sourcePopover?: StickyNotePopover,
-		options?: { openFloating?: boolean; deferListRefresh?: boolean }
+		options?: {
+			openFloating?: boolean;
+			deferListRefresh?: boolean;
+			/** 为 true 时不写入当前活动工作区（仪表盘按筛选自行归属）。 */
+			skipActiveWorkspace?: boolean;
+		}
 	): Promise<TFile | null> {
 		const openFloating = options?.openFloating !== false;
 		const deferListRefresh = options?.deferListRefresh === true;
+		const skipActiveWorkspace = options?.skipActiveWorkspace === true;
 		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 		const defaultTplPath = (this.plugin.settings.defaultTemplatePath || '').trim();
 
@@ -1601,7 +1607,9 @@ export class StickyNoteManager {
 				await this.ensureStickyFrontmatterDefaults(f, { preferredId: id, preferredColor: color }).catch(
 					() => undefined
 				);
-				await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
+				if (!skipActiveWorkspace) {
+					await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
+				}
 				this.notifyStickyListOpenIndicators();
 				return f;
 			}
@@ -1653,7 +1661,9 @@ export class StickyNoteManager {
 			);
 			this.bringStickyToFront(pop);
 			this.persistOpenWindows();
-			await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
+			if (!skipActiveWorkspace) {
+				await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
+			}
 			this.notifyStickyListOpenIndicators();
 			return f;
 		} finally {
