@@ -1733,9 +1733,10 @@ export class StickyNoteDashboardView extends ItemView {
 			this.plugin.syncNoteListGridMetricsToOpenViews();
 		});
 
-		this.gridEl = main.createDiv({ cls: 'csn-dash-grid' });
+		const gridPane = main.createDiv({ cls: 'csn-dash-grid-pane' });
+		this.gridEl = gridPane.createDiv({ cls: 'csn-dash-grid' });
 		this.registerGridDelegatedEvents();
-		this.paginationEl = main.createDiv({ cls: 'csn-list-pagination csn-dash-pagination' });
+		this.paginationEl = gridPane.createDiv({ cls: 'csn-list-pagination csn-dash-pagination' });
 		this.paginationRowEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-row' });
 		this.paginationPrevBtn = this.paginationRowEl.createEl('button', {
 			type: 'button',
