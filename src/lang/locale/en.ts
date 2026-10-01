@@ -172,6 +172,8 @@ export const en = {
 	DISPLAY_STICKY_DASHBOARD: 'Colorful StickyNotes',
 	DASH_COMPOSER_PLACEHOLDER: 'Enter content...',
 	DASH_COMPOSER_DONE: 'Done',
+	DASH_COMPOSER_COLOR_ARIA: 'Choose new sticky color',
+	DASH_COMPOSER_DONE_ARIA: 'Finish and add sticky',
 	DASH_CALENDAR_PREV: 'Previous month',
 	DASH_CALENDAR_NEXT: 'Next month',
 	DASH_CALENDAR_TODAY: 'Today',

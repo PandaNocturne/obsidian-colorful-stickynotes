@@ -233,6 +233,13 @@ export class StickyNoteDashboardView extends ItemView {
 	private composerHostEl: HTMLElement | null = null;
 	private composerFallbackEl: HTMLTextAreaElement | null = null;
 	private composerEditor: EmbeddedMarkdownEditorHost | null = null;
+	private composerColorBtn: HTMLButtonElement | null = null;
+	private composerColorWrapEl: HTMLElement | null = null;
+	private composerPaletteEl: HTMLElement | null = null;
+	private composerColorSwatchBtns = new Map<StickyColorId, HTMLButtonElement>();
+	private composerDoneBtn: HTMLButtonElement | null = null;
+	/** 输入区新建便笺颜色（可在完成按钮旁切换）。 */
+	private composerCreateColor: StickyColorId = 'yellow';
 	private treeEl: HTMLElement | null = null;
 	private areaNavEl: HTMLElement | null = null;
 	private areaPanelEl: HTMLElement | null = null;
@@ -350,6 +357,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const now = new Date();
 		this.calYear = now.getFullYear();
 		this.calMonth0 = now.getMonth();
+		this.composerCreateColor = this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
 	}
 
 	getViewType(): string {
@@ -1396,19 +1404,73 @@ export class StickyNoteDashboardView extends ItemView {
 		this.registerDomEvent(composerFrame, 'click', (evt: MouseEvent) => {
 			const tEl = evt.target;
 			if (!(tEl instanceof Element)) return;
-			if (tEl.closest('.csn-dash-composer-done')) return;
+			if (tEl.closest('.csn-dash-composer-actions')) return;
 			if (tEl.closest('.cm-editor')) return;
 			this.composerEditor?.focus();
 			this.composerFallbackEl?.focus();
 		});
-		const doneBtn = composerWrap.createEl('button', {
+		const actions = composerWrap.createDiv({ cls: 'csn-dash-composer-actions' });
+		this.composerColorWrapEl = actions.createDiv({ cls: 'csn-dash-composer-color-wrap' });
+		this.composerPaletteEl = this.composerColorWrapEl.createDiv({
+			cls: 'csn-dash-composer-palette',
+			attr: { role: 'group', 'aria-label': t('DASH_COMPOSER_COLOR_ARIA') }
+		});
+		this.composerColorSwatchBtns.clear();
+		for (const c of SHEET_COLOR_ORDER) {
+			const sw = this.composerPaletteEl.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-composer-swatch',
+				attr: {
+					'data-csn-color': c.id,
+					'aria-label': t(c.labelKey),
+					title: t(c.labelKey)
+				}
+			});
+			this.composerColorSwatchBtns.set(c.id, sw);
+			this.registerDomEvent(sw, 'click', (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.composerCreateColor = c.id;
+				this.syncComposerColorBtn();
+				this.closeComposerColorPalette();
+			});
+		}
+		this.composerColorBtn = this.composerColorWrapEl.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-composer-color',
+			attr: {
+				'aria-label': t('DASH_COMPOSER_COLOR_ARIA'),
+				'aria-haspopup': 'true',
+				'aria-expanded': 'false',
+				'data-csn-color': this.composerCreateColor
+			}
+		});
+		setIcon(this.composerColorBtn, 'palette');
+		this.registerDomEvent(this.composerColorBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleComposerColorPalette();
+		});
+		this.composerDoneBtn = actions.createEl('button', {
 			type: 'button',
 			cls: 'csn-dash-composer-done',
+			attr: { 'aria-label': t('DASH_COMPOSER_DONE_ARIA') }
+		});
+		setIcon(this.composerDoneBtn.createSpan({ cls: 'csn-dash-composer-done-icon' }), 'check');
+		this.composerDoneBtn.createSpan({
+			cls: 'csn-dash-composer-done-label',
 			text: t('DASH_COMPOSER_DONE')
 		});
-		this.registerDomEvent(doneBtn, 'click', () => {
+		this.registerDomEvent(this.composerDoneBtn, 'click', () => {
 			void this.commitComposer();
 		});
+		this.registerDomEvent(document, 'pointerdown', (evt: PointerEvent) => {
+			const tEl = evt.target;
+			if (!(tEl instanceof Element)) return;
+			if (this.composerColorWrapEl?.contains(tEl)) return;
+			this.closeComposerColorPalette();
+		});
+		this.syncComposerColorBtn();
 
 		const splitH = colRight.createEl('div', {
 			cls: 'csn-dash-splitter csn-dash-splitter--h',
@@ -3899,8 +3961,38 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private selectedCreateColor(): StickyColorId {
-		if (this.colorFilters.length === 1) return this.colorFilters[0]!;
-		return this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
+		return this.composerCreateColor;
+	}
+
+	private syncComposerColorBtn(): void {
+		const btn = this.composerColorBtn;
+		if (!btn) return;
+		btn.setAttr('data-csn-color', this.composerCreateColor);
+		const label =
+			SHEET_COLOR_ORDER.find(c => c.id === this.composerCreateColor)?.labelKey ??
+			'COLOR_DEFAULT';
+		btn.setAttr('aria-label', `${t('DASH_COMPOSER_COLOR_ARIA')}：${t(label)}`);
+		btn.title = t(label);
+		for (const [id, sw] of this.composerColorSwatchBtns) {
+			sw.toggleClass('is-active', id === this.composerCreateColor);
+			sw.setAttr('aria-pressed', id === this.composerCreateColor ? 'true' : 'false');
+		}
+	}
+
+	private openComposerColorPalette(): void {
+		if (!this.composerColorWrapEl || !this.composerColorBtn) return;
+		this.composerColorWrapEl.addClass('is-expanded');
+		this.composerColorBtn.setAttr('aria-expanded', 'true');
+	}
+
+	private closeComposerColorPalette(): void {
+		this.composerColorWrapEl?.removeClass('is-expanded');
+		this.composerColorBtn?.setAttr('aria-expanded', 'false');
+	}
+
+	private toggleComposerColorPalette(): void {
+		if (this.composerColorWrapEl?.hasClass('is-expanded')) this.closeComposerColorPalette();
+		else this.openComposerColorPalette();
 	}
 
 	/** 挂载 Obsidian 原生 Markdown 编辑器；失败时回退到 textarea。 */
@@ -4759,6 +4851,11 @@ export class StickyNoteDashboardView extends ItemView {
 		this.composerEditor = null;
 		this.composerHostEl = null;
 		this.composerFallbackEl = null;
+		this.composerColorBtn = null;
+		this.composerColorWrapEl = null;
+		this.composerPaletteEl = null;
+		this.composerColorSwatchBtns.clear();
+		this.composerDoneBtn = null;
 		this.treeEl = null;
 		this.areaNavEl = null;
 		this.areaPanelEl = null;
