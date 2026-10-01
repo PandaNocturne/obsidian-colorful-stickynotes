@@ -260,6 +260,9 @@ export class StickyNoteDashboardView extends ItemView {
 	private dateFilterInput: HTMLInputElement | null = null;
 	private wsFilterWrapEl: HTMLElement | null = null;
 	private wsFilterChipsEl: HTMLElement | null = null;
+	private wsFilterAddBtn: HTMLButtonElement | null = null;
+	private wsFilterPanelEl: HTMLElement | null = null;
+	private wsFilterPanelListEl: HTMLElement | null = null;
 	private colorBtns = new Map<StickyColorId, HTMLButtonElement>();
 	private gridEl: HTMLElement | null = null;
 	private paginationEl: HTMLElement | null = null;
@@ -1545,9 +1548,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.buildDateFilterPanel(dateFilterWrap);
 		this.syncDateFilterBar();
 
-		const wsFilterWrap = filters.createDiv({
-			cls: 'csn-dash-ws-filter-bar csn-dash-ws-filter-bar--hidden'
-		});
+		const wsFilterWrap = filters.createDiv({ cls: 'csn-dash-ws-filter-bar' });
 		this.wsFilterWrapEl = wsFilterWrap;
 		wsFilterWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_WS_FILTER_LABEL') });
 		this.wsFilterChipsEl = wsFilterWrap.createDiv({ cls: 'csn-dash-ws-filter-chips' });
@@ -1566,6 +1567,24 @@ export class StickyNoteDashboardView extends ItemView {
 				this.removeWorkspaceFilterChip(kind, id);
 			}
 		});
+		this.wsFilterAddBtn = wsFilterWrap.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-ws-filter-add-btn clickable-icon',
+			attr: {
+				'aria-label': t('DASH_WS_FILTER_ADD_ARIA'),
+				'aria-haspopup': 'dialog',
+				'aria-expanded': 'false',
+				'aria-controls': 'csn-dash-ws-filter-panel'
+			}
+		});
+		setIcon(this.wsFilterAddBtn, 'plus');
+		this.registerDomEvent(this.wsFilterAddBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleWorkspaceFilterPanel();
+		});
+		this.buildWorkspaceFilterPanel(wsFilterWrap);
+		this.syncWorkspaceFilterBar();
 
 		const searchWrap = filters.createDiv({ cls: 'csn-dash-search' });
 		searchWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_SEARCH_LABEL') });
@@ -1642,9 +1661,25 @@ export class StickyNoteDashboardView extends ItemView {
 					this.closeDateFilterPanel();
 				}
 			}
+			if (this.isWorkspaceFilterPanelOpen()) {
+				if (
+					!(
+						this.wsFilterPanelEl?.contains(tEl) ||
+						this.wsFilterAddBtn?.contains(tEl) ||
+						this.wsFilterChipsEl?.contains(tEl)
+					)
+				) {
+					this.closeWorkspaceFilterPanel();
+				}
+			}
 		});
 		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
 			if (evt.key !== 'Escape') return;
+			if (this.isWorkspaceFilterPanelOpen()) {
+				evt.preventDefault();
+				this.closeWorkspaceFilterPanel();
+				return;
+			}
 			if (this.isDateFilterPanelOpen()) {
 				evt.preventDefault();
 				this.closeDateFilterPanel();
@@ -3162,16 +3197,124 @@ export class StickyNoteDashboardView extends ItemView {
 		this.setWorkspaceSel({ kind: 'selection', groupIds, workspaceIds });
 	}
 
+	private isWorkspaceFilterPanelOpen(): boolean {
+		return !!this.wsFilterPanelEl && !this.wsFilterPanelEl.hasClass('csn-dash-ws-filter-panel--hidden');
+	}
+
+	private buildWorkspaceFilterPanel(host: HTMLElement): void {
+		const panel = host.createDiv({
+			cls: 'csn-dash-ws-filter-panel csn-dash-ws-filter-panel--hidden',
+			attr: {
+				id: 'csn-dash-ws-filter-panel',
+				role: 'dialog',
+				'aria-label': t('DASH_WS_FILTER_PANEL_ARIA')
+			}
+		});
+		this.wsFilterPanelEl = panel;
+		panel.createDiv({
+			cls: 'csn-dash-ws-filter-panel-hint',
+			text: t('DASH_WS_FILTER_MULTI_HINT')
+		});
+		this.wsFilterPanelListEl = panel.createDiv({ cls: 'csn-dash-ws-filter-panel-list' });
+	}
+
+	private openWorkspaceFilterPanel(): void {
+		const panel = this.wsFilterPanelEl;
+		const btn = this.wsFilterAddBtn;
+		if (!panel) return;
+		this.renderWorkspaceFilterPanelList();
+		panel.removeClass('csn-dash-ws-filter-panel--hidden');
+		btn?.addClass('is-active');
+		btn?.setAttr('aria-expanded', 'true');
+	}
+
+	private closeWorkspaceFilterPanel(): void {
+		const panel = this.wsFilterPanelEl;
+		const btn = this.wsFilterAddBtn;
+		if (!panel || panel.hasClass('csn-dash-ws-filter-panel--hidden')) return;
+		panel.addClass('csn-dash-ws-filter-panel--hidden');
+		btn?.removeClass('is-active');
+		btn?.setAttr('aria-expanded', 'false');
+	}
+
+	private toggleWorkspaceFilterPanel(): void {
+		if (this.isWorkspaceFilterPanelOpen()) this.closeWorkspaceFilterPanel();
+		else this.openWorkspaceFilterPanel();
+	}
+
+	private renderWorkspaceFilterPanelList(): void {
+		const list = this.wsFilterPanelListEl;
+		if (!list) return;
+		list.empty();
+		const file = this.plugin.stickies.workspaces;
+		const tabGroups = file.tabGroups;
+		const groups =
+			tabGroups.length > 0
+				? tabGroups
+				: [{ id: WS_TAB_GROUP_DEFAULT_ID, name: t('WS_TAB_GROUP_DEFAULT') }];
+
+		const addRow = (
+			kind: 'group' | 'workspace',
+			id: string,
+			label: string,
+			opts?: { indent?: boolean }
+		) => {
+			const active =
+				kind === 'group' ? this.isGroupSelActive(id) : this.isWorkspaceSelActive(id);
+			const row = list.createEl('button', {
+				type: 'button',
+				cls: `csn-dash-ws-filter-panel-item${opts?.indent ? ' is-indent' : ''}${
+					active ? ' is-active' : ''
+				}`,
+				attr: { 'aria-pressed': active ? 'true' : 'false' }
+			});
+			const icon = row.createSpan({
+				cls: 'csn-dash-ws-filter-panel-item-icon',
+				attr: { 'aria-hidden': 'true' }
+			});
+			setIcon(icon, kind === 'group' ? 'folder' : 'layers');
+			row.createSpan({ cls: 'csn-dash-ws-filter-panel-item-label', text: label });
+			this.registerDomEvent(row, 'click', (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.clickWorkspaceTreeSel({ kind, id }, true);
+				this.renderWorkspaceFilterPanelList();
+			});
+		};
+
+		const ungrouped = file.workspaces.filter(
+			ws => resolveWorkspaceTabGroupId(ws, tabGroups) === WS_TAB_GROUP_UNGROUPED_ID
+		);
+		for (const ws of ungrouped) addRow('workspace', ws.id, ws.name);
+
+		for (const g of groups) {
+			const groupWorkspaces = file.workspaces.filter(
+				ws => resolveWorkspaceTabGroupId(ws, tabGroups) === g.id
+			);
+			addRow('group', g.id, g.name);
+			for (const ws of groupWorkspaces) {
+				addRow('workspace', ws.id, ws.name, { indent: true });
+			}
+		}
+
+		if (list.childElementCount === 0) {
+			list.createDiv({ cls: 'csn-dash-ws-filter-panel-empty', text: t('DASH_WS_FILTER_EMPTY') });
+		}
+	}
+
 	private syncWorkspaceFilterBar(): void {
-		const wrap = this.wsFilterWrapEl;
 		const chipsEl = this.wsFilterChipsEl;
-		if (!wrap || !chipsEl) return;
+		const addBtn = this.wsFilterAddBtn;
+		if (!chipsEl) return;
 		chipsEl.empty();
 		const sel = this.workspaceSel;
-		if (sel.kind !== 'selection') {
-			wrap.addClass('csn-dash-ws-filter-bar--hidden');
-			return;
+		const has = sel.kind === 'selection';
+		if (addBtn) {
+			addBtn.toggleClass('is-active', this.isWorkspaceFilterPanelOpen() || has);
+			addBtn.setAttr('aria-expanded', this.isWorkspaceFilterPanelOpen() ? 'true' : 'false');
 		}
+		if (!has) return;
+
 		const file = this.plugin.stickies.workspaces;
 		const groupName = (id: string) =>
 			file.tabGroups.find(g => g.id === id)?.name ?? id;
@@ -3186,7 +3329,10 @@ export class StickyNoteDashboardView extends ItemView {
 					'aria-label': label
 				}
 			});
-			const icon = chip.createSpan({ cls: 'csn-dash-ws-filter-chip-icon', attr: { 'aria-hidden': 'true' } });
+			const icon = chip.createSpan({
+				cls: 'csn-dash-ws-filter-chip-icon',
+				attr: { 'aria-hidden': 'true' }
+			});
 			setIcon(icon, kind === 'group' ? 'folder' : 'layers');
 			chip.createSpan({ cls: 'csn-dash-ws-filter-chip-text', text: label });
 			const remove = chip.createEl('span', {
@@ -3204,10 +3350,6 @@ export class StickyNoteDashboardView extends ItemView {
 
 		for (const id of sel.groupIds) addChip('group', id, groupName(id));
 		for (const id of sel.workspaceIds) addChip('workspace', id, wsName(id));
-		wrap.toggleClass(
-			'csn-dash-ws-filter-bar--hidden',
-			sel.groupIds.length === 0 && sel.workspaceIds.length === 0
-		);
 	}
 
 	private clearTreeDropTargets(): void {
@@ -4534,6 +4676,9 @@ export class StickyNoteDashboardView extends ItemView {
 		this.dateFilterInput = null;
 		this.wsFilterWrapEl = null;
 		this.wsFilterChipsEl = null;
+		this.wsFilterAddBtn = null;
+		this.wsFilterPanelEl = null;
+		this.wsFilterPanelListEl = null;
 		this.composerEditor?.destroy();
 		this.composerEditor = null;
 		this.composerHostEl = null;
