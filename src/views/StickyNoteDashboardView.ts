@@ -27,9 +27,18 @@ import {
 	WS_TAB_GROUP_DEFAULT_ID,
 	type NoteListArchiveFilter,
 	type NoteListSort,
-	type StickyColorId
+	type StickyColorId,
+	type StickyWorkspace,
+	type StickyWorkspaceTabGroup
 } from '../types';
 import { ListBatchDeleteConfirmModal } from '../modals/ListBatchDeleteConfirmModal';
+import {
+	DeleteStickyWorkspaceConfirmModal,
+	DeleteWorkspaceTabGroupConfirmModal,
+	EditStickyWorkspaceModal,
+	NewBlankWorkspaceModal,
+	RenameWorkspaceTabGroupModal
+} from '../modals/WorkspacePanelModal';
 import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-folder';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
@@ -58,6 +67,13 @@ import {
 	normalizeStickyTag,
 	type StickyTagCount
 } from '../utils/sticky-tags-from-file';
+import {
+	dragEventHasMime,
+	readStickyPathsDragData,
+	setStickyPathsDragData,
+	STICKY_PATHS_DND_MIME,
+	WORKSPACE_DND_MIME
+} from '../utils/workspace-dnd';
 
 type DashWorkspaceSel =
 	| { kind: 'all' }
@@ -183,6 +199,8 @@ export class StickyNoteDashboardView extends ItemView {
 	private composerFallbackEl: HTMLTextAreaElement | null = null;
 	private composerEditor: EmbeddedMarkdownEditorHost | null = null;
 	private treeEl: HTMLElement | null = null;
+	private wsTreeFilterInput: HTMLInputElement | null = null;
+	private wsTreeFilterQuery = '';
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
 	private searchClearBtn: HTMLButtonElement | null = null;
@@ -896,7 +914,11 @@ export class StickyNoteDashboardView extends ItemView {
 			const dt = evt.dataTransfer;
 			if (!dt) return;
 			dt.setData('text/plain', md);
-			dt.effectAllowed = 'copy';
+			setStickyPathsDragData(
+				dt,
+				items.map(it => normalizePath(it.file.path))
+			);
+			dt.effectAllowed = 'copyMove';
 			if (this.plugin.settings.canvasLinkShowDragHint) {
 				this.showCanvasDragBehaviorHint(items.length, evt);
 			}
@@ -1109,8 +1131,44 @@ export class StickyNoteDashboardView extends ItemView {
 		const colLeft = root.createDiv({ cls: 'csn-dash-col csn-dash-col-left' });
 		this.calendarEl = colLeft.createDiv({ cls: 'csn-dash-calendar' });
 		const left = colLeft.createDiv({ cls: 'csn-dash-left' });
-		left.createDiv({ cls: 'csn-dash-ws-title', text: t('DASH_WS_TREE_TITLE') });
+		const wsHead = left.createDiv({ cls: 'csn-dash-ws-head' });
+		wsHead.createDiv({ cls: 'csn-dash-ws-title', text: t('DASH_WS_TREE_TITLE') });
+		const newWsBtn = wsHead.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-ws-add-btn',
+			attr: { 'aria-label': t('DASH_WS_NEW_ARIA') }
+		});
+		setIcon(newWsBtn, 'plus');
+		this.registerDomEvent(newWsBtn, 'click', () => {
+			void this.openNewWorkspaceModal();
+		});
 		this.treeEl = left.createDiv({ cls: 'csn-dash-ws-tree' });
+		const wsFilter = left.createDiv({ cls: 'csn-dash-ws-filter' });
+		const wsFilterInner = wsFilter.createDiv({ cls: 'csn-dash-ws-filter-inner' });
+		const wsFilterIcon = wsFilterInner.createSpan({
+			cls: 'csn-dash-ws-filter-icon',
+			attr: { 'aria-hidden': 'true' }
+		});
+		setIcon(wsFilterIcon, 'filter');
+		this.wsTreeFilterInput = wsFilterInner.createEl('input', {
+			type: 'text',
+			cls: 'csn-dash-ws-filter-input',
+			attr: {
+				placeholder: t('DASH_WS_FILTER_PLACEHOLDER'),
+				spellcheck: 'false',
+				autocomplete: 'off',
+				'aria-label': t('DASH_WS_FILTER_PLACEHOLDER')
+			}
+		});
+		const debouncedWsFilter = debounce(
+			() => {
+				this.wsTreeFilterQuery = this.wsTreeFilterInput?.value ?? '';
+				this.renderWorkspaceTree();
+			},
+			100,
+			true
+		);
+		this.registerDomEvent(this.wsTreeFilterInput, 'input', () => debouncedWsFilter());
 
 		const splitV = root.createEl('div', {
 			cls: 'csn-dash-splitter csn-dash-splitter--v',
@@ -2044,6 +2102,11 @@ export class StickyNoteDashboardView extends ItemView {
 		return false;
 	}
 
+	/** 供外部在工作区变更后刷新左侧树。 */
+	refreshWorkspaceTree(): void {
+		this.renderWorkspaceTree();
+	}
+
 	private setWorkspaceSel(next: DashWorkspaceSel): void {
 		if (this.workspaceSelEquals(next)) return;
 		this.workspaceSel = next;
@@ -2052,40 +2115,212 @@ export class StickyNoteDashboardView extends ItemView {
 		void this.renderDash();
 	}
 
+	private clearTreeDropTargets(): void {
+		this.treeEl?.querySelectorAll('.csn-dash-tree-item--drop-target').forEach(el => {
+			el.classList.remove('csn-dash-tree-item--drop-target');
+		});
+	}
+
+	private async openNewWorkspaceModal(tabGroupId?: string): Promise<void> {
+		const mgr = this.plugin.stickies;
+		const autoName = t('WS_NEW_WORKSPACE_AUTO_NAME', {
+			n: mgr.workspaces.workspaces.length + 1
+		});
+		new NewBlankWorkspaceModal(this.app, autoName, async ({ name, remark }) => {
+			await mgr.createBlankWorkspace({
+				name: name.trim() || undefined,
+				remark,
+				tabGroupId: tabGroupId ?? WS_TAB_GROUP_DEFAULT_ID
+			});
+			this.renderWorkspaceTree();
+			void this.renderDash();
+		}).open();
+	}
+
+	private renameWorkspace(ws: StickyWorkspace): void {
+		const mgr = this.plugin.stickies;
+		new EditStickyWorkspaceModal(this.app, ws.name, ws.remark ?? '', async ({ name, remark }) => {
+			await mgr.updateWorkspace(ws.id, name, remark);
+			this.renderWorkspaceTree();
+		}).open();
+	}
+
+	private renameWorkspaceGroup(group: StickyWorkspaceTabGroup): void {
+		const mgr = this.plugin.stickies;
+		new RenameWorkspaceTabGroupModal(this.app, group.name, async name => {
+			await mgr.renameWorkspaceTabGroup(group.id, name);
+			this.renderWorkspaceTree();
+		}).open();
+	}
+
+	private openWorkspaceContextMenu(evt: MouseEvent, ws: StickyWorkspace): void {
+		evt.preventDefault();
+		const menu = new Menu();
+		const mgr = this.plugin.stickies;
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_RENAME')).setIcon('pencil').onClick(() => {
+				this.renameWorkspace(ws);
+			});
+		});
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_DELETE')).setIcon('trash').onClick(() => {
+				new DeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
+					await mgr.deleteStickyWorkspace(ws.id);
+					if (
+						this.workspaceSel.kind === 'workspace' &&
+						this.workspaceSel.workspaceId === ws.id
+					) {
+						this.workspaceSel = { kind: 'all' };
+					}
+					this.renderWorkspaceTree();
+					void this.renderDash();
+				}).open();
+			});
+		});
+		menu.showAtMouseEvent(evt);
+	}
+
+	private openGroupContextMenu(evt: MouseEvent, group: StickyWorkspaceTabGroup): void {
+		evt.preventDefault();
+		const menu = new Menu();
+		const mgr = this.plugin.stickies;
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_NEW')).setIcon('plus').onClick(() => {
+				void this.openNewWorkspaceModal(group.id);
+			});
+		});
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_RENAME')).setIcon('pencil').onClick(() => {
+				this.renameWorkspaceGroup(group);
+			});
+		});
+		if (group.id !== WS_TAB_GROUP_DEFAULT_ID) {
+			menu.addItem(item => {
+				item.setTitle(t('DASH_WS_MENU_DELETE')).setIcon('trash').onClick(() => {
+					new DeleteWorkspaceTabGroupConfirmModal(this.app, group.name, async () => {
+						await mgr.deleteWorkspaceTabGroup(group.id);
+						if (this.workspaceSel.kind === 'group' && this.workspaceSel.groupId === group.id) {
+							this.workspaceSel = { kind: 'all' };
+						}
+						this.renderWorkspaceTree();
+						void this.renderDash();
+					}).open();
+				});
+			});
+		}
+		menu.showAtMouseEvent(evt);
+	}
+
+	private bindWorkspaceTreeDrop(
+		el: HTMLElement,
+		opts: {
+			acceptSticky?: boolean;
+			onStickyDrop?: (paths: string[]) => void | Promise<void>;
+			acceptWorkspace?: boolean;
+			onWorkspaceDrop?: (workspaceId: string) => void | Promise<void>;
+		}
+	): void {
+		this.registerDomEvent(el, 'dragover', (e: DragEvent) => {
+			const sticky = opts.acceptSticky && dragEventHasMime(e, STICKY_PATHS_DND_MIME);
+			const ws = opts.acceptWorkspace && dragEventHasMime(e, WORKSPACE_DND_MIME);
+			if (!sticky && !ws) return;
+			e.preventDefault();
+			e.stopPropagation();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = sticky ? 'copy' : 'move';
+			el.addClass('csn-dash-tree-item--drop-target');
+		});
+		this.registerDomEvent(el, 'dragleave', (e: DragEvent) => {
+			const related = e.relatedTarget;
+			if (related instanceof Node && el.contains(related)) return;
+			el.removeClass('csn-dash-tree-item--drop-target');
+		});
+		this.registerDomEvent(el, 'drop', (e: DragEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			el.removeClass('csn-dash-tree-item--drop-target');
+			this.clearTreeDropTargets();
+			const paths = readStickyPathsDragData(e.dataTransfer);
+			if (opts.acceptSticky && paths.length > 0 && opts.onStickyDrop) {
+				void opts.onStickyDrop(paths);
+				return;
+			}
+			const wsId = e.dataTransfer?.getData(WORKSPACE_DND_MIME)?.trim();
+			if (opts.acceptWorkspace && wsId && opts.onWorkspaceDrop) {
+				void opts.onWorkspaceDrop(wsId);
+			}
+		});
+	}
+
+	private async addStickyPathsToWorkspace(wsId: string, paths: string[]): Promise<void> {
+		const files: TFile[] = [];
+		for (const p of paths) {
+			const abs = this.app.vault.getAbstractFileByPath(normalizePath(p));
+			if (abs instanceof TFile) files.push(abs);
+		}
+		if (files.length === 0) return;
+		await this.plugin.stickies.addFilesToWorkspace(wsId, files);
+		this.renderWorkspaceTree();
+		void this.renderDash();
+	}
+
 	private renderWorkspaceTree(): void {
 		const host = this.treeEl;
 		if (!host) return;
 		host.empty();
-		const file = this.plugin.stickies.workspaces;
-		const groups =
+		const mgr = this.plugin.stickies;
+		const file = mgr.workspaces;
+		const groups: StickyWorkspaceTabGroup[] =
 			file.tabGroups.length > 0
 				? file.tabGroups
 				: [{ id: WS_TAB_GROUP_DEFAULT_ID, name: t('WS_TAB_GROUP_DEFAULT') }];
 
+		const q = this.wsTreeFilterQuery.trim().toLowerCase();
+		const matchText = (s: string) => !q || s.toLowerCase().includes(q);
+
+		const allCount = file.workspaces.reduce(
+			(n, ws) => n + mgr.getWorkspaceMemberPathSet(ws).size,
+			0
+		);
 		const allBtn = host.createEl('button', {
 			type: 'button',
 			cls: `csn-dash-tree-item csn-dash-tree-all${this.workspaceSel.kind === 'all' ? ' is-active' : ''}`
 		});
-		setIcon(allBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'folder');
-		allBtn.createSpan({ text: t('DASH_WS_FILTER_ALL') });
+		setIcon(allBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'layout-grid');
+		allBtn.createSpan({ cls: 'csn-dash-tree-label', text: t('DASH_WS_FILTER_ALL') });
+		allBtn.createSpan({ cls: 'csn-dash-tree-count', text: String(allCount) });
 		this.registerDomEvent(allBtn, 'click', () => this.setWorkspaceSel({ kind: 'all' }));
 
 		for (const g of groups) {
-			const groupWorkspaces = file.workspaces.filter(
+			let groupWorkspaces = file.workspaces.filter(
 				ws => resolveWorkspaceTabGroupId(ws, groups) === g.id
 			);
+			if (q) {
+				const groupMatch = matchText(g.name);
+				groupWorkspaces = groupWorkspaces.filter(
+					ws => groupMatch || matchText(ws.name) || matchText(ws.remark ?? '')
+				);
+				if (!groupMatch && groupWorkspaces.length === 0) continue;
+				this.collapsedGroupIds.delete(g.id);
+			}
+
 			const collapsed = this.collapsedGroupIds.has(g.id);
+			const groupCount = groupWorkspaces.reduce(
+				(n, ws) => n + mgr.getWorkspaceMemberPathSet(ws).size,
+				0
+			);
 			const groupRow = host.createDiv({ cls: 'csn-dash-tree-group' });
 			const groupBtn = groupRow.createEl('button', {
 				type: 'button',
 				cls: `csn-dash-tree-item csn-dash-tree-group-btn${
 					this.workspaceSel.kind === 'group' && this.workspaceSel.groupId === g.id ? ' is-active' : ''
-				}`
+				}`,
+				attr: { 'data-csn-ws-group': g.id }
 			});
 			const chevron = groupBtn.createSpan({ cls: 'csn-dash-tree-chevron' });
 			setIcon(chevron, collapsed ? 'chevron-right' : 'chevron-down');
 			setIcon(groupBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'folder');
-			groupBtn.createSpan({ text: g.name });
+			groupBtn.createSpan({ cls: 'csn-dash-tree-label', text: g.name });
+			groupBtn.createSpan({ cls: 'csn-dash-tree-count', text: String(groupCount) });
 			this.registerDomEvent(groupBtn, 'click', (evt: MouseEvent) => {
 				const hit = evt.target;
 				if (hit instanceof Element && hit.closest('.csn-dash-tree-chevron')) {
@@ -2096,21 +2331,71 @@ export class StickyNoteDashboardView extends ItemView {
 				}
 				this.setWorkspaceSel({ kind: 'group', groupId: g.id });
 			});
+			this.registerDomEvent(groupBtn, 'dblclick', (evt: MouseEvent) => {
+				const hit = evt.target;
+				if (hit instanceof Element && hit.closest('.csn-dash-tree-chevron')) return;
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.renameWorkspaceGroup(g);
+			});
+			this.registerDomEvent(groupBtn, 'contextmenu', (evt: MouseEvent) => {
+				this.openGroupContextMenu(evt, g);
+			});
+			this.bindWorkspaceTreeDrop(groupBtn, {
+				acceptWorkspace: true,
+				onWorkspaceDrop: async workspaceId => {
+					await mgr.moveWorkspaceToTabGroup(workspaceId, g.id);
+					this.renderWorkspaceTree();
+				}
+			});
+
 			if (collapsed) continue;
 			for (const ws of groupWorkspaces) {
+				const memberCount = mgr.getWorkspaceMemberPathSet(ws).size;
 				const wsBtn = host.createEl('button', {
 					type: 'button',
 					cls: `csn-dash-tree-item csn-dash-tree-ws${
 						this.workspaceSel.kind === 'workspace' && this.workspaceSel.workspaceId === ws.id
 							? ' is-active'
 							: ''
-					}`
+					}`,
+					attr: { 'data-csn-ws-id': ws.id, draggable: 'true' }
 				});
 				setIcon(wsBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'layers');
-				wsBtn.createSpan({ text: ws.name });
+				wsBtn.createSpan({ cls: 'csn-dash-tree-label', text: ws.name });
+				wsBtn.createSpan({ cls: 'csn-dash-tree-count', text: String(memberCount) });
 				this.registerDomEvent(wsBtn, 'click', () =>
 					this.setWorkspaceSel({ kind: 'workspace', workspaceId: ws.id })
 				);
+				this.registerDomEvent(wsBtn, 'dblclick', (evt: MouseEvent) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.renameWorkspace(ws);
+				});
+				this.registerDomEvent(wsBtn, 'contextmenu', (evt: MouseEvent) => {
+					this.openWorkspaceContextMenu(evt, ws);
+				});
+				this.registerDomEvent(wsBtn, 'dragstart', (e: DragEvent) => {
+					e.dataTransfer?.setData(WORKSPACE_DND_MIME, ws.id);
+					if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+					wsBtn.addClass('csn-dash-tree-item--dragging');
+				});
+				this.registerDomEvent(wsBtn, 'dragend', () => {
+					wsBtn.removeClass('csn-dash-tree-item--dragging');
+					this.clearTreeDropTargets();
+				});
+				this.bindWorkspaceTreeDrop(wsBtn, {
+					acceptSticky: true,
+					onStickyDrop: paths => this.addStickyPathsToWorkspace(ws.id, paths),
+					acceptWorkspace: true,
+					onWorkspaceDrop: async draggedId => {
+						if (draggedId === ws.id) return;
+						await mgr.reorderWorkspaceBefore(draggedId, ws.id);
+						const targetGroup = resolveWorkspaceTabGroupId(ws, groups);
+						await mgr.moveWorkspaceToTabGroup(draggedId, targetGroup);
+						this.renderWorkspaceTree();
+					}
+				});
 			}
 		}
 	}

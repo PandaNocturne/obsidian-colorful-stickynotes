@@ -618,6 +618,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteDashboardView) {
+				v.refreshWorkspaceTree();
 				v.flushDashRedraw();
 			}
 		}
