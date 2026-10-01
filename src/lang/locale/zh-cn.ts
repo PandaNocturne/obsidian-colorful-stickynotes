@@ -172,6 +172,8 @@ export const zhCn: Record<MessageKey, string> = {
 	DASH_DATE_FILTER_PANEL_ARIA: '添加日期筛选',
 	DASH_DATE_FILTER_INPUT_ARIA: '选择日期',
 	DASH_DATE_FILTER_MULTI_HINT: '可继续添加多个日期…',
+	DASH_WS_FILTER_LABEL: '工作区：',
+	DASH_WS_FILTER_CHIP_REMOVE_ARIA: '移除工作区筛选 {label}',
 	DASH_CALENDAR_YEAR_ARIA: '选择年份',
 	DASH_CALENDAR_MONTH_ARIA: '选择月份',
 	DASH_CALENDAR_YEAR_TEXT: '{year} 年',
