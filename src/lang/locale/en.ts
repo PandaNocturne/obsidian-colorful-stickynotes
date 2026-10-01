@@ -186,6 +186,7 @@ export const en = {
 	DASH_DATE_FILTER_PANEL_ARIA: 'Add dates to filter',
 	DASH_DATE_FILTER_INPUT_ARIA: 'Pick a date',
 	DASH_DATE_FILTER_MULTI_HINT: 'Add more dates…',
+	DASH_DATE_FILTER_CONFIRM_ARIA: 'Confirm add date',
 	DASH_WS_FILTER_LABEL: 'Workspace:',
 	DASH_WS_FILTER_CHIP_REMOVE_ARIA: 'Remove workspace filter {label}',
 	DASH_WS_FILTER_ADD_ARIA: 'Add workspace filter',

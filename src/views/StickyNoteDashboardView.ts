@@ -60,7 +60,7 @@ import {
 	type StickyDateFilter
 } from '../utils/query-sticky-list';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
-import { resolveWorkspaceTabGroupId } from '../workspace-store';
+import { isWorkspaceUngrouped, resolveWorkspaceTabGroupId } from '../workspace-store';
 import { EmbeddedMarkdownEditorHost } from '../utils/embedded-markdown-editor';
 import {
 	collectStickyTagCatalog,
@@ -258,6 +258,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private dateFilterAddBtn: HTMLButtonElement | null = null;
 	private dateFilterPanelEl: HTMLElement | null = null;
 	private dateFilterInput: HTMLInputElement | null = null;
+	private dateFilterConfirmBtn: HTMLButtonElement | null = null;
 	private wsFilterWrapEl: HTMLElement | null = null;
 	private wsFilterChipsEl: HTMLElement | null = null;
 	private wsFilterAddBtn: HTMLButtonElement | null = null;
@@ -2779,28 +2780,36 @@ export class StickyNoteDashboardView extends ItemView {
 			cls: 'csn-dash-date-filter-panel-hint',
 			text: t('DASH_DATE_FILTER_MULTI_HINT')
 		});
-		this.dateFilterInput = panel.createEl('input', {
+		const row = panel.createDiv({ cls: 'csn-dash-date-filter-panel-row' });
+		this.dateFilterInput = row.createEl('input', {
 			type: 'date',
 			cls: 'csn-dash-date-filter-input',
 			attr: { 'aria-label': t('DASH_DATE_FILTER_INPUT_ARIA') }
 		});
-		this.registerDomEvent(this.dateFilterInput, 'click', (evt: MouseEvent) => {
-			evt.stopPropagation();
+		this.dateFilterConfirmBtn = row.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-date-filter-confirm-btn',
+			attr: { 'aria-label': t('DASH_DATE_FILTER_CONFIRM_ARIA') }
 		});
-		this.registerDomEvent(this.dateFilterInput, 'change', () => {
+		setIcon(this.dateFilterConfirmBtn, 'check');
+		const commitDate = () => {
 			const v = this.dateFilterInput?.value?.trim() ?? '';
 			if (!v) return;
 			this.addDateToFilter(v);
-			if (this.dateFilterInput) this.dateFilterInput.value = '';
 			window.setTimeout(() => this.dateFilterInput?.focus(), 0);
+		};
+		this.registerDomEvent(this.dateFilterInput, 'click', (evt: MouseEvent) => {
+			evt.stopPropagation();
 		});
 		this.registerDomEvent(this.dateFilterInput, 'keydown', (evt: KeyboardEvent) => {
 			if (evt.key !== 'Enter') return;
 			evt.preventDefault();
-			const v = this.dateFilterInput?.value?.trim() ?? '';
-			if (!v) return;
-			this.addDateToFilter(v);
-			if (this.dateFilterInput) this.dateFilterInput.value = '';
+			commitDate();
+		});
+		this.registerDomEvent(this.dateFilterConfirmBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			commitDate();
 		});
 	}
 
@@ -3282,15 +3291,28 @@ export class StickyNoteDashboardView extends ItemView {
 			});
 		};
 
-		const ungrouped = file.workspaces.filter(
-			ws => resolveWorkspaceTabGroupId(ws, tabGroups) === WS_TAB_GROUP_UNGROUPED_ID
-		);
-		for (const ws of ungrouped) addRow('workspace', ws.id, ws.name);
+		const ungrouped = file.workspaces.filter(ws => isWorkspaceUngrouped(ws, tabGroups));
+		if (ungrouped.length > 0) {
+			const section = list.createDiv({ cls: 'csn-dash-ws-filter-panel-section' });
+			const sectionIcon = section.createSpan({
+				cls: 'csn-dash-ws-filter-panel-section-icon',
+				attr: { 'aria-hidden': 'true' }
+			});
+			setIcon(sectionIcon, 'inbox');
+			section.createSpan({
+				cls: 'csn-dash-ws-filter-panel-section-label',
+				text: t('DASH_AREA_UNGROUPED')
+			});
+			for (const ws of ungrouped) {
+				addRow('workspace', ws.id, ws.name, { indent: true });
+			}
+		}
 
 		for (const g of groups) {
 			const groupWorkspaces = file.workspaces.filter(
 				ws => resolveWorkspaceTabGroupId(ws, tabGroups) === g.id
 			);
+			/* 空分组也保留，便于按分组筛选 */
 			addRow('group', g.id, g.name);
 			for (const ws of groupWorkspaces) {
 				addRow('workspace', ws.id, ws.name, { indent: true });
@@ -4674,6 +4696,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.dateFilterAddBtn = null;
 		this.dateFilterPanelEl = null;
 		this.dateFilterInput = null;
+		this.dateFilterConfirmBtn = null;
 		this.wsFilterWrapEl = null;
 		this.wsFilterChipsEl = null;
 		this.wsFilterAddBtn = null;
