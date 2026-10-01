@@ -105,7 +105,7 @@ const DASH_AREA_MODE_SPECS: Array<{
 	{ mode: 'archived', titleKey: 'DASH_AREA_ARCHIVED', icon: 'archive', showCount: true }
 ];
 
-type DashLeftPanelId = 'calendar' | 'area' | 'workspace';
+type DashLeftPanelId = 'area' | 'workspace';
 
 type DashWsTreeSort = 'manual' | 'name-asc' | 'name-desc' | 'mtime-desc';
 
@@ -235,7 +235,6 @@ function buildMonthWeekRows(
 
 export class StickyNoteDashboardView extends ItemView {
 	private calendarEl: HTMLElement | null = null;
-	private calendarPanelEl: HTMLElement | null = null;
 	private composerHostEl: HTMLElement | null = null;
 	private composerFallbackEl: HTMLTextAreaElement | null = null;
 	private composerEditor: EmbeddedMarkdownEditorHost | null = null;
@@ -1185,10 +1184,7 @@ export class StickyNoteDashboardView extends ItemView {
 		/* 先左右栏，再各自上下：左=日历+区域管理+工作区树；右=输入区+网格 */
 		const colLeft = root.createDiv({ cls: 'csn-dash-col csn-dash-col-left' });
 
-		const calMount = this.mountLeftPanel(colLeft, 'calendar', t('DASH_LEFT_PANEL_CALENDAR'));
-		this.calendarPanelEl = calMount.panel;
-		this.calendarEl = calMount.body;
-		this.calendarEl.addClass('csn-dash-calendar');
+		this.calendarEl = colLeft.createDiv({ cls: 'csn-dash-calendar' });
 
 		const areaMount = this.mountLeftPanel(colLeft, 'area', t('DASH_AREA_LABEL'));
 		this.areaPanelEl = areaMount.panel;
@@ -2308,7 +2304,8 @@ export class StickyNoteDashboardView extends ItemView {
 			'aria-label',
 			allCollapsed ? t('DASH_WS_EXPAND_ALL_ARIA') : t('DASH_WS_COLLAPSE_ALL_ARIA')
 		);
-		btn.toggleClass('is-active', allCollapsed);
+		/* 仅切换图标，不高亮 */
+		btn.removeClass('is-active');
 	}
 
 	private toggleWsTreeCollapseAll(): void {
@@ -2338,7 +2335,7 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private loadCollapsedLeftPanelsFromSettings(): void {
-		const allowed: DashLeftPanelId[] = ['calendar', 'area', 'workspace'];
+		const allowed: DashLeftPanelId[] = ['area', 'workspace'];
 		const ids = this.plugin.settings.dashboardCollapsedLeftPanelIds;
 		this.collapsedLeftPanels = new Set(
 			(Array.isArray(ids) ? ids : []).filter((id): id is DashLeftPanelId =>
@@ -2353,13 +2350,11 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private leftPanelEl(id: DashLeftPanelId): HTMLElement | null {
-		if (id === 'calendar') return this.calendarPanelEl;
 		if (id === 'area') return this.areaPanelEl;
 		return this.wsPanelEl;
 	}
 
 	private leftPanelTitle(id: DashLeftPanelId): string {
-		if (id === 'calendar') return t('DASH_LEFT_PANEL_CALENDAR');
 		if (id === 'area') return t('DASH_AREA_LABEL');
 		return t('DASH_WS_TREE_TITLE');
 	}
@@ -2420,7 +2415,7 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private applyAllLeftPanelCollapsedClasses(): void {
-		for (const id of ['calendar', 'area', 'workspace'] as const) {
+		for (const id of ['area', 'workspace'] as const) {
 			this.applyLeftPanelCollapsedClass(id);
 		}
 	}
@@ -2482,6 +2477,43 @@ export class StickyNoteDashboardView extends ItemView {
 		this.treeEl?.querySelectorAll('.csn-dash-tree-item--drop-target').forEach(el => {
 			el.classList.remove('csn-dash-tree-item--drop-target');
 		});
+	}
+
+	/**
+	 * 分组折叠图标：直接写入 Lucide 路径，避免部分环境下 folder / folder-open 显示相同或缺失。
+	 * viewBox 0 0 24 24，与 Obsidian 内置图标一致。
+	 */
+	private setWsGroupFoldIcon(el: HTMLElement, collapsed: boolean): void {
+		el.empty();
+		const svg = el.createSvg('svg', {
+			attr: {
+				xmlns: 'http://www.w3.org/2000/svg',
+				width: '24',
+				height: '24',
+				viewBox: '0 0 24 24',
+				fill: 'none',
+				stroke: 'currentColor',
+				'stroke-width': '2',
+				'stroke-linecap': 'round',
+				'stroke-linejoin': 'round',
+				class: 'svg-icon'
+			}
+		});
+		if (collapsed) {
+			/* lucide: folder-closed */
+			svg.createSvg('path', {
+				attr: {
+					d: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z'
+				}
+			});
+		} else {
+			/* lucide: folder-open */
+			svg.createSvg('path', {
+				attr: {
+					d: 'm6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2'
+				}
+			});
+		}
 	}
 
 	private async openNewWorkspaceModal(tabGroupId?: string): Promise<void> {
@@ -2696,13 +2728,13 @@ export class StickyNoteDashboardView extends ItemView {
 			});
 			if (groupDraggable) groupBtn.setAttr('draggable', 'true');
 			const folderIcon = groupBtn.createSpan({
-				cls: 'csn-dash-tree-icon csn-dash-tree-folder-toggle',
+				cls: `csn-dash-tree-icon csn-dash-tree-folder-toggle${collapsed ? ' is-collapsed' : ''}`,
 				attr: {
 					'aria-label': collapsed ? t('DASH_WS_EXPAND_GROUP_ARIA') : t('DASH_WS_COLLAPSE_GROUP_ARIA'),
 					role: 'button'
 				}
 			});
-			setIcon(folderIcon, collapsed ? 'folder' : 'folder-open');
+			this.setWsGroupFoldIcon(folderIcon, collapsed);
 			groupBtn.createSpan({ cls: 'csn-dash-tree-label', text: g.name });
 			groupBtn.createSpan({
 				cls: 'csn-dash-tree-count csn-dash-tree-count--toggle',
@@ -3664,7 +3696,6 @@ export class StickyNoteDashboardView extends ItemView {
 		this.selectedListNotePaths.clear();
 		this.lastSelectedListNotePath = null;
 		this.calendarEl = null;
-		this.calendarPanelEl = null;
 		this.composerEditor?.destroy();
 		this.composerEditor = null;
 		this.composerHostEl = null;

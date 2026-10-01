@@ -1316,7 +1316,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0px;
 }
 .csn-dash-col-left {
   flex: 0 0 var(--csn-dash-left-width);
@@ -1452,6 +1452,9 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   padding: 8px;
   min-width: 0;
   box-sizing: border-box;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
 }
 .csn-dash-composer {
   position: relative;

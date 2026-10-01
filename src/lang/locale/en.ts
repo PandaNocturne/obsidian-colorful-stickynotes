@@ -205,7 +205,6 @@ export const en = {
 	DASH_WS_FILTER_ALL: 'All',
 	DASH_ATTR_LABEL: 'Status:',
 	DASH_AREA_LABEL: 'Smart areas',
-	DASH_LEFT_PANEL_CALENDAR: 'Calendar',
 	DASH_LEFT_PANEL_TOGGLE_ARIA: 'Collapse or expand {title}',
 	DASH_AREA_ALL: 'All',
 	DASH_AREA_UNCATEGORIZED: 'Uncategorized',

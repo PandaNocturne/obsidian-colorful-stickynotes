@@ -191,7 +191,6 @@ export const zhCn: Record<MessageKey, string> = {
 	DASH_WS_FILTER_ALL: '全部',
 	DASH_ATTR_LABEL: '属性：',
 	DASH_AREA_LABEL: '区域管理',
-	DASH_LEFT_PANEL_CALENDAR: '日历',
 	DASH_LEFT_PANEL_TOGGLE_ARIA: '折叠或展开{title}',
 	DASH_AREA_ALL: '全部',
 	DASH_AREA_UNCATEGORIZED: '未分类',

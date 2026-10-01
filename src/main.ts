@@ -397,7 +397,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				: [];
 		}
 		{
-			const allowed = new Set(['calendar', 'area', 'workspace']);
+			const allowed = new Set(['area', 'workspace']);
 			const rawIds = this.settings.dashboardCollapsedLeftPanelIds;
 			this.settings.dashboardCollapsedLeftPanelIds = Array.isArray(rawIds)
 				? [
