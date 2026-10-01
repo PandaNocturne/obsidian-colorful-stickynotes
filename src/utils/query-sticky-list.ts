@@ -163,7 +163,8 @@ export type StickyDateFilter =
 	| { kind: 'year'; year: number }
 	| { kind: 'month'; year: number; month0: number }
 	| { kind: 'week'; year: number; week: number }
-	| { kind: 'day'; dateKey: string };
+	| { kind: 'day'; dateKey: string }
+	| { kind: 'days'; dateKeys: string[] };
 
 export function stickyDateFilterKey(filter: StickyDateFilter | null): string {
 	if (!filter) return '';
@@ -176,6 +177,8 @@ export function stickyDateFilterKey(filter: StickyDateFilter | null): string {
 			return `w:${filter.year}-W${filter.week}`;
 		case 'day':
 			return `d:${filter.dateKey}`;
+		case 'days':
+			return `ds:${[...filter.dateKeys].sort().join(',')}`;
 	}
 }
 
@@ -203,6 +206,11 @@ export function filterStickyFilesByDateFilter(
 			});
 		case 'day':
 			return files.filter(f => localDateKeyFromMs(f.stat.ctime) === filter.dateKey);
+		case 'days': {
+			const set = new Set(filter.dateKeys);
+			if (set.size === 0) return files;
+			return files.filter(f => set.has(localDateKeyFromMs(f.stat.ctime)));
+		}
 	}
 }
 
@@ -216,6 +224,27 @@ export function ctimeDateKeysForFiles(files: readonly TFile[]): Set<string> {
 	const out = new Set<string>();
 	for (const f of files) out.add(localDateKeyFromMs(f.stat.ctime));
 	return out;
+}
+
+/** 按创建日统计便笺数量（热力图强度）。 */
+export function ctimeDateCountsForFiles(files: readonly TFile[]): Map<string, number> {
+	const out = new Map<string, number>();
+	for (const f of files) {
+		const key = localDateKeyFromMs(f.stat.ctime);
+		out.set(key, (out.get(key) ?? 0) + 1);
+	}
+	return out;
+}
+
+/** 将计数映射为 0–4 热力档位（近似 GitHub contribution）。 */
+export function heatmapLevelFromCount(count: number, maxCount: number): 0 | 1 | 2 | 3 | 4 {
+	if (count <= 0 || maxCount <= 0) return 0;
+	if (count === 1) return 1;
+	const ratio = count / maxCount;
+	if (ratio <= 0.25) return 1;
+	if (ratio <= 0.5) return 2;
+	if (ratio <= 0.75) return 3;
+	return 4;
 }
 
 export function injectMarkdownAfterFrontmatter(source: string, extra: string): string {

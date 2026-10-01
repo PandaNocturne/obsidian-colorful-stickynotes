@@ -45,13 +45,13 @@ import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import {
 	buildPaginationEntries,
-	ctimeDateKeysForFiles,
+	ctimeDateCountsForFiles,
+	heatmapLevelFromCount,
 	filterStickyFilesByArchiveFilter,
 	filterStickyFilesByColors,
 	filterStickyFilesByDateFilter,
 	filterStickyFilesByKeywords,
 	injectMarkdownAfterFrontmatter,
-	isoWeekPartsFromMs,
 	localDateKeyFromMs,
 	sortStickyListFiles,
 	stickyDateFilterKey,
@@ -204,15 +204,11 @@ function monthShortLabels(): string[] {
 function buildMonthWeekRows(
 	year: number,
 	month0: number
-): Array<{ weekYear: number; week: number; days: Array<{ y: number; m0: number; d: number; inMonth: boolean }> }> {
+): Array<Array<{ y: number; m0: number; d: number; inMonth: boolean }>> {
 	const first = new Date(year, month0, 1);
 	const start = new Date(first);
 	start.setDate(1 - first.getDay());
-	const rows: Array<{
-		weekYear: number;
-		week: number;
-		days: Array<{ y: number; m0: number; d: number; inMonth: boolean }>;
-	}> = [];
+	const rows: Array<Array<{ y: number; m0: number; d: number; inMonth: boolean }>> = [];
 	const cursor = new Date(start);
 	for (let r = 0; r < 6; r++) {
 		const days: Array<{ y: number; m0: number; d: number; inMonth: boolean }> = [];
@@ -225,9 +221,7 @@ function buildMonthWeekRows(
 			});
 			cursor.setDate(cursor.getDate() + 1);
 		}
-		const mid = days[3]!;
-		const iso = isoWeekPartsFromMs(new Date(mid.y, mid.m0, mid.d).getTime());
-		rows.push({ weekYear: iso.year, week: iso.week, days });
+		rows.push(days);
 		if (cursor.getMonth() !== month0 && cursor.getDay() === 0) break;
 	}
 	return rows;
@@ -256,6 +250,13 @@ export class StickyNoteDashboardView extends ItemView {
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
 	private searchClearBtn: HTMLButtonElement | null = null;
+	/** 筛选栏：清除日历日期筛选（日历区常驻）。 */
+	private dateFilterClearBtn: HTMLButtonElement | null = null;
+	private dateFilterChipsEl: HTMLElement | null = null;
+	private dateFilterWrapEl: HTMLElement | null = null;
+	private dateFilterAddBtn: HTMLButtonElement | null = null;
+	private dateFilterPanelEl: HTMLElement | null = null;
+	private dateFilterInput: HTMLInputElement | null = null;
 	private colorBtns = new Map<StickyColorId, HTMLButtonElement>();
 	private gridEl: HTMLElement | null = null;
 	private paginationEl: HTMLElement | null = null;
@@ -305,8 +306,15 @@ export class StickyNoteDashboardView extends ItemView {
 	private collapsedGroupIds = new Set<string>();
 	private calYear: number;
 	private calMonth0: number;
+	/** 年月自定义选择面板：null 关闭。 */
+	private calPicker: null | 'year' | 'month' = null;
+	/** 年面板十年起点（含）。 */
+	private calDecadeStart = 0;
+	private calPickerDocClose: ((evt: MouseEvent) => void) | null = null;
 	private selectedDateFilter: StickyDateFilter | null = null;
 	private noteDateKeys = new Set<string>();
+	/** 创建日 → 便笺数，供日历热力图。 */
+	private noteDateCounts = new Map<string, number>();
 	private composing = false;
 
 	/** 列表卡片多选：当前选中的便笺路径（normalizePath）。 */
@@ -1408,6 +1416,40 @@ export class StickyNoteDashboardView extends ItemView {
 		this.buildTagFilterPanel(tagWrap);
 		this.syncTagFilterButton();
 
+		const dateFilterWrap = filters.createDiv({ cls: 'csn-dash-date-filter' });
+		this.dateFilterWrapEl = dateFilterWrap;
+		dateFilterWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_DATE_FILTER_LABEL') });
+		this.dateFilterChipsEl = dateFilterWrap.createDiv({ cls: 'csn-dash-date-filter-chips' });
+		this.registerDomEvent(this.dateFilterChipsEl, 'click', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const removeBtn = hit.closest('[data-csn-date-chip-remove]');
+			if (!removeBtn || !this.dateFilterChipsEl?.contains(removeBtn)) return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			const key = (removeBtn as HTMLElement).dataset.csnDateChipRemove;
+			if (!key) return;
+			this.removeDateFilterChip(key);
+		});
+		this.dateFilterAddBtn = dateFilterWrap.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-date-filter-add-btn clickable-icon',
+			attr: {
+				'aria-label': t('DASH_DATE_FILTER_ADD_ARIA'),
+				'aria-haspopup': 'dialog',
+				'aria-expanded': 'false',
+				'aria-controls': 'csn-dash-date-filter-panel'
+			}
+		});
+		setIcon(this.dateFilterAddBtn, 'plus');
+		this.registerDomEvent(this.dateFilterAddBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleDateFilterPanel();
+		});
+		this.buildDateFilterPanel(dateFilterWrap);
+		this.syncDateFilterBar();
+
 		const searchWrap = filters.createDiv({ cls: 'csn-dash-search' });
 		searchWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_SEARCH_LABEL') });
 		const searchInner = searchWrap.createDiv({ cls: 'csn-dash-search-inner' });
@@ -1457,18 +1499,40 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 
 		this.registerDomEvent(document, 'pointerdown', (evt: PointerEvent) => {
-			if (!this.isTagFilterPanelOpen()) return;
 			const tEl = evt.target;
 			if (!(tEl instanceof Node)) return;
-			/* 仅点击面板或触发控件内不关闭；勿用整块 tag-wrap（会占满筛选行空白） */
-			if (this.tagPanelEl?.contains(tEl)) return;
-			if (this.tagFilterBtn?.contains(tEl)) return;
-			if (this.tagChipsEl?.contains(tEl)) return;
-			if (this.tagClearBtn?.contains(tEl)) return;
-			this.closeTagFilterPanel();
+			if (this.isTagFilterPanelOpen()) {
+				/* 仅点击面板或触发控件内不关闭；勿用整块 tag-wrap（会占满筛选行空白） */
+				if (
+					!(
+						this.tagPanelEl?.contains(tEl) ||
+						this.tagFilterBtn?.contains(tEl) ||
+						this.tagChipsEl?.contains(tEl) ||
+						this.tagClearBtn?.contains(tEl)
+					)
+				) {
+					this.closeTagFilterPanel();
+				}
+			}
+			if (this.isDateFilterPanelOpen()) {
+				if (
+					!(
+						this.dateFilterPanelEl?.contains(tEl) ||
+						this.dateFilterAddBtn?.contains(tEl) ||
+						this.dateFilterChipsEl?.contains(tEl)
+					)
+				) {
+					this.closeDateFilterPanel();
+				}
+			}
 		});
 		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
 			if (evt.key !== 'Escape') return;
+			if (this.isDateFilterPanelOpen()) {
+				evt.preventDefault();
+				this.closeDateFilterPanel();
+				return;
+			}
 			if (!this.isTagFilterPanelOpen()) return;
 			evt.preventDefault();
 			this.closeTagFilterPanel();
@@ -1977,23 +2041,216 @@ export class StickyNoteDashboardView extends ItemView {
 		void this.renderDash();
 	}
 
-	private setDateFilter(next: StickyDateFilter | null): void {
-		if (stickyDateFiltersEqual(this.selectedDateFilter, next)) {
-			this.selectedDateFilter = null;
-		} else {
-			this.selectedDateFilter = next;
-		}
+	private applyDateFilter(next: StickyDateFilter | null): void {
+		this.selectedDateFilter = next;
 		this.listPageIndex = 0;
 		this.renderCalendar();
 		void this.renderDash();
 	}
 
+	private setDateFilter(next: StickyDateFilter | null): void {
+		if (stickyDateFiltersEqual(this.selectedDateFilter, next)) {
+			this.applyDateFilter(null);
+		} else {
+			this.applyDateFilter(next);
+		}
+	}
+
 	private clearDateFilter(): void {
 		if (!this.selectedDateFilter) return;
-		this.selectedDateFilter = null;
-		this.listPageIndex = 0;
+		this.applyDateFilter(null);
+	}
+
+	private isDateKeySelected(key: string): boolean {
+		const f = this.selectedDateFilter;
+		if (!f) return false;
+		if (f.kind === 'day') return f.dateKey === key;
+		if (f.kind === 'days') return f.dateKeys.includes(key);
+		return false;
+	}
+
+	/** Ctrl/Cmd 点击切换多日筛选。 */
+	private toggleDayMultiSelect(dateKey: string): void {
+		const cur = this.selectedDateFilter;
+		const keys = new Set<string>();
+		if (cur?.kind === 'day') keys.add(cur.dateKey);
+		else if (cur?.kind === 'days') {
+			for (const k of cur.dateKeys) keys.add(k);
+		}
+
+		if (cur?.kind === 'day' || cur?.kind === 'days') {
+			if (keys.has(dateKey)) keys.delete(dateKey);
+			else keys.add(dateKey);
+		} else {
+			keys.clear();
+			keys.add(dateKey);
+		}
+
+		if (keys.size === 0) {
+			this.applyDateFilter(null);
+			return;
+		}
+		if (keys.size === 1) {
+			this.applyDateFilter({ kind: 'day', dateKey: [...keys][0]! });
+			return;
+		}
+		this.applyDateFilter({ kind: 'days', dateKeys: [...keys].sort() });
+	}
+
+	private calendarHeatMax(): number {
+		let max = 0;
+		for (const n of this.noteDateCounts.values()) {
+			if (n > max) max = n;
+		}
+		return max;
+	}
+
+	private syncDayCellHeat(el: HTMLElement, key: string): void {
+		for (let i = 0; i <= 4; i++) el.removeClass(`heat-${i}`);
+		el.removeClass('has-notes');
+		const count = this.noteDateCounts.get(key) ?? 0;
+		const level = heatmapLevelFromCount(count, this.calendarHeatMax());
+		if (level > 0) el.addClass(`heat-${level}`);
+		el.setAttribute(
+			'aria-label',
+			count > 0
+				? t('DASH_CALENDAR_DAY_ARIA', { date: key, count })
+				: t('DASH_CALENDAR_DAY_ARIA_EMPTY', { date: key })
+		);
+		el.title = count > 0 ? t('DASH_CALENDAR_DAY_ARIA', { date: key, count }) : key;
+	}
+
+	private goToToday(): void {
+		const now = new Date();
+		this.calYear = now.getFullYear();
+		this.calMonth0 = now.getMonth();
+		this.calPicker = null;
+		this.detachCalPickerDocClose();
 		this.renderCalendar();
-		void this.renderDash();
+	}
+
+	private detachCalPickerDocClose(): void {
+		if (!this.calPickerDocClose) return;
+		document.removeEventListener('mousedown', this.calPickerDocClose, true);
+		this.calPickerDocClose = null;
+	}
+
+	private openCalPicker(kind: 'year' | 'month'): void {
+		if (this.calPicker === kind) {
+			this.calPicker = null;
+			this.detachCalPickerDocClose();
+			this.renderCalendar();
+			return;
+		}
+		this.calPicker = kind;
+		if (kind === 'year') {
+			this.calDecadeStart = Math.floor(this.calYear / 10) * 10;
+		}
+		this.renderCalendar();
+	}
+
+	private closeCalPicker(): void {
+		if (!this.calPicker) return;
+		this.calPicker = null;
+		this.detachCalPickerDocClose();
+		this.renderCalendar();
+	}
+
+	private formatCalYearText(year: number): string {
+		return t('DASH_CALENDAR_YEAR_TEXT', { year });
+	}
+
+	private formatCalMonthText(month0: number): string {
+		const labels = monthShortLabels();
+		return t('DASH_CALENDAR_MONTH_TEXT', {
+			n: month0 + 1,
+			month: labels[month0] ?? String(month0 + 1)
+		});
+	}
+
+	private renderCalYearPopover(pickers: HTMLElement): void {
+		const pop = pickers.createDiv({ cls: 'csn-dash-cal-popover csn-dash-cal-popover--year' });
+		const head = pop.createDiv({ cls: 'csn-dash-cal-popover-head' });
+		head.createSpan({
+			cls: 'csn-dash-cal-popover-title',
+			text: this.formatCalYearText(this.calYear)
+		});
+		const nav = head.createDiv({ cls: 'csn-dash-cal-popover-nav' });
+		const prev = nav.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-cal-popover-nav-btn',
+			attr: { 'aria-label': t('DASH_CALENDAR_DECADE_PREV') }
+		});
+		setIcon(prev, 'chevron-left');
+		const next = nav.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-cal-popover-nav-btn',
+			attr: { 'aria-label': t('DASH_CALENDAR_DECADE_NEXT') }
+		});
+		setIcon(next, 'chevron-right');
+		this.registerDomEvent(prev, 'click', evt => {
+			evt.stopPropagation();
+			this.calDecadeStart -= 10;
+			this.renderCalendar();
+		});
+		this.registerDomEvent(next, 'click', evt => {
+			evt.stopPropagation();
+			this.calDecadeStart += 10;
+			this.renderCalendar();
+		});
+
+		const grid = pop.createDiv({ cls: 'csn-dash-cal-popover-grid csn-dash-cal-year-grid' });
+		for (let y = this.calDecadeStart; y < this.calDecadeStart + 10; y++) {
+			const btn = grid.createEl('button', {
+				type: 'button',
+				cls: `csn-dash-cal-popover-item${y === this.calYear ? ' is-selected' : ''}`,
+				text: String(y)
+			});
+			this.registerDomEvent(btn, 'click', evt => {
+				evt.stopPropagation();
+				this.calYear = y;
+				this.closeCalPicker();
+			});
+		}
+	}
+
+	private renderCalMonthPopover(pickers: HTMLElement): void {
+		const pop = pickers.createDiv({ cls: 'csn-dash-cal-popover csn-dash-cal-popover--month' });
+		const head = pop.createDiv({ cls: 'csn-dash-cal-popover-head' });
+		head.createSpan({
+			cls: 'csn-dash-cal-popover-title',
+			text: this.formatCalMonthText(this.calMonth0)
+		});
+		const grid = pop.createDiv({ cls: 'csn-dash-cal-popover-grid csn-dash-cal-month-grid' });
+		for (let m = 0; m < 12; m++) {
+			const btn = grid.createEl('button', {
+				type: 'button',
+				cls: `csn-dash-cal-popover-item${m === this.calMonth0 ? ' is-selected' : ''}`,
+				text: this.formatCalMonthText(m)
+			});
+			this.registerDomEvent(btn, 'click', evt => {
+				evt.stopPropagation();
+				this.calMonth0 = m;
+				this.closeCalPicker();
+			});
+		}
+	}
+
+	private bindCalPickerOutsideClose(pickers: HTMLElement): void {
+		this.detachCalPickerDocClose();
+		const close = (evt: MouseEvent) => {
+			const target = evt.target;
+			if (target instanceof Node && pickers.contains(target)) return;
+			this.calPicker = null;
+			this.detachCalPickerDocClose();
+			this.renderCalendar();
+		};
+		this.calPickerDocClose = close;
+		window.setTimeout(() => {
+			if (this.calPickerDocClose === close) {
+				document.addEventListener('mousedown', close, true);
+			}
+		}, 0);
 	}
 
 	private renderCalendar(): void {
@@ -2002,59 +2259,66 @@ export class StickyNoteDashboardView extends ItemView {
 		host.empty();
 
 		const head = host.createDiv({ cls: 'csn-dash-cal-head' });
-		const prev = head.createEl('button', {
+
+		const navGroup = head.createDiv({ cls: 'csn-dash-cal-nav-group' });
+		const prev = navGroup.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-dash-cal-nav',
 			attr: { 'aria-label': t('DASH_CALENDAR_PREV') }
 		});
 		setIcon(prev, 'chevron-left');
 
-		const pickers = head.createDiv({ cls: 'csn-dash-cal-pickers' });
-		const yearSel = pickers.createEl('select', {
-			cls: 'csn-dash-cal-select csn-dash-cal-year',
-			attr: { 'aria-label': t('DASH_CALENDAR_YEAR_ARIA') }
-		});
-		const nowY = new Date().getFullYear();
-		const yearMin = Math.min(this.calYear, nowY) - 8;
-		const yearMax = Math.max(this.calYear, nowY) + 4;
-		for (let y = yearMin; y <= yearMax; y++) {
-			yearSel.createEl('option', {
-				text: String(y),
-				attr: { value: String(y), ...(y === this.calYear ? { selected: 'selected' } : {}) }
-			});
-		}
-		const monthSel = pickers.createEl('select', {
-			cls: 'csn-dash-cal-select csn-dash-cal-month',
-			attr: { 'aria-label': t('DASH_CALENDAR_MONTH_ARIA') }
-		});
-		const monthLabels = monthShortLabels();
-		for (let m = 0; m < 12; m++) {
-			monthSel.createEl('option', {
-				text: monthLabels[m] ?? String(m + 1),
-				attr: { value: String(m), ...(m === this.calMonth0 ? { selected: 'selected' } : {}) }
-			});
-		}
-
-		const yearFilterBtn = pickers.createEl('button', {
+		const pickers = navGroup.createDiv({ cls: 'csn-dash-cal-pickers' });
+		const yearBtn = pickers.createEl('button', {
 			type: 'button',
-			cls: `csn-dash-cal-scope-btn csn-dash-cal-scope-year${
+			cls: `csn-dash-cal-ym csn-dash-cal-ym-year${this.calPicker === 'year' ? ' is-open' : ''}`,
+			text: this.formatCalYearText(this.calYear),
+			attr: {
+				'aria-label': t('DASH_CALENDAR_YEAR_ARIA'),
+				'aria-expanded': this.calPicker === 'year' ? 'true' : 'false'
+			}
+		});
+		const monthBtn = pickers.createEl('button', {
+			type: 'button',
+			cls: `csn-dash-cal-ym csn-dash-cal-ym-month${this.calPicker === 'month' ? ' is-open' : ''}`,
+			text: this.formatCalMonthText(this.calMonth0),
+			attr: {
+				'aria-label': t('DASH_CALENDAR_MONTH_ARIA'),
+				'aria-expanded': this.calPicker === 'month' ? 'true' : 'false'
+			}
+		});
+
+		if (this.calPicker === 'year') this.renderCalYearPopover(pickers);
+		else if (this.calPicker === 'month') this.renderCalMonthPopover(pickers);
+		if (this.calPicker) this.bindCalPickerOutsideClose(pickers);
+
+		const next = navGroup.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-cal-nav',
+			attr: { 'aria-label': t('DASH_CALENDAR_NEXT') }
+		});
+		setIcon(next, 'chevron-right');
+
+		const actions = head.createDiv({ cls: 'csn-dash-cal-actions' });
+		const yearFilterBtn = actions.createEl('button', {
+			type: 'button',
+			cls: `clickable-icon csn-dash-cal-scope-btn csn-dash-cal-scope-year${
 				this.selectedDateFilter?.kind === 'year' && this.selectedDateFilter.year === this.calYear
 					? ' is-active'
 					: ''
 			}`,
-			text: t('DASH_CALENDAR_SCOPE_YEAR'),
 			attr: { 'aria-label': t('DASH_CALENDAR_SELECT_YEAR', { year: this.calYear }) }
 		});
-		const monthFilterBtn = pickers.createEl('button', {
+		setIcon(yearFilterBtn, 'calendar-range');
+		const monthFilterBtn = actions.createEl('button', {
 			type: 'button',
-			cls: `csn-dash-cal-scope-btn csn-dash-cal-scope-month${
+			cls: `clickable-icon csn-dash-cal-scope-btn csn-dash-cal-scope-month${
 				this.selectedDateFilter?.kind === 'month' &&
 				this.selectedDateFilter.year === this.calYear &&
 				this.selectedDateFilter.month0 === this.calMonth0
 					? ' is-active'
 					: ''
 			}`,
-			text: t('DASH_CALENDAR_SCOPE_MONTH'),
 			attr: {
 				'aria-label': t('DASH_CALENDAR_SELECT_MONTH', {
 					year: this.calYear,
@@ -2062,15 +2326,27 @@ export class StickyNoteDashboardView extends ItemView {
 				})
 			}
 		});
-
-		const next = head.createEl('button', {
+		setIcon(monthFilterBtn, 'calendar');
+		const todayBtn = actions.createEl('button', {
 			type: 'button',
-			cls: 'clickable-icon csn-dash-cal-nav',
-			attr: { 'aria-label': t('DASH_CALENDAR_NEXT') }
+			cls: 'clickable-icon csn-dash-cal-today',
+			attr: { 'aria-label': t('DASH_CALENDAR_TODAY_ARIA') }
 		});
-		setIcon(next, 'chevron-right');
+		setIcon(todayBtn, 'crosshair');
+		this.dateFilterClearBtn = actions.createEl('button', {
+			type: 'button',
+			cls: `clickable-icon csn-dash-cal-clear${this.selectedDateFilter ? '' : ' is-disabled'}`,
+			attr: {
+				'aria-label': t('DASH_CALENDAR_CLEAR'),
+				...(this.selectedDateFilter ? {} : { disabled: 'true' })
+			}
+		});
+		setIcon(this.dateFilterClearBtn, 'calendar-x');
+		this.registerDomEvent(this.dateFilterClearBtn, 'click', () => this.clearDateFilter());
 
 		this.registerDomEvent(prev, 'click', () => {
+			this.calPicker = null;
+			this.detachCalPickerDocClose();
 			if (this.calMonth0 === 0) {
 				this.calMonth0 = 11;
 				this.calYear -= 1;
@@ -2080,6 +2356,8 @@ export class StickyNoteDashboardView extends ItemView {
 			this.renderCalendar();
 		});
 		this.registerDomEvent(next, 'click', () => {
+			this.calPicker = null;
+			this.detachCalPickerDocClose();
 			if (this.calMonth0 === 11) {
 				this.calMonth0 = 0;
 				this.calYear += 1;
@@ -2088,17 +2366,14 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 			this.renderCalendar();
 		});
-		this.registerDomEvent(yearSel, 'change', () => {
-			const y = parseInt(yearSel.value, 10);
-			if (!Number.isFinite(y)) return;
-			this.calYear = y;
-			this.renderCalendar();
+		this.registerDomEvent(todayBtn, 'click', () => this.goToToday());
+		this.registerDomEvent(yearBtn, 'click', evt => {
+			evt.stopPropagation();
+			this.openCalPicker('year');
 		});
-		this.registerDomEvent(monthSel, 'change', () => {
-			const m = parseInt(monthSel.value, 10);
-			if (!Number.isFinite(m) || m < 0 || m > 11) return;
-			this.calMonth0 = m;
-			this.renderCalendar();
+		this.registerDomEvent(monthBtn, 'click', evt => {
+			evt.stopPropagation();
+			this.openCalPicker('month');
 		});
 		this.registerDomEvent(yearFilterBtn, 'click', () => {
 			this.setDateFilter({ kind: 'year', year: this.calYear });
@@ -2108,81 +2383,50 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 
 		const weekHead = host.createDiv({ cls: 'csn-dash-cal-week' });
-		weekHead.createSpan({
-			cls: 'csn-dash-cal-weekday csn-dash-cal-weeknum-head',
-			text: t('DASH_CALENDAR_WEEK_HEADER')
-		});
 		for (const d of weekdayMinLabels()) {
 			weekHead.createSpan({ cls: 'csn-dash-cal-weekday', text: d });
 		}
 
 		const grid = host.createDiv({ cls: 'csn-dash-cal-grid' });
 		const todayKey = localDateKeyFromMs(Date.now());
+		const heatMax = this.calendarHeatMax();
 		const rows = buildMonthWeekRows(this.calYear, this.calMonth0);
 		for (const row of rows) {
-			const weekBtn = grid.createEl('button', {
-				type: 'button',
-				cls: 'csn-dash-cal-cell csn-dash-cal-weeknum',
-				text: String(row.week),
-				attr: {
-					'aria-label': t('DASH_CALENDAR_WEEK_ARIA', { week: row.week }),
-					'data-csn-week-year': String(row.weekYear),
-					'data-csn-week': String(row.week)
-				}
-			});
-			if (
-				this.selectedDateFilter?.kind === 'week' &&
-				this.selectedDateFilter.year === row.weekYear &&
-				this.selectedDateFilter.week === row.week
-			) {
-				weekBtn.addClass('is-selected');
-			}
-			if (
-				row.days.some(day => {
-					const key = localDateKeyFromMs(new Date(day.y, day.m0, day.d).getTime());
-					return this.noteDateKeys.has(key);
-				})
-			) {
-				weekBtn.addClass('has-notes');
-			}
-			this.registerDomEvent(weekBtn, 'click', () => {
-				this.setDateFilter({ kind: 'week', year: row.weekYear, week: row.week });
-			});
-
-			for (const day of row.days) {
+			for (const day of row) {
 				const key = localDateKeyFromMs(new Date(day.y, day.m0, day.d).getTime());
+				const count = this.noteDateCounts.get(key) ?? 0;
+				const level = heatmapLevelFromCount(count, heatMax);
 				const cell = grid.createEl('button', {
 					type: 'button',
-					cls: `csn-dash-cal-cell${day.inMonth ? '' : ' is-outside'}`,
+					cls: `csn-dash-cal-cell csn-dash-cal-day${day.inMonth ? '' : ' is-outside'}${
+						level > 0 ? ` heat-${level}` : ''
+					}`,
 					text: String(day.d),
-					attr: { 'data-csn-date': key }
+					attr: {
+						'data-csn-date': key,
+						'aria-label':
+							count > 0
+								? t('DASH_CALENDAR_DAY_ARIA', { date: key, count })
+								: t('DASH_CALENDAR_DAY_ARIA_EMPTY', { date: key })
+					}
 				});
+				if (count > 0) cell.title = t('DASH_CALENDAR_DAY_ARIA', { date: key, count });
 				if (key === todayKey) cell.addClass('is-today');
-				if (
-					this.selectedDateFilter?.kind === 'day' &&
-					this.selectedDateFilter.dateKey === key
-				) {
-					cell.addClass('is-selected');
-				}
-				if (this.noteDateKeys.has(key)) cell.addClass('has-notes');
-				this.registerDomEvent(cell, 'click', () => {
+				if (this.isDateKeySelected(key)) cell.addClass('is-selected');
+				this.registerDomEvent(cell, 'click', (evt: MouseEvent) => {
 					if (!day.inMonth) {
 						this.calYear = day.y;
 						this.calMonth0 = day.m0;
+					}
+					if (evt.ctrlKey || evt.metaKey) {
+						this.toggleDayMultiSelect(key);
+						return;
 					}
 					this.setDateFilter({ kind: 'day', dateKey: key });
 				});
 			}
 		}
 
-		if (this.selectedDateFilter) {
-			const clear = host.createEl('button', {
-				type: 'button',
-				cls: 'csn-dash-cal-clear',
-				text: t('DASH_CALENDAR_CLEAR')
-			});
-			this.registerDomEvent(clear, 'click', () => this.clearDateFilter());
-		}
 		this.updateCalendarMarks();
 	}
 
@@ -2194,33 +2438,9 @@ export class StickyNoteDashboardView extends ItemView {
 			if (!(el instanceof HTMLElement)) continue;
 			const key = el.dataset.csnDate;
 			if (!key) continue;
-			el.toggleClass('has-notes', this.noteDateKeys.has(key));
-			el.toggleClass(
-				'is-selected',
-				this.selectedDateFilter?.kind === 'day' && this.selectedDateFilter.dateKey === key
-			);
-		}
-
-		const gridChildren = Array.from(host.querySelectorAll('.csn-dash-cal-grid > *'));
-		for (let i = 0; i < gridChildren.length; i++) {
-			const el = gridChildren[i];
-			if (!(el instanceof HTMLElement) || !el.classList.contains('csn-dash-cal-weeknum')) continue;
-			const wy = parseInt(el.dataset.csnWeekYear ?? '', 10);
-			const w = parseInt(el.dataset.csnWeek ?? '', 10);
-			el.toggleClass(
-				'is-selected',
-				this.selectedDateFilter?.kind === 'week' &&
-					this.selectedDateFilter.year === wy &&
-					this.selectedDateFilter.week === w
-			);
-			let has = false;
-			for (let j = 1; j <= 7; j++) {
-				const dayEl = gridChildren[i + j];
-				if (!(dayEl instanceof HTMLElement)) continue;
-				const key = dayEl.dataset.csnDate;
-				if (key && this.noteDateKeys.has(key)) has = true;
-			}
-			el.toggleClass('has-notes', has);
+			this.syncDayCellHeat(el, key);
+			el.toggleClass('is-selected', this.isDateKeySelected(key));
+			el.toggleClass('is-today', key === localDateKeyFromMs(Date.now()));
 		}
 
 		host.querySelector('.csn-dash-cal-scope-year')?.toggleClass(
@@ -2234,17 +2454,183 @@ export class StickyNoteDashboardView extends ItemView {
 				this.selectedDateFilter.month0 === this.calMonth0
 		);
 
-		const existing = host.querySelector('.csn-dash-cal-clear');
-		if (this.selectedDateFilter && !existing) {
-			const clear = host.createEl('button', {
-				type: 'button',
-				cls: 'csn-dash-cal-clear',
-				text: t('DASH_CALENDAR_CLEAR')
-			});
-			this.registerDomEvent(clear, 'click', () => this.clearDateFilter());
-		} else if (!this.selectedDateFilter && existing) {
-			existing.remove();
+		this.syncDateFilterBar();
+	}
+
+	private formatDateFilterChipLabel(filter: StickyDateFilter): string {
+		switch (filter.kind) {
+			case 'year':
+				return t('DASH_DATE_FILTER_YEAR', { year: filter.year });
+			case 'month':
+				return t('DASH_DATE_FILTER_MONTH', {
+					year: filter.year,
+					n: filter.month0 + 1,
+					month: String(filter.month0 + 1).padStart(2, '0')
+				});
+			case 'week':
+				return t('DASH_DATE_FILTER_WEEK', { year: filter.year, week: filter.week });
+			case 'day':
+				return filter.dateKey;
+			case 'days':
+				return filter.dateKeys.join(', ');
 		}
+	}
+
+	private removeDateFilterChip(removeKey: string): void {
+		const f = this.selectedDateFilter;
+		if (!f) return;
+		if (f.kind === 'days') {
+			this.toggleDayMultiSelect(removeKey);
+			return;
+		}
+		if (f.kind === 'day' && f.dateKey === removeKey) {
+			this.clearDateFilter();
+			return;
+		}
+		if (removeKey === 'all' || removeKey === stickyDateFilterKey(f)) {
+			this.clearDateFilter();
+		}
+	}
+
+	/** 追加日期到筛选（支持连续多加，不切换移除）。 */
+	private addDateToFilter(dateKey: string): void {
+		const key = dateKey.trim();
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
+		const cur = this.selectedDateFilter;
+		const keys = new Set<string>();
+		if (cur?.kind === 'day') keys.add(cur.dateKey);
+		else if (cur?.kind === 'days') {
+			for (const k of cur.dateKeys) keys.add(k);
+		}
+		keys.add(key);
+		if (keys.size === 1) {
+			this.applyDateFilter({ kind: 'day', dateKey: [...keys][0]! });
+		} else {
+			this.applyDateFilter({ kind: 'days', dateKeys: [...keys].sort() });
+		}
+	}
+
+	private isDateFilterPanelOpen(): boolean {
+		return !!this.dateFilterPanelEl && !this.dateFilterPanelEl.hasClass('csn-dash-date-filter-panel--hidden');
+	}
+
+	private buildDateFilterPanel(host: HTMLElement): void {
+		const panel = host.createDiv({
+			cls: 'csn-dash-date-filter-panel csn-dash-date-filter-panel--hidden',
+			attr: {
+				id: 'csn-dash-date-filter-panel',
+				role: 'dialog',
+				'aria-label': t('DASH_DATE_FILTER_PANEL_ARIA')
+			}
+		});
+		this.dateFilterPanelEl = panel;
+		panel.createDiv({
+			cls: 'csn-dash-date-filter-panel-hint',
+			text: t('DASH_DATE_FILTER_MULTI_HINT')
+		});
+		this.dateFilterInput = panel.createEl('input', {
+			type: 'date',
+			cls: 'csn-dash-date-filter-input',
+			attr: { 'aria-label': t('DASH_DATE_FILTER_INPUT_ARIA') }
+		});
+		this.registerDomEvent(this.dateFilterInput, 'click', (evt: MouseEvent) => {
+			evt.stopPropagation();
+		});
+		this.registerDomEvent(this.dateFilterInput, 'change', () => {
+			const v = this.dateFilterInput?.value?.trim() ?? '';
+			if (!v) return;
+			this.addDateToFilter(v);
+			if (this.dateFilterInput) this.dateFilterInput.value = '';
+			window.setTimeout(() => this.dateFilterInput?.focus(), 0);
+		});
+		this.registerDomEvent(this.dateFilterInput, 'keydown', (evt: KeyboardEvent) => {
+			if (evt.key !== 'Enter') return;
+			evt.preventDefault();
+			const v = this.dateFilterInput?.value?.trim() ?? '';
+			if (!v) return;
+			this.addDateToFilter(v);
+			if (this.dateFilterInput) this.dateFilterInput.value = '';
+		});
+	}
+
+	private openDateFilterPanel(): void {
+		const panel = this.dateFilterPanelEl;
+		const btn = this.dateFilterAddBtn;
+		if (!panel) return;
+		panel.removeClass('csn-dash-date-filter-panel--hidden');
+		btn?.addClass('is-active');
+		btn?.setAttr('aria-expanded', 'true');
+		const today = localDateKeyFromMs(Date.now());
+		if (this.dateFilterInput && !this.dateFilterInput.value) {
+			this.dateFilterInput.value = today;
+		}
+		window.setTimeout(() => this.dateFilterInput?.focus(), 0);
+	}
+
+	private closeDateFilterPanel(): void {
+		const panel = this.dateFilterPanelEl;
+		const btn = this.dateFilterAddBtn;
+		if (!panel || panel.hasClass('csn-dash-date-filter-panel--hidden')) return;
+		panel.addClass('csn-dash-date-filter-panel--hidden');
+		btn?.removeClass('is-active');
+		btn?.setAttr('aria-expanded', 'false');
+	}
+
+	private toggleDateFilterPanel(): void {
+		if (this.isDateFilterPanelOpen()) this.closeDateFilterPanel();
+		else this.openDateFilterPanel();
+	}
+
+	private syncDateFilterBar(): void {
+		const clear = this.dateFilterClearBtn;
+		const chipsEl = this.dateFilterChipsEl;
+		const addBtn = this.dateFilterAddBtn;
+		const has = !!this.selectedDateFilter;
+		if (clear) {
+			clear.toggleClass('is-disabled', !has);
+			clear.disabled = !has;
+			clear.toggleClass('is-active', has);
+		}
+		if (addBtn) {
+			addBtn.toggleClass('is-active', this.isDateFilterPanelOpen() || has);
+			addBtn.setAttr('aria-expanded', this.isDateFilterPanelOpen() ? 'true' : 'false');
+		}
+		if (!chipsEl) return;
+		chipsEl.empty();
+		const f = this.selectedDateFilter;
+		if (!f) return;
+
+		const addChip = (label: string, removeKey: string) => {
+			const chip = chipsEl.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-date-filter-chip',
+				attr: {
+					title: label,
+					'aria-label': label
+				}
+			});
+			chip.createSpan({ cls: 'csn-dash-date-filter-chip-text', text: label });
+			const remove = chip.createEl('span', {
+				cls: 'csn-dash-date-filter-chip-remove',
+				attr: {
+					role: 'button',
+					tabindex: '0',
+					'data-csn-date-chip-remove': removeKey,
+					'aria-label': t('DASH_DATE_FILTER_CHIP_REMOVE_ARIA', { label })
+				}
+			});
+			setIcon(remove, 'x');
+		};
+
+		if (f.kind === 'days') {
+			for (const key of [...f.dateKeys].sort()) addChip(key, key);
+			return;
+		}
+		if (f.kind === 'day') {
+			addChip(f.dateKey, f.dateKey);
+			return;
+		}
+		addChip(this.formatDateFilterChipLabel(f), stickyDateFilterKey(f));
 	}
 
 	private workspaceSelEquals(other: DashWorkspaceSel): boolean {
@@ -3622,7 +4008,8 @@ export class StickyNoteDashboardView extends ItemView {
 			);
 			files = this.applyAreaModeFilters(files);
 
-			this.noteDateKeys = ctimeDateKeysForFiles(files);
+			this.noteDateCounts = ctimeDateCountsForFiles(files);
+			this.noteDateKeys = new Set(this.noteDateCounts.keys());
 			this.updateCalendarMarks();
 
 			files = filterStickyFilesByDateFilter(files, this.selectedDateFilter);
@@ -3750,6 +4137,8 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.detachCalPickerDocClose();
+		this.calPicker = null;
 		this.hideCanvasDragBehaviorHint();
 		this.cancelPendingRefresh();
 		this.debouncedStructureRefresh = null;
@@ -3761,6 +4150,12 @@ export class StickyNoteDashboardView extends ItemView {
 		this.selectedListNotePaths.clear();
 		this.lastSelectedListNotePath = null;
 		this.calendarEl = null;
+		this.dateFilterClearBtn = null;
+		this.dateFilterChipsEl = null;
+		this.dateFilterWrapEl = null;
+		this.dateFilterAddBtn = null;
+		this.dateFilterPanelEl = null;
+		this.dateFilterInput = null;
 		this.composerEditor?.destroy();
 		this.composerEditor = null;
 		this.composerHostEl = null;
