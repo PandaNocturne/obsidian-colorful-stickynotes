@@ -772,6 +772,63 @@ export class StickyNoteManager {
 		await this.syncStickyWorkspaceYamlForFile(file).catch(() => undefined);
 	}
 
+	private getPopoverFile(pop: StickyNotePopover): TFile | undefined {
+		const vf =
+			pop.leaf?.view && 'file' in pop.leaf.view ? (pop.leaf.view as { file?: TFile }).file : undefined;
+		return vf instanceof TFile ? vf : undefined;
+	}
+
+	/** 活动工作区列表中包含该文件的工作区 id。 */
+	private getWorkspaceIdsContainingFile(file: TFile): string[] {
+		const ids: string[] = [];
+		for (const ws of this.workspaces.workspaces) {
+			if (this.findWorkspaceWindowIndex(ws, file) >= 0) ids.push(ws.id);
+		}
+		return ids;
+	}
+
+	/**
+	 * 新建便笺工作区归属：有活动工作区则加入活动区；
+	 * 否则若从悬浮便笺「+」创建，则继承源便笺所属工作区（无则保持未分类）。
+	 */
+	private async assignNewStickyToWorkspaceContext(
+		file: TFile,
+		sourcePopover?: StickyNotePopover
+	): Promise<void> {
+		if (this.activeWorkspace()) {
+			await this.ensureStickyInActiveWorkspace(file);
+			return;
+		}
+		if (!sourcePopover) return;
+		await this.ensureStickyInSameWorkspacesAs(file, sourcePopover);
+	}
+
+	/** 将新建便笺加入源悬浮便笺所在的全部活动工作区。 */
+	private async ensureStickyInSameWorkspacesAs(
+		file: TFile,
+		sourcePopover: StickyNotePopover
+	): Promise<void> {
+		const source = this.getPopoverFile(sourcePopover);
+		if (!source) return;
+		let wsIds = this.getWorkspaceIdsContainingFile(source);
+		if (wsIds.length === 0) {
+			const fromYaml = await resolveStickyWorkspacesForFile(this.app, source);
+			wsIds = fromYaml.filter(id => this.workspaces.workspaces.some(w => w.id === id));
+		}
+		if (wsIds.length === 0) return;
+		let changed = false;
+		for (const wsId of wsIds) {
+			const ws = this.workspaces.workspaces.find(w => w.id === wsId);
+			if (!ws) continue;
+			if (this.findWorkspaceWindowIndex(ws, file) >= 0) continue;
+			ws.windows.push(this.buildSerializedWindowForFile(file, { open: true }));
+			ws.updatedAt = Date.now();
+			changed = true;
+		}
+		if (changed) this.scheduleSaveWorkspaces();
+		await this.syncStickyWorkspaceYamlForFile(file).catch(() => undefined);
+	}
+
 	/** 关闭已打开、但不在当前活动工作区成员中的浮动便笺。 */
 	private async closeOpenStickiesNotInActiveWorkspace(): Promise<void> {
 		const ws = this.activeWorkspace();
@@ -1608,7 +1665,7 @@ export class StickyNoteManager {
 					() => undefined
 				);
 				if (!skipActiveWorkspace) {
-					await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
+					await this.assignNewStickyToWorkspaceContext(f, sourcePopover).catch(() => undefined);
 				}
 				this.notifyStickyListOpenIndicators();
 				return f;
@@ -1662,7 +1719,7 @@ export class StickyNoteManager {
 			this.bringStickyToFront(pop);
 			this.persistOpenWindows();
 			if (!skipActiveWorkspace) {
-				await this.ensureStickyInActiveWorkspace(f).catch(() => undefined);
+				await this.assignNewStickyToWorkspaceContext(f, sourcePopover).catch(() => undefined);
 			}
 			this.notifyStickyListOpenIndicators();
 			return f;

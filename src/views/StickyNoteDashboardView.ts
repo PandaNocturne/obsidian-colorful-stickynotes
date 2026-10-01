@@ -1320,6 +1320,9 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		/* 进入仪表盘即关闭当前激活的便笺工作区会话 */
+		await this.plugin.stickies.deselectActiveStickyWorkspace();
+
 		const root = this.contentEl;
 		root.empty();
 		root.addClass('csn-dash');

@@ -810,6 +810,8 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			await leaf.setViewState({ type: VIEW_STICKY_NOTE_DASHBOARD, active: true });
 		}
 		await workspace.revealLeaf(leaf);
+		/* 打开仪表盘时取消活动便笺工作区并关闭其浮动窗口 */
+		await this.stickies.deselectActiveStickyWorkspace();
 	}
 
 	/** 打开或聚焦指定文件的便笺窗口 */
