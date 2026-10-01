@@ -390,6 +390,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.settings.dashboardComposerPaneHeight = clampDashComposerPaneHeight(
 			this.settings.dashboardComposerPaneHeight
 		);
+		{
+			const rawIds = this.settings.dashboardCollapsedWorkspaceGroupIds;
+			this.settings.dashboardCollapsedWorkspaceGroupIds = Array.isArray(rawIds)
+				? [...new Set(rawIds.filter((id): id is string => typeof id === 'string' && id.length > 0))]
+				: [];
+		}
 
 		const nls = this.settings.noteListSort;
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.some(s => s === nls)) {

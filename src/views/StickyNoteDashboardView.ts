@@ -72,13 +72,27 @@ import {
 	readStickyPathsDragData,
 	setStickyPathsDragData,
 	STICKY_PATHS_DND_MIME,
-	WORKSPACE_DND_MIME
+	WORKSPACE_DND_MIME,
+	WORKSPACE_GROUP_DND_MIME
 } from '../utils/workspace-dnd';
 
 type DashWorkspaceSel =
 	| { kind: 'all' }
 	| { kind: 'group'; groupId: string }
 	| { kind: 'workspace'; workspaceId: string };
+
+type DashWsTreeSort = 'manual' | 'name-asc' | 'name-desc' | 'mtime-desc';
+
+const DASH_WS_TREE_SORT_SPECS: Array<{
+	mode: DashWsTreeSort;
+	titleKey: MessageKey;
+	menuIcon: string;
+}> = [
+	{ mode: 'manual', titleKey: 'DASH_WS_SORT_MANUAL', menuIcon: 'list-ordered' },
+	{ mode: 'name-asc', titleKey: 'DASH_WS_SORT_NAME_ASC', menuIcon: 'arrow-up-narrow-wide' },
+	{ mode: 'name-desc', titleKey: 'DASH_WS_SORT_NAME_DESC', menuIcon: 'arrow-down-narrow-wide' },
+	{ mode: 'mtime-desc', titleKey: 'DASH_WS_SORT_MTIME_DESC', menuIcon: 'clock' }
+];
 
 /** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
 function listPreviewEmbedMarkdown(file: TFile): string {
@@ -201,6 +215,11 @@ export class StickyNoteDashboardView extends ItemView {
 	private treeEl: HTMLElement | null = null;
 	private wsTreeFilterInput: HTMLInputElement | null = null;
 	private wsTreeFilterQuery = '';
+	private wsTreeSortMode: DashWsTreeSort = 'manual';
+	/** 树内正在拖拽的数据类型（自定义 MIME 在部分 Electron 的 dragover.types 里不可靠）。 */
+	private wsTreeDragKind: 'none' | 'workspace' | 'group' | 'sticky' = 'none';
+	private wsTreeSortBtn: HTMLButtonElement | null = null;
+	private wsTreeCollapseBtn: HTMLButtonElement | null = null;
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
 	private searchClearBtn: HTMLButtonElement | null = null;
@@ -1133,7 +1152,27 @@ export class StickyNoteDashboardView extends ItemView {
 		const left = colLeft.createDiv({ cls: 'csn-dash-left' });
 		const wsHead = left.createDiv({ cls: 'csn-dash-ws-head' });
 		wsHead.createDiv({ cls: 'csn-dash-ws-title', text: t('DASH_WS_TREE_TITLE') });
-		const newWsBtn = wsHead.createEl('button', {
+		const wsActions = wsHead.createDiv({ cls: 'csn-dash-ws-actions' });
+		this.wsTreeSortBtn = wsActions.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-ws-action-btn',
+			attr: { 'aria-label': t('DASH_WS_SORT_ARIA'), 'aria-haspopup': 'menu' }
+		});
+		setIcon(this.wsTreeSortBtn, 'arrow-up-down');
+		this.registerDomEvent(this.wsTreeSortBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			this.openWsTreeSortMenu(evt);
+		});
+		this.wsTreeCollapseBtn = wsActions.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-ws-action-btn',
+			attr: { 'aria-label': t('DASH_WS_COLLAPSE_ALL_ARIA') }
+		});
+		setIcon(this.wsTreeCollapseBtn, 'chevrons-down-up');
+		this.registerDomEvent(this.wsTreeCollapseBtn, 'click', () => {
+			this.toggleWsTreeCollapseAll();
+		});
+		const newWsBtn = wsActions.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-dash-ws-add-btn',
 			attr: { 'aria-label': t('DASH_WS_NEW_ARIA') }
@@ -1142,6 +1181,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.registerDomEvent(newWsBtn, 'click', () => {
 			void this.openNewWorkspaceModal();
 		});
+		this.syncWsTreeCollapseBtn();
 		this.treeEl = left.createDiv({ cls: 'csn-dash-ws-tree' });
 		const wsFilter = left.createDiv({ cls: 'csn-dash-ws-filter' });
 		const wsFilterInner = wsFilter.createDiv({ cls: 'csn-dash-ws-filter-inner' });
@@ -1484,12 +1524,14 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 
 		this.registerVaultRefresh();
+		this.loadCollapsedGroupsFromSettings();
 		this.syncListGridMetricsFromSettings();
 		this.syncViewContentZoomFromSettings();
 		this.syncArchiveButtons();
 		this.syncColorButtons();
 		this.syncTagFilterButton();
 		this.syncSortToolbarBtn();
+		this.syncWsTreeSortBtn();
 		this.syncListArchiveCheckboxEditUI();
 		this.syncCardOverflowClipToolbarBtn();
 		this.syncSearchClearVisibility();
@@ -2107,6 +2149,121 @@ export class StickyNoteDashboardView extends ItemView {
 		this.renderWorkspaceTree();
 	}
 
+	private openWsTreeSortMenu(evt: MouseEvent): void {
+		const menu = new Menu();
+		for (const spec of DASH_WS_TREE_SORT_SPECS) {
+			menu.addItem(item => {
+				item
+					.setTitle(t(spec.titleKey))
+					.setIcon(spec.menuIcon)
+					.setChecked(spec.mode === this.wsTreeSortMode)
+					.onClick(() => {
+						this.wsTreeSortMode = spec.mode;
+						this.syncWsTreeSortBtn();
+						this.renderWorkspaceTree();
+					});
+			});
+		}
+		menu.showAtMouseEvent(evt);
+	}
+
+	private syncWsTreeSortBtn(): void {
+		const btn = this.wsTreeSortBtn;
+		if (!btn) return;
+		const spec = DASH_WS_TREE_SORT_SPECS.find(s => s.mode === this.wsTreeSortMode) ?? DASH_WS_TREE_SORT_SPECS[0]!;
+		btn.empty();
+		setIcon(btn, this.wsTreeSortMode === 'manual' ? 'arrow-up-down' : spec.menuIcon);
+		btn.toggleClass('is-active', this.wsTreeSortMode !== 'manual');
+		btn.setAttr('aria-label', t('DASH_WS_SORT_ARIA_WITH', { title: t(spec.titleKey) }));
+	}
+
+	private allWsTreeGroupsCollapsed(groupIds: readonly string[]): boolean {
+		if (groupIds.length === 0) return false;
+		return groupIds.every(id => this.collapsedGroupIds.has(id));
+	}
+
+	private syncWsTreeCollapseBtn(groupIds?: readonly string[]): void {
+		const btn = this.wsTreeCollapseBtn;
+		if (!btn) return;
+		const ids =
+			groupIds ??
+			(this.plugin.stickies.workspaces.tabGroups.length > 0
+				? this.plugin.stickies.workspaces.tabGroups.map(g => g.id)
+				: [WS_TAB_GROUP_DEFAULT_ID]);
+		const allCollapsed = this.allWsTreeGroupsCollapsed(ids);
+		btn.empty();
+		setIcon(btn, allCollapsed ? 'chevrons-up-down' : 'chevrons-down-up');
+		btn.setAttr(
+			'aria-label',
+			allCollapsed ? t('DASH_WS_EXPAND_ALL_ARIA') : t('DASH_WS_COLLAPSE_ALL_ARIA')
+		);
+		btn.toggleClass('is-active', allCollapsed);
+	}
+
+	private toggleWsTreeCollapseAll(): void {
+		const file = this.plugin.stickies.workspaces;
+		const groupIds =
+			file.tabGroups.length > 0
+				? file.tabGroups.map(g => g.id)
+				: [WS_TAB_GROUP_DEFAULT_ID];
+		if (this.allWsTreeGroupsCollapsed(groupIds)) {
+			this.collapsedGroupIds.clear();
+		} else {
+			for (const id of groupIds) this.collapsedGroupIds.add(id);
+		}
+		this.persistCollapsedGroups();
+		this.syncWsTreeCollapseBtn(groupIds);
+		this.renderWorkspaceTree();
+	}
+
+	private loadCollapsedGroupsFromSettings(): void {
+		const ids = this.plugin.settings.dashboardCollapsedWorkspaceGroupIds;
+		this.collapsedGroupIds = new Set(Array.isArray(ids) ? ids.filter(Boolean) : []);
+	}
+
+	private persistCollapsedGroups(): void {
+		this.plugin.settings.dashboardCollapsedWorkspaceGroupIds = [...this.collapsedGroupIds];
+		void this.plugin.saveSettings();
+	}
+
+	private sortWorkspacesForTree(list: StickyWorkspace[]): StickyWorkspace[] {
+		if (this.wsTreeSortMode === 'manual') return list;
+		const arr = [...list];
+		if (this.wsTreeSortMode === 'name-asc') {
+			arr.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+		} else if (this.wsTreeSortMode === 'name-desc') {
+			arr.sort((a, b) => b.name.localeCompare(a.name, undefined, { sensitivity: 'base' }));
+		} else {
+			arr.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+		}
+		return arr;
+	}
+
+	/** 按当前树排序模式排列分组（最近更新取组内工作区最新 mtime）。 */
+	private sortGroupsForTree(
+		groups: StickyWorkspaceTabGroup[],
+		workspaces: readonly StickyWorkspace[]
+	): StickyWorkspaceTabGroup[] {
+		if (this.wsTreeSortMode === 'manual' || groups.length <= 1) return groups;
+		const arr = [...groups];
+		if (this.wsTreeSortMode === 'name-asc') {
+			arr.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+		} else if (this.wsTreeSortMode === 'name-desc') {
+			arr.sort((a, b) => b.name.localeCompare(a.name, undefined, { sensitivity: 'base' }));
+		} else {
+			const maxMtime = (g: StickyWorkspaceTabGroup): number => {
+				let m = 0;
+				for (const ws of workspaces) {
+					if (resolveWorkspaceTabGroupId(ws, groups) !== g.id) continue;
+					m = Math.max(m, ws.updatedAt ?? 0);
+				}
+				return m;
+			};
+			arr.sort((a, b) => maxMtime(b) - maxMtime(a));
+		}
+		return arr;
+	}
+
 	private setWorkspaceSel(next: DashWorkspaceSel): void {
 		if (this.workspaceSelEquals(next)) return;
 		this.workspaceSel = next;
@@ -2211,6 +2368,12 @@ export class StickyNoteDashboardView extends ItemView {
 		menu.showAtMouseEvent(evt);
 	}
 
+	private ensureManualWsTreeSort(): void {
+		if (this.wsTreeSortMode === 'manual') return;
+		this.wsTreeSortMode = 'manual';
+		this.syncWsTreeSortBtn();
+	}
+
 	private bindWorkspaceTreeDrop(
 		el: HTMLElement,
 		opts: {
@@ -2218,12 +2381,21 @@ export class StickyNoteDashboardView extends ItemView {
 			onStickyDrop?: (paths: string[]) => void | Promise<void>;
 			acceptWorkspace?: boolean;
 			onWorkspaceDrop?: (workspaceId: string) => void | Promise<void>;
+			acceptGroup?: boolean;
+			onGroupDrop?: (groupId: string) => void | Promise<void>;
 		}
 	): void {
 		this.registerDomEvent(el, 'dragover', (e: DragEvent) => {
-			const sticky = opts.acceptSticky && dragEventHasMime(e, STICKY_PATHS_DND_MIME);
-			const ws = opts.acceptWorkspace && dragEventHasMime(e, WORKSPACE_DND_MIME);
-			if (!sticky && !ws) return;
+			const sticky =
+				opts.acceptSticky &&
+				(this.wsTreeDragKind === 'sticky' || dragEventHasMime(e, STICKY_PATHS_DND_MIME));
+			const group =
+				opts.acceptGroup &&
+				(this.wsTreeDragKind === 'group' || dragEventHasMime(e, WORKSPACE_GROUP_DND_MIME));
+			const ws =
+				opts.acceptWorkspace &&
+				(this.wsTreeDragKind === 'workspace' || dragEventHasMime(e, WORKSPACE_DND_MIME));
+			if (!sticky && !ws && !group) return;
 			e.preventDefault();
 			e.stopPropagation();
 			if (e.dataTransfer) e.dataTransfer.dropEffect = sticky ? 'copy' : 'move';
@@ -2242,6 +2414,16 @@ export class StickyNoteDashboardView extends ItemView {
 			const paths = readStickyPathsDragData(e.dataTransfer);
 			if (opts.acceptSticky && paths.length > 0 && opts.onStickyDrop) {
 				void opts.onStickyDrop(paths);
+				return;
+			}
+			/* 分组优先于工作区：展开分组时拖到子项也应重排分组，不能被工作区处理器吞掉 */
+			let groupId = e.dataTransfer?.getData(WORKSPACE_GROUP_DND_MIME)?.trim() ?? '';
+			if (!groupId) {
+				const plain = e.dataTransfer?.getData('text/plain')?.trim() ?? '';
+				if (plain.startsWith('csn-wsg:')) groupId = plain.slice('csn-wsg:'.length);
+			}
+			if (opts.acceptGroup && groupId && opts.onGroupDrop) {
+				void opts.onGroupDrop(groupId);
 				return;
 			}
 			const wsId = e.dataTransfer?.getData(WORKSPACE_DND_MIME)?.trim();
@@ -2269,10 +2451,11 @@ export class StickyNoteDashboardView extends ItemView {
 		host.empty();
 		const mgr = this.plugin.stickies;
 		const file = mgr.workspaces;
-		const groups: StickyWorkspaceTabGroup[] =
+		const rawGroups: StickyWorkspaceTabGroup[] =
 			file.tabGroups.length > 0
 				? file.tabGroups
 				: [{ id: WS_TAB_GROUP_DEFAULT_ID, name: t('WS_TAB_GROUP_DEFAULT') }];
+		const groups = this.sortGroupsForTree(rawGroups, file.workspaces);
 
 		const q = this.wsTreeFilterQuery.trim().toLowerCase();
 		const matchText = (s: string) => !q || s.toLowerCase().includes(q);
@@ -2300,15 +2483,17 @@ export class StickyNoteDashboardView extends ItemView {
 					ws => groupMatch || matchText(ws.name) || matchText(ws.remark ?? '')
 				);
 				if (!groupMatch && groupWorkspaces.length === 0) continue;
-				this.collapsedGroupIds.delete(g.id);
 			}
+			groupWorkspaces = this.sortWorkspacesForTree(groupWorkspaces);
 
-			const collapsed = this.collapsedGroupIds.has(g.id);
+			/* 筛选时临时展开匹配分组，不改动已记住的折叠状态 */
+			const collapsed = !q && this.collapsedGroupIds.has(g.id);
 			const groupCount = groupWorkspaces.reduce(
 				(n, ws) => n + mgr.getWorkspaceMemberPathSet(ws).size,
 				0
 			);
 			const groupRow = host.createDiv({ cls: 'csn-dash-tree-group' });
+			const groupDraggable = file.tabGroups.some(tg => tg.id === g.id);
 			const groupBtn = groupRow.createEl('button', {
 				type: 'button',
 				cls: `csn-dash-tree-item csn-dash-tree-group-btn${
@@ -2316,6 +2501,7 @@ export class StickyNoteDashboardView extends ItemView {
 				}`,
 				attr: { 'data-csn-ws-group': g.id }
 			});
+			if (groupDraggable) groupBtn.setAttr('draggable', 'true');
 			const chevron = groupBtn.createSpan({ cls: 'csn-dash-tree-chevron' });
 			setIcon(chevron, collapsed ? 'chevron-right' : 'chevron-down');
 			setIcon(groupBtn.createSpan({ cls: 'csn-dash-tree-icon' }), 'folder');
@@ -2324,8 +2510,9 @@ export class StickyNoteDashboardView extends ItemView {
 			this.registerDomEvent(groupBtn, 'click', (evt: MouseEvent) => {
 				const hit = evt.target;
 				if (hit instanceof Element && hit.closest('.csn-dash-tree-chevron')) {
-					if (collapsed) this.collapsedGroupIds.delete(g.id);
+					if (this.collapsedGroupIds.has(g.id)) this.collapsedGroupIds.delete(g.id);
 					else this.collapsedGroupIds.add(g.id);
+					this.persistCollapsedGroups();
 					this.renderWorkspaceTree();
 					return;
 				}
@@ -2341,12 +2528,41 @@ export class StickyNoteDashboardView extends ItemView {
 			this.registerDomEvent(groupBtn, 'contextmenu', (evt: MouseEvent) => {
 				this.openGroupContextMenu(evt, g);
 			});
+			const onGroupReorderDrop = async (draggedGroupId: string): Promise<void> => {
+				if (draggedGroupId === g.id) return;
+				this.ensureManualWsTreeSort();
+				await mgr.reorderWorkspaceTabGroupBefore(draggedGroupId, g.id);
+				this.renderWorkspaceTree();
+			};
+			if (groupDraggable) {
+				this.registerDomEvent(groupBtn, 'dragstart', (e: DragEvent) => {
+					const hit = e.target;
+					if (hit instanceof Element && hit.closest('.csn-dash-tree-chevron')) {
+						e.preventDefault();
+						return;
+					}
+					this.wsTreeDragKind = 'group';
+					e.dataTransfer?.setData(WORKSPACE_GROUP_DND_MIME, g.id);
+					/* 部分环境仅认可 text/plain，前缀避免与便签路径拖拽混淆 */
+					e.dataTransfer?.setData('text/plain', `csn-wsg:${g.id}`);
+					if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+					groupBtn.addClass('csn-dash-tree-item--dragging');
+				});
+				this.registerDomEvent(groupBtn, 'dragend', () => {
+					this.wsTreeDragKind = 'none';
+					groupBtn.removeClass('csn-dash-tree-item--dragging');
+					this.clearTreeDropTargets();
+				});
+			}
 			this.bindWorkspaceTreeDrop(groupBtn, {
 				acceptWorkspace: true,
 				onWorkspaceDrop: async workspaceId => {
+					this.ensureManualWsTreeSort();
 					await mgr.moveWorkspaceToTabGroup(workspaceId, g.id);
 					this.renderWorkspaceTree();
-				}
+				},
+				acceptGroup: groupDraggable,
+				onGroupDrop: onGroupReorderDrop
 			});
 
 			if (collapsed) continue;
@@ -2376,11 +2592,13 @@ export class StickyNoteDashboardView extends ItemView {
 					this.openWorkspaceContextMenu(evt, ws);
 				});
 				this.registerDomEvent(wsBtn, 'dragstart', (e: DragEvent) => {
+					this.wsTreeDragKind = 'workspace';
 					e.dataTransfer?.setData(WORKSPACE_DND_MIME, ws.id);
 					if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
 					wsBtn.addClass('csn-dash-tree-item--dragging');
 				});
 				this.registerDomEvent(wsBtn, 'dragend', () => {
+					this.wsTreeDragKind = 'none';
 					wsBtn.removeClass('csn-dash-tree-item--dragging');
 					this.clearTreeDropTargets();
 				});
@@ -2390,14 +2608,20 @@ export class StickyNoteDashboardView extends ItemView {
 					acceptWorkspace: true,
 					onWorkspaceDrop: async draggedId => {
 						if (draggedId === ws.id) return;
+						this.ensureManualWsTreeSort();
 						await mgr.reorderWorkspaceBefore(draggedId, ws.id);
 						const targetGroup = resolveWorkspaceTabGroupId(ws, groups);
 						await mgr.moveWorkspaceToTabGroup(draggedId, targetGroup);
 						this.renderWorkspaceTree();
-					}
+					},
+					/* 展开时拖分组常落在子工作区行上，在此接管为「插到该分组前」 */
+					acceptGroup: groupDraggable,
+					onGroupDrop: onGroupReorderDrop
 				});
 			}
 		}
+		this.syncWsTreeSortBtn();
+		this.syncWsTreeCollapseBtn(groups.map(g => g.id));
 	}
 
 	private resolveWorkspacePathFilter(): Set<string> | null {
