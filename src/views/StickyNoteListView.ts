@@ -1340,7 +1340,7 @@ export class StickyNoteListView extends ItemView {
 			this.colorFilterBtnById.set(c.id, sw);
 			this.registerDomEvent(sw, 'click', (e: MouseEvent) => {
 				e.stopPropagation();
-				void this.toggleListColorFilter(c.id);
+				void this.toggleListColorFilter(c.id, e.ctrlKey || e.metaKey);
 			});
 		}
 
@@ -1729,12 +1729,18 @@ export class StickyNoteListView extends ItemView {
 		this.syncColorFilterPaletteAria();
 	}
 
-	/** 切换某色是否参与筛选；均未选中时显示全部便笺。 */
-	private async toggleListColorFilter(color: StickyColorId): Promise<void> {
-		const arr = [...this.plugin.settings.noteListColorFilters];
-		const i = arr.indexOf(color);
-		if (i >= 0) arr.splice(i, 1);
-		else arr.push(color);
+	/** 切换颜色筛选：默认单选；Ctrl/Cmd+点击多选切换。均未选中时显示全部便笺。 */
+	private async toggleListColorFilter(color: StickyColorId, multi = false): Promise<void> {
+		let arr = [...this.plugin.settings.noteListColorFilters];
+		if (multi) {
+			const i = arr.indexOf(color);
+			if (i >= 0) arr.splice(i, 1);
+			else arr.push(color);
+		} else if (arr.length === 1 && arr[0] === color) {
+			arr = [];
+		} else {
+			arr = [color];
+		}
 		this.plugin.settings.noteListColorFilters = arr;
 		await this.plugin.saveSettings();
 		this.syncColorFilterToolbarActive();

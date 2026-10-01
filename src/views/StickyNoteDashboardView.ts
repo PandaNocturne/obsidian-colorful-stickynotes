@@ -51,6 +51,13 @@ import {
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
 import { resolveWorkspaceTabGroupId } from '../workspace-store';
 import { EmbeddedMarkdownEditorHost } from '../utils/embedded-markdown-editor';
+import {
+	collectStickyTagCatalog,
+	displayStickyTag,
+	filterStickyFilesByTags,
+	normalizeStickyTag,
+	type StickyTagCount
+} from '../utils/sticky-tags-from-file';
 
 type DashWorkspaceSel =
 	| { kind: 'all' }
@@ -204,6 +211,24 @@ export class StickyNoteDashboardView extends ItemView {
 	private listPageIndex = 0;
 	private archiveFilter: NoteListArchiveFilter = 'all';
 	private colorFilters: StickyColorId[] = [];
+	/** 包含筛选的标签（规范化 `#tag`）。 */
+	private tagIncludeFilters: string[] = [];
+	/** 排除筛选的标签。 */
+	private tagExcludeFilters: string[] = [];
+	private tagFilterLogic: 'and' | 'or' = 'or';
+	private tagPanelGroup: 'all' | 'selected' = 'all';
+	private tagPanelSearch = '';
+	private tagCatalog: StickyTagCount[] = [];
+	private tagFilterBtn: HTMLButtonElement | null = null;
+	private tagClearBtn: HTMLButtonElement | null = null;
+	private tagChipsEl: HTMLElement | null = null;
+	private tagPanelWrapEl: HTMLElement | null = null;
+	private tagPanelEl: HTMLElement | null = null;
+	private tagPanelSearchInput: HTMLInputElement | null = null;
+	private tagPanelGroupsEl: HTMLElement | null = null;
+	private tagPanelListEl: HTMLElement | null = null;
+	private tagLogicOrBtn: HTMLButtonElement | null = null;
+	private tagLogicAndBtn: HTMLButtonElement | null = null;
 	private workspaceSel: DashWorkspaceSel = { kind: 'all' };
 	private collapsedGroupIds = new Set<string>();
 	private calYear: number;
@@ -1179,15 +1204,82 @@ export class StickyNoteDashboardView extends ItemView {
 				}
 			});
 			this.colorBtns.set(c.id, btn);
-			this.registerDomEvent(btn, 'click', () => {
-				const i = this.colorFilters.indexOf(c.id);
-				if (i >= 0) this.colorFilters.splice(i, 1);
-				else this.colorFilters.push(c.id);
+			this.registerDomEvent(btn, 'click', (evt: MouseEvent) => {
+				const multi = evt.ctrlKey || evt.metaKey;
+				if (multi) {
+					const i = this.colorFilters.indexOf(c.id);
+					if (i >= 0) this.colorFilters.splice(i, 1);
+					else this.colorFilters.push(c.id);
+				} else {
+					/* 单击单选：再点已选中的唯一色则清空 */
+					if (this.colorFilters.length === 1 && this.colorFilters[0] === c.id) {
+						this.colorFilters = [];
+					} else {
+						this.colorFilters = [c.id];
+					}
+				}
 				this.listPageIndex = 0;
 				this.syncColorButtons();
 				void this.renderDash();
 			});
 		}
+
+		const tagWrap = filters.createDiv({ cls: 'csn-dash-tag-wrap' });
+		this.tagPanelWrapEl = tagWrap;
+		tagWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_TAG_LABEL') });
+		this.tagChipsEl = tagWrap.createDiv({ cls: 'csn-dash-tag-chips' });
+		this.registerDomEvent(this.tagChipsEl, 'click', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const removeBtn = hit.closest('[data-csn-tag-chip-remove]');
+			if (removeBtn && this.tagChipsEl?.contains(removeBtn)) {
+				const tag = (removeBtn as HTMLElement).dataset.csnTagChipRemove;
+				if (!tag) return;
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.removeTagFilter(tag);
+				return;
+			}
+			const chip = hit.closest('button[data-csn-tag-chip]');
+			if (chip && this.tagChipsEl?.contains(chip)) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.openTagFilterPanel();
+			}
+		});
+		this.tagFilterBtn = tagWrap.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-add-btn clickable-icon',
+			attr: {
+				'aria-label': t('DASH_TAG_ADD_ARIA'),
+				'aria-haspopup': 'dialog',
+				'aria-expanded': 'false',
+				'aria-controls': 'csn-dash-tag-panel'
+			}
+		});
+		setIcon(this.tagFilterBtn, 'plus');
+		this.registerDomEvent(this.tagFilterBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleTagFilterPanel();
+		});
+		this.tagClearBtn = tagWrap.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-clear-btn csn-dash-tag-clear-btn--hidden',
+			attr: {
+				'aria-label': t('DASH_TAG_CLEAR_ARIA'),
+				'aria-hidden': 'true',
+				tabindex: '-1'
+			},
+			text: t('DASH_TAG_CLEAR')
+		});
+		this.registerDomEvent(this.tagClearBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.clearAllTagFilters();
+		});
+		this.buildTagFilterPanel(tagWrap);
+		this.syncTagFilterButton();
 
 		const searchWrap = filters.createDiv({ cls: 'csn-dash-search' });
 		searchWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_SEARCH_LABEL') });
@@ -1235,6 +1327,24 @@ export class StickyNoteDashboardView extends ItemView {
 			this.listPageIndex = 0;
 			void this.renderDash();
 			this.searchInput.focus();
+		});
+
+		this.registerDomEvent(document, 'pointerdown', (evt: PointerEvent) => {
+			if (!this.isTagFilterPanelOpen()) return;
+			const tEl = evt.target;
+			if (!(tEl instanceof Node)) return;
+			/* 仅点击面板或触发控件内不关闭；勿用整块 tag-wrap（会占满筛选行空白） */
+			if (this.tagPanelEl?.contains(tEl)) return;
+			if (this.tagFilterBtn?.contains(tEl)) return;
+			if (this.tagChipsEl?.contains(tEl)) return;
+			if (this.tagClearBtn?.contains(tEl)) return;
+			this.closeTagFilterPanel();
+		});
+		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
+			if (evt.key !== 'Escape') return;
+			if (!this.isTagFilterPanelOpen()) return;
+			evt.preventDefault();
+			this.closeTagFilterPanel();
 		});
 
 		const toolbar = filterBar.createDiv({ cls: 'csn-dash-toolbar' });
@@ -1320,6 +1430,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncViewContentZoomFromSettings();
 		this.syncArchiveButtons();
 		this.syncColorButtons();
+		this.syncTagFilterButton();
 		this.syncSortToolbarBtn();
 		this.syncListArchiveCheckboxEditUI();
 		this.syncCardOverflowClipToolbarBtn();
@@ -1348,6 +1459,307 @@ export class StickyNoteDashboardView extends ItemView {
 		for (const [id, btn] of this.colorBtns) {
 			btn.toggleClass('is-active', sel.has(id));
 		}
+	}
+
+	private activeTagFilterCount(): number {
+		return this.tagIncludeFilters.length + this.tagExcludeFilters.length;
+	}
+
+	private syncTagFilterButton(): void {
+		const btn = this.tagFilterBtn;
+		const chipsEl = this.tagChipsEl;
+		const clearBtn = this.tagClearBtn;
+		const hasFilters = this.activeTagFilterCount() > 0;
+		if (btn) {
+			btn.toggleClass('is-active', this.isTagFilterPanelOpen() || hasFilters);
+			btn.setAttr('aria-expanded', this.isTagFilterPanelOpen() ? 'true' : 'false');
+		}
+		if (clearBtn) {
+			clearBtn.toggleClass('csn-dash-tag-clear-btn--hidden', !hasFilters);
+			clearBtn.setAttr('aria-hidden', hasFilters ? 'false' : 'true');
+			clearBtn.setAttr('tabindex', hasFilters ? '0' : '-1');
+		}
+		if (!chipsEl) return;
+		chipsEl.empty();
+		const addChip = (tag: string, mode: 'include' | 'exclude') => {
+			const chip = chipsEl.createEl('button', {
+				type: 'button',
+				cls: `csn-dash-tag-chip csn-dash-tag-chip--${mode}`,
+				attr: {
+					'data-csn-tag-chip': tag,
+					title: displayStickyTag(tag),
+					'aria-label': displayStickyTag(tag)
+				}
+			});
+			chip.createSpan({ cls: 'csn-dash-tag-chip-text', text: displayStickyTag(tag) });
+			const remove = chip.createEl('span', {
+				cls: 'csn-dash-tag-chip-remove',
+				attr: {
+					role: 'button',
+					tabindex: '0',
+					'data-csn-tag-chip-remove': tag,
+					'aria-label': t('DASH_TAG_CHIP_REMOVE_ARIA', { tag: displayStickyTag(tag) })
+				}
+			});
+			setIcon(remove, 'x');
+		};
+		for (const tag of this.tagIncludeFilters) addChip(tag, 'include');
+		for (const tag of this.tagExcludeFilters) addChip(tag, 'exclude');
+	}
+
+	private clearAllTagFilters(): void {
+		if (this.tagIncludeFilters.length === 0 && this.tagExcludeFilters.length === 0) return;
+		this.tagIncludeFilters = [];
+		this.tagExcludeFilters = [];
+		this.listPageIndex = 0;
+		this.syncTagFilterButton();
+		if (this.isTagFilterPanelOpen()) this.renderTagPanelBody();
+		void this.renderDash();
+	}
+
+	private removeTagFilter(tagRaw: string): void {
+		const tag = normalizeStickyTag(tagRaw);
+		if (!tag) return;
+		this.tagIncludeFilters = this.tagIncludeFilters.filter(x => x !== tag);
+		this.tagExcludeFilters = this.tagExcludeFilters.filter(x => x !== tag);
+		this.listPageIndex = 0;
+		this.syncTagFilterButton();
+		if (this.isTagFilterPanelOpen()) this.renderTagPanelBody();
+		void this.renderDash();
+	}
+
+	private isTagFilterPanelOpen(): boolean {
+		return !!this.tagPanelEl && !this.tagPanelEl.hasClass('csn-dash-tag-panel--hidden');
+	}
+
+	private buildTagFilterPanel(host: HTMLElement): void {
+		const panel = host.createDiv({
+			cls: 'csn-dash-tag-panel csn-dash-tag-panel--hidden',
+			attr: {
+				id: 'csn-dash-tag-panel',
+				role: 'dialog',
+				'aria-label': t('DASH_TAG_PANEL_ARIA')
+			}
+		});
+		this.tagPanelEl = panel;
+
+		const tools = panel.createDiv({ cls: 'csn-dash-tag-panel-tools' });
+		const searchInner = tools.createDiv({ cls: 'csn-dash-tag-search-inner' });
+		const searchIcon = searchInner.createSpan({ cls: 'csn-dash-tag-search-icon', attr: { 'aria-hidden': 'true' } });
+		setIcon(searchIcon, 'search');
+		this.tagPanelSearchInput = searchInner.createEl('input', {
+			type: 'text',
+			cls: 'csn-dash-tag-search-input',
+			attr: {
+				placeholder: t('DASH_TAG_SEARCH_PLACEHOLDER'),
+				spellcheck: 'false',
+				autocomplete: 'off'
+			}
+		});
+		this.registerDomEvent(this.tagPanelSearchInput, 'input', () => {
+			this.tagPanelSearch = this.tagPanelSearchInput?.value ?? '';
+			this.renderTagPanelBody();
+		});
+		this.registerDomEvent(this.tagPanelSearchInput, 'click', (evt: MouseEvent) => {
+			evt.stopPropagation();
+		});
+
+		const logic = tools.createDiv({ cls: 'csn-dash-tag-logic' });
+		logic.createSpan({ cls: 'csn-dash-tag-logic-label', text: t('DASH_TAG_LOGIC') });
+		this.tagLogicOrBtn = logic.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-logic-btn',
+			text: t('DASH_TAG_LOGIC_OR'),
+			attr: { 'aria-pressed': 'true' }
+		});
+		this.tagLogicAndBtn = logic.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-logic-btn',
+			text: t('DASH_TAG_LOGIC_AND'),
+			attr: { 'aria-pressed': 'false' }
+		});
+		this.registerDomEvent(this.tagLogicOrBtn, 'click', () => {
+			this.tagFilterLogic = 'or';
+			this.syncTagLogicButtons();
+			this.listPageIndex = 0;
+			void this.renderDash();
+		});
+		this.registerDomEvent(this.tagLogicAndBtn, 'click', () => {
+			this.tagFilterLogic = 'and';
+			this.syncTagLogicButtons();
+			this.listPageIndex = 0;
+			void this.renderDash();
+		});
+
+		const body = panel.createDiv({ cls: 'csn-dash-tag-panel-body' });
+		this.tagPanelGroupsEl = body.createDiv({ cls: 'csn-dash-tag-groups' });
+		const mkGroup = (id: 'selected' | 'all', label: string) => {
+			const btn = this.tagPanelGroupsEl!.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-tag-group-btn',
+				attr: { 'data-csn-tag-group': id }
+			});
+			btn.createSpan({ cls: 'csn-dash-tag-group-label', text: label });
+			btn.createSpan({ cls: 'csn-dash-tag-group-count', text: '0' });
+			this.registerDomEvent(btn, 'click', () => {
+				this.tagPanelGroup = id;
+				this.renderTagPanelBody();
+			});
+		};
+		mkGroup('selected', t('DASH_TAG_GROUP_SELECTED'));
+		mkGroup('all', t('DASH_TAG_GROUP_ALL'));
+
+		this.tagPanelListEl = body.createDiv({ cls: 'csn-dash-tag-list' });
+		this.registerDomEvent(this.tagPanelListEl, 'click', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const item = hit.closest('button[data-csn-tag]');
+			if (!item || !this.tagPanelListEl?.contains(item)) return;
+			const tag = (item as HTMLButtonElement).dataset.csnTag;
+			if (!tag) return;
+			evt.preventDefault();
+			this.toggleTagInclude(tag);
+		});
+		this.registerDomEvent(this.tagPanelListEl, 'contextmenu', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const item = hit.closest('button[data-csn-tag]');
+			if (!item || !this.tagPanelListEl?.contains(item)) return;
+			const tag = (item as HTMLButtonElement).dataset.csnTag;
+			if (!tag) return;
+			evt.preventDefault();
+			this.toggleTagExclude(tag);
+		});
+
+		const foot = panel.createDiv({ cls: 'csn-dash-tag-panel-foot' });
+		foot.createSpan({ cls: 'csn-dash-tag-hint', text: t('DASH_TAG_HINT_SELECT') });
+		foot.createSpan({ cls: 'csn-dash-tag-hint', text: t('DASH_TAG_HINT_EXCLUDE') });
+		foot.createSpan({ cls: 'csn-dash-tag-hint csn-dash-tag-hint--end', text: t('DASH_TAG_HINT_CLOSE') });
+
+		this.syncTagLogicButtons();
+	}
+
+	private syncTagLogicButtons(): void {
+		this.tagLogicOrBtn?.toggleClass('is-active', this.tagFilterLogic === 'or');
+		this.tagLogicAndBtn?.toggleClass('is-active', this.tagFilterLogic === 'and');
+		this.tagLogicOrBtn?.setAttr('aria-pressed', this.tagFilterLogic === 'or' ? 'true' : 'false');
+		this.tagLogicAndBtn?.setAttr('aria-pressed', this.tagFilterLogic === 'and' ? 'true' : 'false');
+	}
+
+	private toggleTagFilterPanel(): void {
+		if (this.isTagFilterPanelOpen()) this.closeTagFilterPanel();
+		else this.openTagFilterPanel();
+	}
+
+	private openTagFilterPanel(): void {
+		if (!this.tagPanelEl) return;
+		this.refreshTagCatalogFromVault();
+		this.tagPanelEl.removeClass('csn-dash-tag-panel--hidden');
+		this.syncTagFilterButton();
+		this.renderTagPanelBody();
+		window.setTimeout(() => this.tagPanelSearchInput?.focus(), 0);
+	}
+
+	private closeTagFilterPanel(): void {
+		this.tagPanelEl?.addClass('csn-dash-tag-panel--hidden');
+		this.syncTagFilterButton();
+	}
+
+	/** 从便笺目录收集标签目录（工作区筛选后），供面板展示与计数。 */
+	private refreshTagCatalogFromVault(): void {
+		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+		const folderAbs = this.app.vault.getAbstractFileByPath(folder);
+		if (!folderAbs || !(folderAbs instanceof TFolder)) {
+			this.tagCatalog = [];
+			return;
+		}
+		let files = collectMarkdownUnderFolder(folderAbs);
+		const wsPaths = this.resolveWorkspacePathFilter();
+		if (wsPaths) files = files.filter(f => wsPaths.has(normalizePath(f.path)));
+		this.tagCatalog = collectStickyTagCatalog(this.app, files);
+	}
+
+	private renderTagPanelBody(): void {
+		const groupsEl = this.tagPanelGroupsEl;
+		const listEl = this.tagPanelListEl;
+		if (!groupsEl || !listEl) return;
+
+		const selectedSet = new Set([...this.tagIncludeFilters, ...this.tagExcludeFilters]);
+		const selectedCount = selectedSet.size;
+		const allCount = this.tagCatalog.length;
+
+		for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-tag-group-btn'))) {
+			if (!(btn instanceof HTMLElement)) continue;
+			const id = btn.dataset.csnTagGroup;
+			const countEl = btn.querySelector('.csn-dash-tag-group-count');
+			if (countEl) countEl.setText(String(id === 'selected' ? selectedCount : allCount));
+			btn.toggleClass('is-active', this.tagPanelGroup === id);
+		}
+
+		const q = this.tagPanelSearch.trim().toLowerCase().replace(/^#/, '');
+		let rows = this.tagCatalog;
+		if (this.tagPanelGroup === 'selected') {
+			rows = rows.filter(r => selectedSet.has(r.tag));
+		}
+		if (q) {
+			rows = rows.filter(r => displayStickyTag(r.tag).toLowerCase().includes(q) || r.tag.includes(q));
+		}
+
+		listEl.empty();
+		if (rows.length === 0) {
+			listEl.createDiv({ cls: 'csn-dash-tag-empty', text: t('DASH_TAG_EMPTY') });
+			return;
+		}
+
+		const include = new Set(this.tagIncludeFilters);
+		const exclude = new Set(this.tagExcludeFilters);
+		for (const row of rows) {
+			const item = listEl.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-tag-item',
+				attr: { 'data-csn-tag': row.tag }
+			});
+			const check = item.createSpan({ cls: 'csn-dash-tag-check', attr: { 'aria-hidden': 'true' } });
+			if (include.has(row.tag)) {
+				item.addClass('is-included');
+				setIcon(check, 'check-square');
+			} else if (exclude.has(row.tag)) {
+				item.addClass('is-excluded');
+				setIcon(check, 'x-square');
+			} else {
+				setIcon(check, 'square');
+			}
+			const icon = item.createSpan({ cls: 'csn-dash-tag-icon', attr: { 'aria-hidden': 'true' } });
+			setIcon(icon, 'tags');
+			item.createSpan({ cls: 'csn-dash-tag-name', text: displayStickyTag(row.tag) });
+			item.createSpan({ cls: 'csn-dash-tag-count', text: String(row.count) });
+		}
+	}
+
+	private toggleTagInclude(tagRaw: string): void {
+		const tag = normalizeStickyTag(tagRaw);
+		if (!tag) return;
+		this.tagExcludeFilters = this.tagExcludeFilters.filter(x => x !== tag);
+		const i = this.tagIncludeFilters.indexOf(tag);
+		if (i >= 0) this.tagIncludeFilters.splice(i, 1);
+		else this.tagIncludeFilters.push(tag);
+		this.listPageIndex = 0;
+		this.syncTagFilterButton();
+		this.renderTagPanelBody();
+		void this.renderDash();
+	}
+
+	private toggleTagExclude(tagRaw: string): void {
+		const tag = normalizeStickyTag(tagRaw);
+		if (!tag) return;
+		this.tagIncludeFilters = this.tagIncludeFilters.filter(x => x !== tag);
+		const i = this.tagExcludeFilters.indexOf(tag);
+		if (i >= 0) this.tagExcludeFilters.splice(i, 1);
+		else this.tagExcludeFilters.push(tag);
+		this.listPageIndex = 0;
+		this.syncTagFilterButton();
+		this.renderTagPanelBody();
+		void this.renderDash();
 	}
 
 	private setDateFilter(next: StickyDateFilter | null): void {
@@ -2268,6 +2680,9 @@ export class StickyNoteDashboardView extends ItemView {
 		query: string,
 		colorFilters: readonly StickyColorId[],
 		archiveFilter: NoteListArchiveFilter,
+		tagInclude: readonly string[],
+		tagExclude: readonly string[],
+		tagLogic: 'and' | 'or',
 		sortMode: NoteListSort,
 		pageSize: number,
 		prioPath: string | null,
@@ -2280,6 +2695,9 @@ export class StickyNoteDashboardView extends ItemView {
 			search: query,
 			colors: [...colorFilters].sort(),
 			archive: archiveFilter,
+			tagInclude: [...tagInclude].sort(),
+			tagExclude: [...tagExclude].sort(),
+			tagLogic,
 			sort: sortMode,
 			pageSize,
 			prio: prioPath ?? '',
@@ -2332,6 +2750,13 @@ export class StickyNoteDashboardView extends ItemView {
 
 			files = await filterStickyFilesByColors(this.app, files, this.colorFilters);
 			files = await filterStickyFilesByArchiveFilter(this.app, files, this.archiveFilter);
+			files = filterStickyFilesByTags(
+				this.app,
+				files,
+				this.tagIncludeFilters,
+				this.tagExcludeFilters,
+				this.tagFilterLogic
+			);
 
 			this.noteDateKeys = ctimeDateKeysForFiles(files);
 			this.updateCalendarMarks();
@@ -2368,6 +2793,9 @@ export class StickyNoteDashboardView extends ItemView {
 				query,
 				this.colorFilters,
 				this.archiveFilter,
+				this.tagIncludeFilters,
+				this.tagExcludeFilters,
+				this.tagFilterLogic,
 				sortMode,
 				pageSize,
 				prio,
