@@ -265,6 +265,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private wsFilterPanelEl: HTMLElement | null = null;
 	private wsFilterPanelListEl: HTMLElement | null = null;
 	private colorBtns = new Map<StickyColorId, HTMLButtonElement>();
+	private archiveFilterBtns = new Map<NoteListArchiveFilter, HTMLButtonElement>();
 	private gridEl: HTMLElement | null = null;
 	private paginationEl: HTMLElement | null = null;
 	private paginationRowEl: HTMLElement | null = null;
@@ -1425,6 +1426,36 @@ export class StickyNoteDashboardView extends ItemView {
 		const toolBar = main.createDiv({ cls: 'csn-dash-tool-bar' });
 		const filters = toolBar.createDiv({ cls: 'csn-dash-filters' });
 
+		const attrRow = filters.createDiv({ cls: 'csn-dash-attr' });
+		attrRow.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_ATTR_LABEL') });
+		const archiveSpecs: Array<{
+			mode: NoteListArchiveFilter;
+			icon: string;
+			titleKey: MessageKey;
+		}> = [
+			{ mode: 'all', icon: 'list', titleKey: 'ARCHIVE_FILTER_ALL' },
+			{ mode: 'unarchived', icon: 'inbox', titleKey: 'ARCHIVE_FILTER_UNARCHIVED' },
+			{ mode: 'archived', icon: 'archive', titleKey: 'ARCHIVE_FILTER_ARCHIVED' }
+		];
+		for (const spec of archiveSpecs) {
+			const title = t(spec.titleKey);
+			const btn = attrRow.createEl('button', {
+				type: 'button',
+				cls: 'clickable-icon csn-dash-attr-btn csn-dash-attr-btn--icon',
+				attr: {
+					'aria-label': title,
+					'aria-pressed': 'false',
+					title
+				}
+			});
+			setIcon(btn, spec.icon);
+			this.archiveFilterBtns.set(spec.mode, btn);
+			this.registerDomEvent(btn, 'click', () => {
+				this.setArchiveFilter(spec.mode);
+			});
+		}
+		this.syncArchiveFilterButtons();
+
 		const colorRow = filters.createDiv({ cls: 'csn-dash-colors' });
 		colorRow.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_COLOR_LABEL') });
 		const strip = colorRow.createDiv({ cls: 'csn-list-color-filter-btns' });
@@ -1838,6 +1869,26 @@ export class StickyNoteDashboardView extends ItemView {
 		this.searchClearBtn?.setAttr('tabindex', has ? '0' : '-1');
 	}
 
+	private setArchiveFilter(mode: NoteListArchiveFilter): void {
+		if (this.archiveFilter === mode) return;
+		this.archiveFilter = mode;
+		if (mode !== 'archived' && this.areaMode === 'archived') {
+			this.areaMode = 'all';
+		}
+		this.listPageIndex = 0;
+		this.syncArchiveFilterButtons();
+		this.syncAreaButtons();
+		void this.renderDash();
+	}
+
+	private syncArchiveFilterButtons(): void {
+		for (const [mode, btn] of this.archiveFilterBtns) {
+			const on = mode === this.archiveFilter;
+			btn.toggleClass('is-active', on);
+			btn.setAttr('aria-pressed', on ? 'true' : 'false');
+		}
+	}
+
 	private setAreaMode(mode: DashAreaMode): void {
 		const same = this.areaMode === mode && this.workspaceSel.kind === 'all';
 		if (same && mode !== 'random') return;
@@ -1848,6 +1899,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.randomOrderPaths = null;
 		this.listPageIndex = 0;
 		this.renderAreaNav();
+		this.syncArchiveFilterButtons();
 		this.syncWorkspaceFilterBar();
 		this.renderWorkspaceTree();
 		void this.renderDash();
@@ -3187,6 +3239,7 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 		this.listPageIndex = 0;
 		this.syncAreaButtons();
+		this.syncArchiveFilterButtons();
 		this.syncWorkspaceFilterBar();
 		this.renderWorkspaceTree();
 		void this.renderDash();
@@ -4729,6 +4782,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.paginationMetaEl = null;
 		this.areaBtns.clear();
 		this.colorBtns.clear();
+		this.archiveFilterBtns.clear();
 		this.contentEl.empty();
 	}
 }

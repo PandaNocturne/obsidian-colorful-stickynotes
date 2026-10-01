@@ -2560,12 +2560,27 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   color: var(--text-muted);
   cursor: var(--cursor);
 }
+.csn-dash-attr-btn--icon {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.csn-dash-attr-btn--icon svg {
+  width: 16px;
+  height: 16px;
+}
 .csn-dash-attr-btn:hover {
   color: var(--text-normal);
   background: var(--background-modifier-hover);
 }
 .csn-dash-attr-btn.is-active {
   color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
   font-weight: var(--font-semibold);
 }
 .csn-dash-cal-head {
