@@ -5,6 +5,7 @@ import {
 	clampDashLeftPaneWidth,
 	clampViewContentZoom,
 	normalizeNoteListDimensionCss,
+	normalizeDashboardFilterState,
 	ColorfulStickyNotesSettingTab,
 	DEFAULT_SETTINGS,
 	type ColorfulStickyNotesSettings
@@ -422,6 +423,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 					]
 				: [];
 		}
+		this.settings.dashboardFilters = normalizeDashboardFilterState(this.settings.dashboardFilters);
 
 		const nls = this.settings.noteListSort;
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.some(s => s === nls)) {

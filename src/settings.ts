@@ -5,7 +5,10 @@ import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
 import { MarkdownFilePickerModal } from './modals/MarkdownFilePickerModal';
 import { SHEET_COLOR_ORDER } from './sticky/sticky-color-order';
+import type { StickyDateFilter } from './utils/query-sticky-list';
 import type {
+	DashAreaMode,
+	DashWorkspaceSel,
 	HeaderNewStickyAdjacentSide,
 	NoteListArchiveFilter,
 	NoteListFloatOpenFilter,
@@ -14,6 +17,154 @@ import type {
 	StickyAssistAlignSnapMode,
 	StickyColorId
 } from './types';
+
+const VALID_DASH_AREA_MODE: readonly DashAreaMode[] = [
+	'all',
+	'ungrouped',
+	'uncategorized',
+	'recent',
+	'random',
+	'archived'
+];
+const VALID_DASH_ARCHIVE_FILTER: readonly NoteListArchiveFilter[] = ['all', 'unarchived', 'archived'];
+const VALID_DASH_COLOR: readonly StickyColorId[] = [
+	'default',
+	'yellow',
+	'pink',
+	'mint',
+	'blue',
+	'lavender',
+	'gray'
+];
+
+export interface DashboardFilterState {
+	areaMode: DashAreaMode;
+	archiveFilter: NoteListArchiveFilter;
+	colorFilters: StickyColorId[];
+	workspaceSel: DashWorkspaceSel;
+	tagIncludeFilters: string[];
+	tagExcludeFilters: string[];
+	tagFilterLogic: 'and' | 'or';
+	dateFilter: StickyDateFilter | null;
+	searchQuery: string;
+}
+
+function normalizeDashStringList(raw: unknown): string[] {
+	if (!Array.isArray(raw)) return [];
+	const out: string[] = [];
+	const seen = new Set<string>();
+	for (const item of raw) {
+		if (typeof item !== 'string') continue;
+		const s = item.trim();
+		if (!s || seen.has(s)) continue;
+		seen.add(s);
+		out.push(s);
+	}
+	return out;
+}
+
+function normalizeDashWorkspaceSel(raw: unknown): DashWorkspaceSel {
+	if (!raw || typeof raw !== 'object') return { kind: 'all' };
+	const obj = raw as { kind?: unknown; groupIds?: unknown; workspaceIds?: unknown };
+	if (obj.kind !== 'selection') return { kind: 'all' };
+	const groupIds = normalizeDashStringList(obj.groupIds);
+	const workspaceIds = normalizeDashStringList(obj.workspaceIds);
+	if (groupIds.length === 0 && workspaceIds.length === 0) return { kind: 'all' };
+	return { kind: 'selection', groupIds, workspaceIds };
+}
+
+function normalizeDashDateFilter(raw: unknown): StickyDateFilter | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const obj = raw as Record<string, unknown>;
+	const kind = obj.kind;
+	if (kind === 'year' && typeof obj.year === 'number' && Number.isFinite(obj.year)) {
+		return { kind: 'year', year: Math.round(obj.year) };
+	}
+	if (
+		kind === 'month' &&
+		typeof obj.year === 'number' &&
+		Number.isFinite(obj.year) &&
+		typeof obj.month0 === 'number' &&
+		Number.isFinite(obj.month0)
+	) {
+		const month0 = Math.max(0, Math.min(11, Math.round(obj.month0)));
+		return { kind: 'month', year: Math.round(obj.year), month0 };
+	}
+	if (
+		kind === 'week' &&
+		typeof obj.year === 'number' &&
+		Number.isFinite(obj.year) &&
+		typeof obj.week === 'number' &&
+		Number.isFinite(obj.week)
+	) {
+		return { kind: 'week', year: Math.round(obj.year), week: Math.max(1, Math.round(obj.week)) };
+	}
+	if (kind === 'day' && typeof obj.dateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(obj.dateKey)) {
+		return { kind: 'day', dateKey: obj.dateKey };
+	}
+	if (kind === 'days' && Array.isArray(obj.dateKeys)) {
+		const dateKeys = normalizeDashStringList(obj.dateKeys).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+		if (dateKeys.length === 0) return null;
+		return { kind: 'days', dateKeys };
+	}
+	return null;
+}
+
+export const DEFAULT_DASHBOARD_FILTERS: DashboardFilterState = {
+	areaMode: 'all',
+	archiveFilter: 'unarchived',
+	colorFilters: [],
+	workspaceSel: { kind: 'all' },
+	tagIncludeFilters: [],
+	tagExcludeFilters: [],
+	tagFilterLogic: 'or',
+	dateFilter: null,
+	searchQuery: ''
+};
+
+export function normalizeDashboardFilterState(raw: unknown): DashboardFilterState {
+	const obj = raw && typeof raw === 'object' ? (raw as Partial<DashboardFilterState>) : {};
+	const areaMode =
+		typeof obj.areaMode === 'string' && VALID_DASH_AREA_MODE.includes(obj.areaMode)
+			? obj.areaMode
+			: DEFAULT_DASHBOARD_FILTERS.areaMode;
+	const archiveFilter =
+		typeof obj.archiveFilter === 'string' && VALID_DASH_ARCHIVE_FILTER.includes(obj.archiveFilter)
+			? obj.archiveFilter
+			: DEFAULT_DASHBOARD_FILTERS.archiveFilter;
+	const colorFilters = Array.isArray(obj.colorFilters)
+		? obj.colorFilters.filter((c): c is StickyColorId =>
+				typeof c === 'string' && VALID_DASH_COLOR.includes(c as StickyColorId)
+			)
+		: [];
+	const tagFilterLogic = obj.tagFilterLogic === 'and' ? 'and' : 'or';
+	const searchQuery = typeof obj.searchQuery === 'string' ? obj.searchQuery : '';
+	return {
+		areaMode,
+		archiveFilter: areaMode === 'archived' ? 'archived' : archiveFilter,
+		colorFilters,
+		workspaceSel: normalizeDashWorkspaceSel(obj.workspaceSel),
+		tagIncludeFilters: normalizeDashStringList(obj.tagIncludeFilters),
+		tagExcludeFilters: normalizeDashStringList(obj.tagExcludeFilters),
+		tagFilterLogic,
+		dateFilter: normalizeDashDateFilter(obj.dateFilter),
+		searchQuery
+	};
+}
+
+export function dashboardFilterStateKey(state: DashboardFilterState): string {
+	return JSON.stringify({
+		areaMode: state.areaMode,
+		archiveFilter: state.archiveFilter,
+		colorFilters: [...state.colorFilters].sort(),
+		workspaceSel: state.workspaceSel,
+		tagIncludeFilters: [...state.tagIncludeFilters].sort(),
+		tagExcludeFilters: [...state.tagExcludeFilters].sort(),
+		tagFilterLogic: state.tagFilterLogic,
+		dateFilter: state.dateFilter,
+		searchQuery: state.searchQuery
+	});
+}
 
 /** 便笺窗口与列表预览正文的 zoom 范围（与设置项一致）。 */
 export const VIEW_CONTENT_ZOOM_MIN = 0.3;
@@ -154,6 +305,8 @@ export interface ColorfulStickyNotesSettings {
 	dashboardCollapsedWorkspaceGroupIds: string[];
 	/** 仪表盘左侧面板折叠：`area` | `workspace`。 */
 	dashboardCollapsedLeftPanelIds: string[];
+	/** 仪表盘上次使用的筛选（重新打开时恢复）。 */
+	dashboardFilters: DashboardFilterState;
 	/** 便笺列表排序（默认：创建时间新在前）。 */
 	noteListSort: NoteListSort;
 	/** 便笺列表置顶路径（靠前优先显示；顺序即置顶顺序）。 */
@@ -228,6 +381,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	dashboardComposerHidden: false,
 	dashboardCollapsedWorkspaceGroupIds: [],
 	dashboardCollapsedLeftPanelIds: [],
+	dashboardFilters: { ...DEFAULT_DASHBOARD_FILTERS, workspaceSel: { kind: 'all' } },
 	noteListSort: 'ctime-desc',
 	noteListPinnedPaths: [],
 	noteListColorFilters: [],

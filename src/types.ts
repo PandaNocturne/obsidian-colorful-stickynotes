@@ -117,6 +117,20 @@ export type NoteListFloatOpenFilter = 'all' | 'open' | 'closed';
 /** 便笺列表：按 frontmatter `colorful-sticky-archived` 筛选。 */
 export type NoteListArchiveFilter = 'all' | 'unarchived' | 'archived';
 
+/** 仪表盘工作区树筛选：全部，或若干分组 / 工作区。 */
+export type DashWorkspaceSel =
+	| { kind: 'all' }
+	| { kind: 'selection'; groupIds: string[]; workspaceIds: string[] };
+
+/** 仪表盘「区域管理」互斥模式。 */
+export type DashAreaMode =
+	| 'all'
+	| 'ungrouped'
+	| 'uncategorized'
+	| 'recent'
+	| 'random'
+	| 'archived';
+
 /** 便笺列表工作区筛选：跟随当前活动工作区（非具体工作区 id）。 */
 export const NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID = '@active-workspace';
 

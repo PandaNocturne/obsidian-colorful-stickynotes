@@ -553,6 +553,16 @@
 	padding: 4px 10px 4px 8px;
 	font-size: var(--font-ui-small);
 	cursor: var(--cursor);
+	background-color: var(--interactive-accent) !important;
+	border-color: var(--interactive-accent) !important;
+	color: var(--text-on-accent, #fff) !important;
+	box-shadow: none !important;
+}
+
+.csn-dash-composer-done:hover {
+	background-color: var(--interactive-accent-hover, var(--interactive-accent)) !important;
+	border-color: var(--interactive-accent-hover, var(--interactive-accent)) !important;
+	color: var(--text-on-accent, #fff) !important;
 }
 
 .csn-dash-composer-done-icon {
@@ -561,15 +571,18 @@
 	justify-content: center;
 	width: 16px;
 	height: 16px;
+	color: inherit;
 }
 
 .csn-dash-composer-done-icon svg {
 	width: 14px;
 	height: 14px;
+	stroke: currentColor;
 }
 
 .csn-dash-composer-done-label {
 	line-height: 1.2;
+	color: inherit;
 }
 
 .csn-dash-left {
@@ -699,12 +712,18 @@
 .csn-dash-search {
 	display: flex;
 	align-items: center;
+	flex-wrap: nowrap;
 	gap: 6px;
 	margin-left: auto;
 	flex: 0 1 260px;
 	min-width: 160px;
 	max-width: 320px;
 	padding-left: 10px;
+
+	> .csn-dash-filter-label {
+		flex: 0 0 auto;
+		white-space: nowrap;
+	}
 }
 
 .csn-dash-tag-wrap {

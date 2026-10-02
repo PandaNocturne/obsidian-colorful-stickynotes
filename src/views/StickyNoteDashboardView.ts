@@ -22,12 +22,17 @@ import {
 	clampViewContentZoom,
 	DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
 	DASH_LEFT_PANE_AUTO_COLLAPSE_BELOW,
-	DASH_LEFT_PANE_WIDTH_DEFAULT
+	DASH_LEFT_PANE_WIDTH_DEFAULT,
+	dashboardFilterStateKey,
+	normalizeDashboardFilterState,
+	type DashboardFilterState
 } from '../settings';
 import {
 	VIEW_STICKY_NOTE_DASHBOARD,
 	WS_TAB_GROUP_DEFAULT_ID,
 	WS_TAB_GROUP_UNGROUPED_ID,
+	type DashAreaMode,
+	type DashWorkspaceSel,
 	type NoteListArchiveFilter,
 	type NoteListSort,
 	type StickyColorId,
@@ -77,20 +82,6 @@ import {
 	WORKSPACE_DND_MIME,
 	WORKSPACE_GROUP_DND_MIME
 } from '../utils/workspace-dnd';
-
-/** 工作区树筛选：全部，或若干分组 / 工作区（可 Ctrl 多选）。 */
-type DashWorkspaceSel =
-	| { kind: 'all' }
-	| { kind: 'selection'; groupIds: string[]; workspaceIds: string[] };
-
-/** 仪表盘文件列表顶部「区域管理」互斥模式。 */
-type DashAreaMode =
-	| 'all'
-	| 'ungrouped'
-	| 'uncategorized'
-	| 'recent'
-	| 'random'
-	| 'archived';
 
 const DASH_AREA_MODE_SPECS: Array<{
 	mode: DashAreaMode;
@@ -363,6 +354,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.calYear = now.getFullYear();
 		this.calMonth0 = now.getMonth();
 		this.composerCreateColor = this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
+		this.restoreDashboardFiltersFromSettings();
 	}
 
 	getViewType(): string {
@@ -1745,6 +1737,7 @@ export class StickyNoteDashboardView extends ItemView {
 				autocomplete: 'off'
 			}
 		});
+		this.searchInput.value = this.plugin.settings.dashboardFilters.searchQuery;
 		this.searchClearBtn = searchInner.createEl('button', {
 			type: 'button',
 			cls: 'csn-dash-search-clear csn-dash-search-clear--hidden',
@@ -3382,6 +3375,78 @@ export class StickyNoteDashboardView extends ItemView {
 			arr.sort((a, b) => maxMtime(b) - maxMtime(a));
 		}
 		return arr;
+	}
+
+	private snapshotDashboardFilters(): DashboardFilterState {
+		return normalizeDashboardFilterState({
+			areaMode: this.areaMode,
+			archiveFilter: this.archiveFilter,
+			colorFilters: [...this.colorFilters],
+			workspaceSel: this.workspaceSel,
+			tagIncludeFilters: [...this.tagIncludeFilters],
+			tagExcludeFilters: [...this.tagExcludeFilters],
+			tagFilterLogic: this.tagFilterLogic,
+			dateFilter: this.selectedDateFilter,
+			searchQuery: this.searchInput?.value ?? this.plugin.settings.dashboardFilters.searchQuery
+		});
+	}
+
+	private persistDashboardFilters(): void {
+		const next = this.snapshotDashboardFilters();
+		if (dashboardFilterStateKey(next) === dashboardFilterStateKey(this.plugin.settings.dashboardFilters)) {
+			return;
+		}
+		this.plugin.settings.dashboardFilters = next;
+		void this.plugin.saveSettings();
+	}
+
+	private restoreDashboardFiltersFromSettings(): void {
+		const saved = normalizeDashboardFilterState(this.plugin.settings.dashboardFilters);
+		this.areaMode = saved.areaMode;
+		this.archiveFilter = saved.areaMode === 'archived' ? 'archived' : saved.archiveFilter;
+		this.colorFilters = [...saved.colorFilters];
+		this.tagIncludeFilters = [...saved.tagIncludeFilters];
+		this.tagExcludeFilters = [...saved.tagExcludeFilters];
+		this.tagFilterLogic = saved.tagFilterLogic;
+		this.selectedDateFilter = saved.dateFilter;
+		this.applySavedDateFilterToCalendar(saved.dateFilter);
+		this.workspaceSel = this.pruneWorkspaceSel(saved.workspaceSel);
+		this.plugin.settings.dashboardFilters = {
+			...saved,
+			workspaceSel: this.workspaceSel,
+			archiveFilter: this.archiveFilter
+		};
+	}
+
+	private pruneWorkspaceSel(sel: DashWorkspaceSel): DashWorkspaceSel {
+		if (sel.kind !== 'selection') return { kind: 'all' };
+		const file = this.plugin.stickies?.workspaces;
+		if (!file) return sel;
+		const liveWs = new Set(file.workspaces.map(w => w.id));
+		const liveGroups = new Set(file.tabGroups.map(g => g.id));
+		const workspaceIds = sel.workspaceIds.filter(id => liveWs.has(id));
+		const groupIds = sel.groupIds.filter(id => liveGroups.has(id) || id === WS_TAB_GROUP_UNGROUPED_ID);
+		if (workspaceIds.length === 0 && groupIds.length === 0) return { kind: 'all' };
+		return { kind: 'selection', groupIds, workspaceIds };
+	}
+
+	private applySavedDateFilterToCalendar(filter: DashboardFilterState['dateFilter']): void {
+		if (!filter) return;
+		if (filter.kind === 'year' || filter.kind === 'week') {
+			this.calYear = filter.year;
+			return;
+		}
+		if (filter.kind === 'month') {
+			this.calYear = filter.year;
+			this.calMonth0 = filter.month0;
+			return;
+		}
+		const key = filter.kind === 'day' ? filter.dateKey : filter.dateKeys[0];
+		if (!key) return;
+		const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+		if (!m) return;
+		this.calYear = Number(m[1]);
+		this.calMonth0 = Math.max(0, Math.min(11, Number(m[2]) - 1));
 	}
 
 	private setWorkspaceSel(next: DashWorkspaceSel): void {
@@ -5218,6 +5283,7 @@ export class StickyNoteDashboardView extends ItemView {
 				container.scrollTop = 0;
 			}
 		} finally {
+			this.persistDashboardFilters();
 			if (this.plugin.listPrioritizeStickyPath) {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
@@ -5225,6 +5291,7 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.persistDashboardFilters();
 		this.detachCalPickerDocClose();
 		this.calPicker = null;
 		this.leftPaneAutoCollapsedForWidth = false;
