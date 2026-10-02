@@ -2129,11 +2129,6 @@ export class StickyNoteDashboardView extends ItemView {
 					this.closeTagFilterPanel();
 				}
 			}
-			if (this.isComposerColorPaletteOpen()) {
-				if (!this.composerColorWrapEl?.contains(tEl)) {
-					this.closeComposerColorPalette();
-				}
-			}
 			if (this.isComposerTagPanelOpen()) {
 				if (
 					!(

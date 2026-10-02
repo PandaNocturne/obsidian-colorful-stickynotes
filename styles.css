@@ -1620,9 +1620,6 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   margin-right: 0;
   border-right: 1px solid var(--background-modifier-border);
 }
-.csn-dash-composer-color-wrap.is-expanded {
-  z-index: 5;
-}
 .csn-dash-composer-tag-wrap {
   position: relative;
   z-index: 1;
@@ -1647,22 +1644,20 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   min-width: 0;
   flex: 0 1 auto;
 }
-/* 悬浮展开，避免撑开底栏宽度 */
+/* 在颜色按钮右侧内联展开，不悬浮覆盖标签区 */
 .csn-dash-composer-palette {
-  position: absolute;
-  left: calc(100% - 8px);
-  top: 50%;
-  transform: translateY(-50%);
+  position: static;
   display: none;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  background: var(--background-primary);
-  box-shadow: var(--shadow-s);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
   pointer-events: auto;
-  z-index: 40;
+  z-index: 1;
   white-space: nowrap;
 }
 .csn-dash-composer-color-wrap.is-expanded .csn-dash-composer-palette {
