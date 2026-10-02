@@ -301,6 +301,8 @@ export interface ColorfulStickyNotesSettings {
 	dashboardComposerPaneHeight: number;
 	/** 仪表盘快速输入区是否隐藏。 */
 	dashboardComposerHidden: boolean;
+	/** 仪表盘快速输入区未提交草稿（关闭/重开后恢复）。 */
+	dashboardComposerDraft: string;
 	/** 仪表盘工作区树中已折叠的分组 id。 */
 	dashboardCollapsedWorkspaceGroupIds: string[];
 	/** 仪表盘左侧面板折叠：`area` | `workspace`。 */
@@ -379,6 +381,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	dashboardLeftPaneCollapsed: false,
 	dashboardComposerPaneHeight: DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
 	dashboardComposerHidden: false,
+	dashboardComposerDraft: '',
 	dashboardCollapsedWorkspaceGroupIds: [],
 	dashboardCollapsedLeftPanelIds: [],
 	dashboardFilters: { ...DEFAULT_DASHBOARD_FILTERS, workspaceSel: { kind: 'all' } },

@@ -94,6 +94,8 @@ export interface EmbeddedMarkdownEditorOptions {
 	onSubmit: (markdown: string) => void;
 	/** Escape。 */
 	onEscape?: () => void;
+	/** 文档内容变化（含程序 setValue）。 */
+	onChange?: (markdown: string) => void;
 }
 
 /**
@@ -112,8 +114,18 @@ export class EmbeddedMarkdownEditorHost {
 
 	mount(): void {
 		this.destroy();
-		const { plugin, app, hostEl, MarkdownEditor, getFile, placeholder, initialValue, onSubmit, onEscape } =
-			this.opts;
+		const {
+			plugin,
+			app,
+			hostEl,
+			MarkdownEditor,
+			getFile,
+			placeholder,
+			initialValue,
+			onSubmit,
+			onEscape,
+			onChange
+		} = this.opts;
 		hostEl.empty();
 		const proxiedApp = createEditorAppProxy(app);
 
@@ -127,6 +139,13 @@ export class EmbeddedMarkdownEditorHost {
 			buildLocalExtensions(): Extension[] {
 				const extensions: Extension[] = super.buildLocalExtensions();
 				if (placeholder) extensions.push(placeholderExt(placeholder));
+				if (onChange) {
+					extensions.push(
+						EditorView.updateListener.of(update => {
+							if (update.docChanged) onChange(update.state.doc.toString());
+						})
+					);
+				}
 
 				extensions.push(
 					Prec.highest(

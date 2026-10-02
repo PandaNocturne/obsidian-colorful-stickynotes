@@ -352,6 +352,8 @@ export class StickyNoteDashboardView extends ItemView {
 	private dashRenderChain: Promise<void> = Promise.resolve();
 	private debouncedStructureRefresh: Debouncer<[], void> | null = null;
 	private debouncedContentRefresh: Debouncer<[], void> | null = null;
+	/** 快速输入未提交草稿防抖落盘。 */
+	private debouncedPersistComposerDraft: Debouncer<[string], void> | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -4520,6 +4522,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.composerFallbackEl = null;
 		host.empty();
 
+		const draft = this.plugin.settings.dashboardComposerDraft ?? '';
 		const Ctor = this.plugin.markdownEditorClass;
 		if (Ctor) {
 			try {
@@ -4531,12 +4534,16 @@ export class StickyNoteDashboardView extends ItemView {
 					/* 切勿绑定 workspace 当前文件，否则 Enter/内部同步会覆盖或清空输入 */
 					getFile: () => null,
 					placeholder: t('DASH_COMPOSER_PLACEHOLDER'),
-					initialValue: '',
+					initialValue: draft,
 					onSubmit: () => {
 						void this.commitComposer();
 					},
 					onEscape: () => {
 						this.composerEditor?.setValue('');
+						this.persistComposerDraft('');
+					},
+					onChange: md => {
+						this.schedulePersistComposerDraft(md);
 					}
 				});
 				this.composerEditor.mount();
@@ -4559,7 +4566,11 @@ export class StickyNoteDashboardView extends ItemView {
 				'aria-label': t('DASH_COMPOSER_PLACEHOLDER')
 			}
 		});
+		this.composerFallbackEl.value = draft;
 		this.applyComposerContentZoom();
+		this.registerDomEvent(this.composerFallbackEl, 'input', () => {
+			this.schedulePersistComposerDraft(this.composerFallbackEl?.value ?? '');
+		});
 		this.registerDomEvent(this.composerFallbackEl, 'keydown', (evt: KeyboardEvent) => {
 			if ((evt.ctrlKey || evt.metaKey) && evt.key === 'Enter') {
 				evt.preventDefault();
@@ -4573,20 +4584,52 @@ export class StickyNoteDashboardView extends ItemView {
 		if (!this.composerHostEl) return;
 		/* 已有可用 CM 时勿重挂，避免清空正在输入的内容 */
 		if (this.composerEditor) return;
+		this.flushComposerDraftToSettings();
 		this.mountComposerEditor();
 	}
 
+	private getComposerMarkdownRaw(): string {
+		if (this.composerEditor) return this.composerEditor.getValue();
+		return this.composerFallbackEl?.value ?? '';
+	}
+
 	private getComposerMarkdown(): string {
-		if (this.composerEditor) return this.composerEditor.getValue().trimEnd();
-		return (this.composerFallbackEl?.value ?? '').trimEnd();
+		return this.getComposerMarkdownRaw().trimEnd();
+	}
+
+	private ensureComposerDraftDebouncer(): Debouncer<[string], void> {
+		if (!this.debouncedPersistComposerDraft) {
+			this.debouncedPersistComposerDraft = debounce((text: string) => {
+				this.persistComposerDraft(text);
+			}, 400);
+		}
+		return this.debouncedPersistComposerDraft;
+	}
+
+	private schedulePersistComposerDraft(text: string): void {
+		this.ensureComposerDraftDebouncer()(text);
+	}
+
+	private persistComposerDraft(text?: string): void {
+		const next = text ?? this.getComposerMarkdownRaw();
+		if (this.plugin.settings.dashboardComposerDraft === next) return;
+		this.plugin.settings.dashboardComposerDraft = next;
+		void this.plugin.saveSettings();
+	}
+
+	private flushComposerDraftToSettings(): void {
+		this.debouncedPersistComposerDraft?.cancel();
+		this.persistComposerDraft();
 	}
 
 	private clearComposer(): void {
 		if (this.composerEditor) {
 			this.composerEditor.setValue('');
-			return;
+		} else if (this.composerFallbackEl) {
+			this.composerFallbackEl.value = '';
 		}
-		if (this.composerFallbackEl) this.composerFallbackEl.value = '';
+		this.debouncedPersistComposerDraft?.cancel();
+		this.persistComposerDraft('');
 	}
 
 	/**
@@ -5461,6 +5504,8 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.flushComposerDraftToSettings();
+		this.debouncedPersistComposerDraft = null;
 		this.persistDashboardFilters();
 		this.detachCalPickerDocClose();
 		this.calPicker = null;
