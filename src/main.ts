@@ -129,7 +129,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 			void this.openNoteListView();
 		});
 
-		this.addRibbonIcon('layout-template', t('RIBBON_STICKY_DASHBOARD'), () => {
+		this.addRibbonIcon('layout-panel-top', t('RIBBON_STICKY_DASHBOARD'), () => {
 			void this.openStickyDashboardView();
 		});
 

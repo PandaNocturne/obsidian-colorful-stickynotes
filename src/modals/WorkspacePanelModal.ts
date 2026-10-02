@@ -4,6 +4,7 @@ import type ColorfulStickyNotesPlugin from '../main';
 import {
 	WS_TAB_FILTER_ALL,
 	WS_TAB_GROUP_DEFAULT_ID,
+	WS_TAB_GROUP_UNGROUPED_ID,
 	type StickyWorkspace,
 	type StickyWorkspaceTabGroup
 } from '../types';
@@ -403,6 +404,10 @@ export class WorkspacePanelModal extends Modal {
 	private panelMode: 'workspaces' | 'trash' = 'workspaces';
 	/** 顶部分组筛选：`@all` 或具体分组 id。 */
 	private activeTabFilterId: string = WS_TAB_FILTER_ALL;
+	/** 面板搜索框是否展开。 */
+	private panelSearchOpen = false;
+	/** 面板搜索关键字。 */
+	private panelSearchQuery = '';
 
 	constructor(
 		app: App,
@@ -440,17 +445,26 @@ export class WorkspacePanelModal extends Modal {
 
 		if (this.panelMode === 'workspaces') {
 			this.renderTabGroupBar(this.contentEl, () => this.render());
+			if (this.panelSearchOpen) this.renderPanelSearchRow(this.contentEl, () => this.render());
 		}
 
 		const bodyEl = this.contentEl.createDiv({ cls: 'csn-ws-panel-body' });
 		const gridEl = bodyEl.createDiv({ cls: 'csn-ws-panel-grid' });
 
 		if (this.panelMode === 'workspaces') {
-			const visibleWorkspaces = mgr.filterWorkspacesForTab(this.activeTabFilterId);
+			let visibleWorkspaces = mgr.filterWorkspacesForTab(this.activeTabFilterId);
+			const q = this.panelSearchQuery.trim().toLowerCase();
+			if (q) {
+				visibleWorkspaces = visibleWorkspaces.filter(
+					ws =>
+						ws.name.toLowerCase().includes(q) ||
+						(ws.remark ?? '').toLowerCase().includes(q)
+				);
+			}
 			if (visibleWorkspaces.length === 0) {
 				gridEl.createDiv({
 					cls: 'csn-ws-panel-empty',
-					text: t('WS_TAB_GROUP_EMPTY')
+					text: q ? t('WS_PANEL_SEARCH_EMPTY') : t('WS_TAB_GROUP_EMPTY')
 				});
 			} else {
 				for (const ws of visibleWorkspaces) {
@@ -469,9 +483,7 @@ export class WorkspacePanelModal extends Modal {
 				text: t('WS_TRASH_EMPTY')
 			});
 		} else {
-			for (const ws of data.trash) {
-				this.renderTrashTile(gridEl, ws, () => this.render());
-			}
+			this.renderTrashGrouped(gridEl, data.trash, data.tabGroups, () => this.render());
 		}
 
 		const toolbar = this.contentEl.createDiv({ cls: 'csn-ws-panel-toolbar' });
@@ -616,15 +628,199 @@ export class WorkspacePanelModal extends Modal {
 			void mgr.reorderWorkspaceTabGroupToEnd(fromId).then(() => refresh());
 		});
 
-		const allWrap = bar.createDiv({ cls: 'csn-ws-panel-tabbar-all' });
+		const allWrap = bar.createDiv({ cls: 'csn-ws-panel-tabbar-actions' });
+
 		const allTab = allWrap.createEl('button', {
-			cls: `csn-ws-panel-tab csn-ws-panel-tab--all${this.activeTabFilterId === WS_TAB_FILTER_ALL ? ' csn-ws-panel-tab--active' : ''}`,
-			text: t('WS_TAB_FILTER_ALL'),
-			attr: { type: 'button', 'aria-pressed': String(this.activeTabFilterId === WS_TAB_FILTER_ALL) }
+			cls: `clickable-icon csn-ws-panel-tabbar-icon-btn${
+				this.activeTabFilterId === WS_TAB_FILTER_ALL ? ' is-active' : ''
+			}`,
+			attr: {
+				type: 'button',
+				'aria-label': t('WS_TAB_FILTER_ALL_ARIA'),
+				'aria-pressed': String(this.activeTabFilterId === WS_TAB_FILTER_ALL),
+				title: t('WS_TAB_FILTER_ALL')
+			}
 		});
+		setIcon(allTab, 'layout-grid');
 		allTab.addEventListener('click', () => {
+			/* 二次点击取消「全部」：回到默认分组（或首个分组） */
+			if (this.activeTabFilterId === WS_TAB_FILTER_ALL) {
+				const fallback =
+					data.tabGroups.find(g => g.id === WS_TAB_GROUP_DEFAULT_ID)?.id ??
+					data.tabGroups[0]?.id;
+				if (fallback) this.selectTabFilter(fallback, refresh);
+				return;
+			}
 			this.selectTabFilter(WS_TAB_FILTER_ALL, refresh);
 		});
+
+		const searchBtn = allWrap.createEl('button', {
+			cls: `clickable-icon csn-ws-panel-tabbar-icon-btn${this.panelSearchOpen ? ' is-active' : ''}`,
+			attr: {
+				type: 'button',
+				'aria-label': t('WS_PANEL_SEARCH_ARIA'),
+				'aria-pressed': String(this.panelSearchOpen),
+				title: t('WS_PANEL_SEARCH_ARIA')
+			}
+		});
+		setIcon(searchBtn, 'search');
+		searchBtn.addEventListener('click', () => {
+			this.panelSearchOpen = !this.panelSearchOpen;
+			if (!this.panelSearchOpen) this.panelSearchQuery = '';
+			refresh();
+		});
+
+		const locateBtn = allWrap.createEl('button', {
+			cls: 'clickable-icon csn-ws-panel-tabbar-icon-btn',
+			attr: {
+				type: 'button',
+				'aria-label': t('WS_PANEL_LOCATE_ARIA'),
+				title: t('WS_PANEL_LOCATE_ARIA')
+			}
+		});
+		setIcon(locateBtn, 'crosshair');
+		locateBtn.addEventListener('click', () => {
+			this.locateActiveWorkspace(refresh);
+		});
+	}
+
+	private renderPanelSearchRow(parentEl: HTMLElement, refresh: () => void): void {
+		const row = parentEl.createDiv({ cls: 'csn-ws-panel-search' });
+		const inner = row.createDiv({ cls: 'csn-ws-panel-search-inner' });
+		const icon = inner.createSpan({
+			cls: 'csn-ws-panel-search-icon',
+			attr: { 'aria-hidden': 'true' }
+		});
+		setIcon(icon, 'search');
+		const input = inner.createEl('input', {
+			type: 'search',
+			cls: 'csn-ws-panel-search-input',
+			attr: {
+				placeholder: t('WS_PANEL_SEARCH_PLACEHOLDER'),
+				'aria-label': t('WS_PANEL_SEARCH_ARIA'),
+				spellcheck: 'false',
+				autocomplete: 'off'
+			}
+		});
+		input.value = this.panelSearchQuery;
+		input.addEventListener('input', () => {
+			this.panelSearchQuery = input.value;
+			refresh();
+			window.requestAnimationFrame(() => {
+				const next = this.contentEl.querySelector(
+					'.csn-ws-panel-search-input'
+				) as HTMLInputElement | null;
+				if (!next) return;
+				next.focus();
+				const len = next.value.length;
+				next.setSelectionRange(len, len);
+			});
+		});
+		input.addEventListener('keydown', (evt: KeyboardEvent) => {
+			if (evt.key !== 'Escape') return;
+			evt.preventDefault();
+			this.panelSearchOpen = false;
+			this.panelSearchQuery = '';
+			refresh();
+		});
+		window.requestAnimationFrame(() => input.focus());
+	}
+
+	/** 定位当前活动工作区：必要时切到「全部」，滚动并短暂高亮。 */
+	private locateActiveWorkspace(refresh: () => void): void {
+		const mgr = this.plugin.stickies;
+		const activeId = mgr.workspaces.activeWorkspaceId;
+		if (!activeId) {
+			new Notice(t('WS_PANEL_LOCATE_NONE'));
+			return;
+		}
+		const ws = mgr.workspaces.workspaces.find(w => w.id === activeId);
+		if (!ws) {
+			new Notice(t('WS_PANEL_LOCATE_NONE'));
+			return;
+		}
+		let needRefresh = false;
+		if (this.activeTabFilterId !== WS_TAB_FILTER_ALL) {
+			this.activeTabFilterId = WS_TAB_FILTER_ALL;
+			void mgr.persistPanelTabFilterId(WS_TAB_FILTER_ALL);
+			needRefresh = true;
+		}
+		if (this.panelSearchQuery.trim()) {
+			this.panelSearchQuery = '';
+			this.panelSearchOpen = false;
+			needRefresh = true;
+		}
+		if (needRefresh) refresh();
+		window.requestAnimationFrame(() => {
+			const el = this.contentEl.querySelector(
+				`.csn-ws-panel-item[data-csn-ws-id="${CSS.escape(activeId)}"]`
+			);
+			if (!(el instanceof HTMLElement)) {
+				new Notice(t('WS_PANEL_LOCATE_NONE'));
+				return;
+			}
+			el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+			el.addClass('is-locate-flash');
+			window.setTimeout(() => el.removeClass('is-locate-flash'), 1200);
+		});
+	}
+
+	/** 回收站按归档时的分组展示（保留 tabGroupId）。 */
+	private renderTrashGrouped(
+		gridEl: HTMLDivElement,
+		trash: readonly StickyWorkspace[],
+		tabGroups: readonly StickyWorkspaceTabGroup[],
+		refresh: () => void
+	): void {
+		type Bucket = { key: string; label: string; items: StickyWorkspace[] };
+		const bucketMap = new Map<string, Bucket>();
+		const ensure = (key: string, label: string): Bucket => {
+			let b = bucketMap.get(key);
+			if (!b) {
+				b = { key, label, items: [] };
+				bucketMap.set(key, b);
+			}
+			return b;
+		};
+
+		for (const ws of trash) {
+			const raw = ws.tabGroupId;
+			if (!raw || raw === WS_TAB_GROUP_UNGROUPED_ID) {
+				ensure(WS_TAB_GROUP_UNGROUPED_ID, t('DASH_AREA_UNGROUPED')).items.push(ws);
+				continue;
+			}
+			const g = tabGroups.find(x => x.id === raw);
+			if (g) {
+				ensure(g.id, g.name).items.push(ws);
+			} else {
+				ensure(`missing:${raw}`, t('WS_TRASH_GROUP_MISSING')).items.push(ws);
+			}
+		}
+
+		const ordered: Bucket[] = [];
+		for (const g of tabGroups) {
+			const b = bucketMap.get(g.id);
+			if (b) ordered.push(b);
+		}
+		const ungrouped = bucketMap.get(WS_TAB_GROUP_UNGROUPED_ID);
+		if (ungrouped) ordered.push(ungrouped);
+		for (const [key, b] of bucketMap) {
+			if (key === WS_TAB_GROUP_UNGROUPED_ID) continue;
+			if (tabGroups.some(g => g.id === key)) continue;
+			ordered.push(b);
+		}
+
+		for (const bucket of ordered) {
+			const section = gridEl.createDiv({ cls: 'csn-ws-panel-trash-section' });
+			section.createDiv({
+				cls: 'csn-ws-panel-trash-section-title',
+				text: bucket.label
+			});
+			const list = section.createDiv({ cls: 'csn-ws-panel-trash-section-grid' });
+			for (const ws of bucket.items) {
+				this.renderTrashTile(list, ws, refresh);
+			}
+		}
 	}
 
 	private renderTabGroupTab(
@@ -757,7 +953,8 @@ export class WorkspacePanelModal extends Modal {
 		const isOpening = isActive && openingWorkspaceId === ws.id;
 
 		const row = gridEl.createDiv({
-			cls: `csn-ws-panel-item csn-ws-panel-item--clickable${isActive ? ' csn-ws-panel-item--active' : ''}${isOpening ? ' csn-ws-panel-item--opening' : ''}`
+			cls: `csn-ws-panel-item csn-ws-panel-item--clickable${isActive ? ' csn-ws-panel-item--active' : ''}${isOpening ? ' csn-ws-panel-item--opening' : ''}`,
+			attr: { 'data-csn-ws-id': ws.id }
 		});
 		row.tabIndex = 0;
 		if (isActive) {

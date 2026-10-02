@@ -3895,12 +3895,102 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   padding-bottom: 2px;
   scrollbar-width: thin;
 }
-.csn-ws-panel-tabbar-all {
+.csn-ws-panel-tabbar-all,
+.csn-ws-panel-tabbar-actions {
   display: flex;
   flex-direction: row;
   align-items: center;
   flex: 0 0 auto;
+  gap: 4px;
   margin-left: auto;
+}
+.csn-ws-panel-tabbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: none;
+}
+.csn-ws-panel-tabbar-icon-btn:hover,
+.csn-ws-panel-tabbar-icon-btn:focus,
+.csn-ws-panel-tabbar-icon-btn:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+.csn-ws-panel-tabbar-icon-btn.is-active {
+  color: var(--interactive-accent);
+  border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+.csn-ws-panel-tabbar-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.csn-ws-panel-search {
+  padding: 0 0 8px;
+}
+.csn-ws-panel-search-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-form-field, var(--background-primary));
+}
+.csn-ws-panel-search-inner:focus-within {
+  border-color: var(--background-modifier-border);
+  box-shadow: none;
+  outline: none;
+}
+.csn-ws-panel-search-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+.csn-ws-panel-search-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.csn-ws-panel-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent;
+  padding: 4px 0;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+.csn-ws-panel-trash-section {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.csn-ws-panel-trash-section-title {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  padding: 2px 2px 0;
+}
+.csn-ws-panel-trash-section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.csn-ws-panel-item.is-locate-flash {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
 }
 /* 顶部分组标签栏：纯文本标签（非按钮外观） */
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab {

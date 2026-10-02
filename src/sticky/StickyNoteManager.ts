@@ -1226,6 +1226,15 @@ export class StickyNoteManager {
 			const isBlank = !removed.windows || removed.windows.length === 0;
 			if (!isBlank) {
 				removed.updatedAt = Date.now();
+				/* 归档时写入当前有效分组，便于回收站按组展示与还原 */
+				const effectiveGroup = resolveWorkspaceTabGroupId(
+					removed,
+					this.workspaces.tabGroups
+				);
+				removed.tabGroupId =
+					effectiveGroup === WS_TAB_GROUP_UNGROUPED_ID
+						? WS_TAB_GROUP_UNGROUPED_ID
+						: effectiveGroup;
 				this.workspaces.trash.unshift(removed);
 			}
 			const wasActive = this.workspaces.activeWorkspaceId === wsId;
