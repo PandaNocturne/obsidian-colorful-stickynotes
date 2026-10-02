@@ -3838,15 +3838,22 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 /* —— 管理便笺工作区弹窗 —— */
 .modal.csn-workspace-panel-modal {
   width: 100%;
-  max-width: min(80vw, 800px);
-  height: min(60vh, 600px);
+  max-width: min(82vw, 840px);
+  height: min(64vh, 640px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--shadow-l);
   /* 内容区占满剩余高度，仅中间列表滚动，底部工具栏固定 */
 }
 .modal.csn-workspace-panel-modal > .modal-title {
   flex-shrink: 0;
+  padding: 14px 18px 10px;
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold, 600);
+  letter-spacing: 0.01em;
+  border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
 }
 .modal.csn-workspace-panel-modal > .modal-content {
   flex: 1 1 auto;
@@ -3854,6 +3861,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0px;
 }
 .csn-workspace-panel {
   display: flex;
@@ -3861,8 +3869,8 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   gap: 0;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 5px;
-  margin: 5px;
+  padding: 0;
+  margin: 0;
 }
 /* 工作区网格区域：单独滚动 */
 .csn-ws-panel-body {
@@ -3870,29 +3878,32 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding-bottom: 4px;
+  padding: 2px 2px 8px;
+  scrollbar-gutter: stable;
 }
 /* 顶部分组标签栏 */
 .csn-ws-panel-tabbar {
   flex-shrink: 0;
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 0 10px;
+  gap: 10px;
+  padding: 0 0 0;
+  margin-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 85%, transparent);
 }
 .csn-ws-panel-tabbar-groups {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 2px;
+  padding-bottom: 0;
   scrollbar-width: thin;
 }
 .csn-ws-panel-tabbar-all,
@@ -3903,6 +3914,10 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   flex: 0 0 auto;
   gap: 4px;
   margin-left: auto;
+  margin-bottom: 6px;
+  padding: 2px;
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--background-modifier-hover) 55%, transparent);
 }
 .csn-ws-panel-tabbar-icon-btn {
   display: inline-flex;
@@ -3911,50 +3926,53 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid var(--background-modifier-border);
+  border: none;
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   box-shadow: none;
+  transition: color 0.12s ease, background-color 0.12s ease;
 }
 .csn-ws-panel-tabbar-icon-btn:hover,
 .csn-ws-panel-tabbar-icon-btn:focus,
 .csn-ws-panel-tabbar-icon-btn:focus-visible {
   color: var(--text-normal);
   background: var(--background-modifier-hover);
+  box-shadow: none;
+  outline: none;
 }
 .csn-ws-panel-tabbar-icon-btn.is-active {
   color: var(--interactive-accent);
-  border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-modifier-border));
-  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
 }
 .csn-ws-panel-tabbar-icon-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 .csn-ws-panel-search {
-  padding: 0 0 8px;
+  padding: 0 0 10px;
 }
 .csn-ws-panel-search-inner {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 8px;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
   border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
   background: var(--background-modifier-form-field, var(--background-primary));
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 .csn-ws-panel-search-inner:focus-within {
-  border-color: var(--background-modifier-border);
-  box-shadow: none;
+  border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
   outline: none;
 }
 .csn-ws-panel-search-icon {
   display: inline-flex;
   color: var(--text-muted);
-  opacity: 0.85;
+  opacity: 0.9;
 }
 .csn-ws-panel-search-icon svg {
   width: 14px;
@@ -3967,7 +3985,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   outline: none !important;
   box-shadow: none !important;
   background: transparent;
-  padding: 4px 0;
+  padding: 6px 0;
   font-size: var(--font-ui-small);
   color: var(--text-normal);
 }
@@ -3976,23 +3994,42 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 4px;
+}
+.csn-ws-panel-trash-section + .csn-ws-panel-trash-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed color-mix(in srgb, var(--background-modifier-border) 80%, transparent);
 }
 .csn-ws-panel-trash-section-title {
   font-size: var(--font-ui-smaller);
-  font-weight: var(--font-semibold);
+  font-weight: var(--font-semibold, 600);
   color: var(--text-muted);
-  padding: 2px 2px 0;
+  padding: 0 2px;
+  letter-spacing: 0.02em;
 }
 .csn-ws-panel-trash-section-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 .csn-ws-panel-item.is-locate-flash {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
+  animation: csn-ws-locate-flash 1.1s ease;
 }
-/* 顶部分组标签栏：纯文本标签（非按钮外观） */
+@keyframes csn-ws-locate-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--interactive-accent) 35%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+/* 顶部分组标签栏：底边指示选中，无按钮外观 */
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab {
   display: inline-flex;
   align-items: center;
@@ -4000,42 +4037,44 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   gap: 4px;
   flex: 0 0 auto;
   height: auto;
-  min-height: calc(var(--input-height) - 4px);
-  padding: 4px 8px;
+  min-height: 30px;
+  padding: 6px 10px 8px;
   margin: 0;
   border: none;
-  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
   background: transparent;
   color: var(--text-muted);
   font-size: var(--font-ui-small);
   font-family: inherit;
-  line-height: 1.4;
+  line-height: 1.35;
   cursor: pointer;
   white-space: nowrap;
   box-sizing: border-box;
   box-shadow: none;
   -webkit-appearance: none;
   appearance: none;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab:hover:not(.csn-ws-panel-tab--active) {
-  background: transparent;
+  background: color-mix(in srgb, var(--background-modifier-hover) 70%, transparent);
   color: var(--text-normal);
   box-shadow: none;
 }
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--active {
   border: none;
-  border-bottom: 3px solid var(--interactive-accent);
-  margin-bottom: -2px;
-  padding-bottom: 1px;
+  border-bottom: 2px solid var(--interactive-accent);
+  margin-bottom: -1px;
+  padding-bottom: 8px;
   color: var(--text-normal);
-  background: var(--interactive-normal);
-  font-weight: inherit;
+  background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+  font-weight: var(--font-semibold, 600);
   box-shadow: none;
 }
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab:active,
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab:focus,
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab:focus-visible {
-  background: transparent;
+  background: color-mix(in srgb, var(--background-modifier-hover) 70%, transparent);
   border-color: transparent;
   box-shadow: none;
   outline: none;
@@ -4044,24 +4083,26 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--active:active,
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--active:focus,
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--active:focus-visible {
-  background: var(--interactive-normal);
+  background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
   border-bottom-color: var(--interactive-accent);
 }
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--add {
   width: auto;
   min-width: 0;
-  padding: 4px 6px;
+  padding: 6px 8px 8px;
   color: var(--text-muted);
   background: transparent;
   border: none;
+  border-bottom: 2px solid transparent;
   box-shadow: none;
 }
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--add:hover,
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--add:active,
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--add:focus,
 .modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab--add:focus-visible {
-  background: transparent;
+  background: color-mix(in srgb, var(--background-modifier-hover) 70%, transparent);
   border: none;
+  border-bottom: 2px solid transparent;
   box-shadow: none;
   color: var(--text-normal);
 }
@@ -4098,11 +4139,12 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 /* 底部工具栏：操作按钮靠右（不随网格滚动） */
 .csn-ws-panel-toolbar {
-  padding-top: 12px;
-  padding-bottom: 8px;
-  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 10px;
+  padding-bottom: 2px;
+  margin-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 85%, transparent);
   flex-shrink: 0;
-  background: var(--background-primary);
+  background: transparent;
 }
 .csn-ws-panel-toolbar-inner {
   display: flex;
@@ -4116,6 +4158,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 .csn-ws-panel-toolbar-badge {
   position: absolute;
@@ -4133,27 +4176,33 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   color: var(--text-on-accent);
   box-sizing: border-box;
   pointer-events: none;
+  box-shadow: 0 0 0 2px var(--background-primary);
 }
 .csn-ws-panel-empty {
   grid-column: 1 / -1;
-  min-height: 120px;
+  min-height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 24px 16px;
+  padding: 28px 18px;
+  margin: 4px 0;
   font-size: var(--font-ui-small);
   color: var(--text-muted);
-  line-height: 1.45;
+  line-height: 1.5;
+  border-radius: var(--radius-m);
+  border: 1px dashed color-mix(in srgb, var(--background-modifier-border) 90%, transparent);
+  background: color-mix(in srgb, var(--background-secondary) 55%, transparent);
 }
 /* 回收站卡片：不可点击切换工作区 */
 .csn-ws-panel-item--trash {
   cursor: default;
+  opacity: 0.92;
 }
 .csn-ws-panel-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 12px;
   align-items: stretch;
 }
 .csn-ws-panel-save-row {
@@ -4212,10 +4261,13 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   background: var(--background-primary);
-  color: var(--text-normal);
+  color: var(--text-muted);
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 .csn-ws-panel-icon-btn--bordered:hover:not(:disabled) {
   background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-color: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-modifier-border));
 }
 .csn-ws-panel-icon-btn--bordered:disabled {
   opacity: 0.45;
@@ -4232,16 +4284,29 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  gap: 10px;
-  padding: 12px 12px;
-  border-radius: var(--radius-m);
-  border: 1px solid var(--background-modifier-border);
+  gap: 8px;
+  min-height: 132px;
+  padding: 14px 14px 12px;
+  border-radius: var(--radius-l, var(--radius-m));
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
   background: var(--background-secondary);
   box-sizing: border-box;
   overflow: visible;
+  transition: border-color 0.14s ease, background-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
+}
+.csn-ws-panel-item--clickable:hover {
+  border-color: color-mix(in srgb, var(--interactive-accent) 28%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--background-secondary) 88%, var(--background-primary));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
 }
 .csn-ws-panel-item--active {
-  border-color: var(--interactive-accent);
+  border-color: color-mix(in srgb, var(--interactive-accent) 70%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 7%, var(--background-secondary));
+  box-shadow: inset 3px 0 0 var(--interactive-accent), 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+}
+.csn-ws-panel-item--active:hover {
+  border-color: color-mix(in srgb, var(--interactive-accent) 80%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 9%, var(--background-secondary));
 }
 .csn-ws-panel-item--clickable {
   cursor: pointer;
@@ -4259,12 +4324,11 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   justify-content: center;
   align-self: stretch;
   width: 100%;
-  min-height: 120px;
+  min-height: 132px;
   padding: 12px;
-  border-radius: var(--radius-m);
-  border: 1px dashed var(--background-modifier-border);
-  /* 与 .csn-ws-panel-item 相同的底色，四边视觉一致 */
-  background: var(--background-secondary);
+  border-radius: var(--radius-l, var(--radius-m));
+  border: 1px dashed color-mix(in srgb, var(--background-modifier-border) 90%, transparent);
+  background: color-mix(in srgb, var(--background-secondary) 70%, transparent);
   box-sizing: border-box;
   color: var(--text-muted);
   cursor: pointer;
@@ -4274,11 +4338,12 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   font-size: inherit;
   font-family: inherit;
   -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease;
 }
 .csn-ws-panel-add-tile:hover {
-  border-color: var(--interactive-accent);
+  border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
   color: var(--text-normal);
-  background: var(--background-modifier-hover);
+  background: color-mix(in srgb, var(--interactive-accent) 6%, var(--background-secondary));
 }
 .csn-ws-panel-add-tile:focus-visible {
   outline: 2px solid var(--interactive-accent);
@@ -4317,11 +4382,30 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   min-width: 0;
   width: 100%;
+}
+.csn-ws-panel-item--active .csn-ws-panel-item-title-row {
+  padding-right: 34px;
+  /* 避开右上角活动徽章 */
+}
+.csn-ws-panel-item-name {
+  font-size: var(--font-ui-medium);
+  font-weight: 600;
+  color: var(--text-normal);
+  line-height: 1.35;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  letter-spacing: 0.01em;
 }
 /* 拖拽：悬浮左上角；默认隐藏，悬停卡片或正在拖动时显示 */
 .csn-ws-panel-item-drag {
@@ -4371,20 +4455,6 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   outline-offset: 2px;
   border-radius: var(--radius-m);
 }
-.csn-ws-panel-item-name {
-  font-size: var(--font-ui-medium);
-  font-weight: 600;
-  color: var(--text-normal);
-  line-height: 1.35;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-  flex: 1 1 auto;
-  width: 100%;
-  max-width: 100%;
-}
 .csn-ws-panel-add-tile--drop-target {
   border-color: var(--interactive-accent);
   background: var(--background-modifier-hover);
@@ -4412,7 +4482,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
-  box-shadow: var(--shadow-s);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--background-secondary) 80%, transparent);
 }
 .csn-ws-panel-item--opening {
   cursor: wait;
@@ -4473,7 +4543,8 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   justify-content: space-between;
   gap: 10px;
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 55%, transparent);
   width: 100%;
   box-sizing: border-box;
 }
@@ -4490,9 +4561,9 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
   line-height: 1.45;
-  margin: 2px 0 6px;
+  margin: 0 0 2px;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
@@ -4504,8 +4575,8 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   -webkit-line-clamp: 2;
 }
 .csn-ws-panel-item-meta {
-  font-size: var(--font-ui-smaller);
-  color: var(--text-muted);
+  font-size: 11px;
+  color: var(--text-faint);
   line-height: 1.4;
   text-align: left;
   max-width: 100%;
