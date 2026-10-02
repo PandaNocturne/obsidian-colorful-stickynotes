@@ -63,6 +63,7 @@ import {
 	sortStickyListFiles,
 	stickyDateFilterKey,
 	stickyDateFiltersEqual,
+	listLocalDateKeysInclusive,
 	type StickyDateFilter
 } from '../utils/query-sticky-list';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
@@ -339,6 +340,8 @@ export class StickyNoteDashboardView extends ItemView {
 	private calDecadeStart = 0;
 	private calPickerDocClose: ((evt: MouseEvent) => void) | null = null;
 	private selectedDateFilter: StickyDateFilter | null = null;
+	/** Shift 范围多选的锚点日期（YYYY-MM-DD）。 */
+	private lastCalDateClickKey: string | null = null;
 	private noteDateKeys = new Set<string>();
 	/** 创建日 → 便笺数，供日历热力图。 */
 	private noteDateCounts = new Map<string, number>();
@@ -2777,6 +2780,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private clearDateFilter(): void {
 		if (!this.selectedDateFilter) return;
+		this.lastCalDateClickKey = null;
 		this.applyDateFilter(null);
 	}
 
@@ -2786,6 +2790,20 @@ export class StickyNoteDashboardView extends ItemView {
 		if (f.kind === 'day') return f.dateKey === key;
 		if (f.kind === 'days') return f.dateKeys.includes(key);
 		return false;
+	}
+
+	/** 将多日结果规范为 day / days / null。 */
+	private applyDayKeysFilter(keys: Iterable<string>): void {
+		const sorted = [...new Set(keys)].sort();
+		if (sorted.length === 0) {
+			this.applyDateFilter(null);
+			return;
+		}
+		if (sorted.length === 1) {
+			this.applyDateFilter({ kind: 'day', dateKey: sorted[0]! });
+			return;
+		}
+		this.applyDateFilter({ kind: 'days', dateKeys: sorted });
 	}
 
 	/** Ctrl/Cmd 点击切换多日筛选。 */
@@ -2805,15 +2823,21 @@ export class StickyNoteDashboardView extends ItemView {
 			keys.add(dateKey);
 		}
 
-		if (keys.size === 0) {
-			this.applyDateFilter(null);
+		this.lastCalDateClickKey = dateKey;
+		this.applyDayKeysFilter(keys);
+	}
+
+	/** Shift 点击：从锚点到当前日的连续区间（含端点）。 */
+	private selectDayRangeFromAnchor(dateKey: string): void {
+		const anchor = this.lastCalDateClickKey;
+		if (!anchor) {
+			this.lastCalDateClickKey = dateKey;
+			this.applyDateFilter({ kind: 'day', dateKey });
 			return;
 		}
-		if (keys.size === 1) {
-			this.applyDateFilter({ kind: 'day', dateKey: [...keys][0]! });
-			return;
-		}
-		this.applyDateFilter({ kind: 'days', dateKeys: [...keys].sort() });
+		const keys = listLocalDateKeysInclusive(anchor, dateKey);
+		this.applyDayKeysFilter(keys);
+		/* 保留锚点，便于连续 Shift 调整另一端 */
 	}
 
 	private calendarHeatMax(): number {
@@ -3193,10 +3217,15 @@ export class StickyNoteDashboardView extends ItemView {
 						this.calYear = day.y;
 						this.calMonth0 = day.m0;
 					}
+					if (evt.shiftKey) {
+						this.selectDayRangeFromAnchor(key);
+						return;
+					}
 					if (evt.ctrlKey || evt.metaKey) {
 						this.toggleDayMultiSelect(key);
 						return;
 					}
+					this.lastCalDateClickKey = key;
 					this.setDateFilter({ kind: 'day', dateKey: key });
 				});
 			}
@@ -3777,6 +3806,13 @@ export class StickyNoteDashboardView extends ItemView {
 		this.tagExcludeFilters = [...saved.tagExcludeFilters];
 		this.tagFilterLogic = saved.tagFilterLogic;
 		this.selectedDateFilter = saved.dateFilter;
+		if (saved.dateFilter?.kind === 'day') {
+			this.lastCalDateClickKey = saved.dateFilter.dateKey;
+		} else if (saved.dateFilter?.kind === 'days' && saved.dateFilter.dateKeys.length > 0) {
+			this.lastCalDateClickKey = saved.dateFilter.dateKeys[saved.dateFilter.dateKeys.length - 1]!;
+		} else {
+			this.lastCalDateClickKey = null;
+		}
 		this.applySavedDateFilterToCalendar(saved.dateFilter);
 		this.workspaceSel = this.pruneWorkspaceSel(saved.workspaceSel);
 		this.ensureVisibleAreaMode();
@@ -5730,6 +5766,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.closeAreaVisibilityPanel();
+		this.lastCalDateClickKey = null;
 		this.flushComposerDraftToSettings();
 		this.debouncedPersistComposerDraft = null;
 		this.persistDashboardFilters();

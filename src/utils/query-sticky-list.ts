@@ -148,6 +148,35 @@ export function localDateKeyFromMs(ms: number): string {
 	return `${y}-${m}-${day}`;
 }
 
+/** 解析 `YYYY-MM-DD` 为本地 0 点时间戳；非法则返回 null。 */
+export function localMsFromDateKey(dateKey: string): number | null {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+	if (!m) return null;
+	const y = Number(m[1]);
+	const mo = Number(m[2]) - 1;
+	const d = Number(m[3]);
+	const dt = new Date(y, mo, d);
+	if (dt.getFullYear() !== y || dt.getMonth() !== mo || dt.getDate() !== d) return null;
+	return dt.getTime();
+}
+
+/** 两日（含端点）之间的全部本地日期键，按时间升序。 */
+export function listLocalDateKeysInclusive(a: string, b: string): string[] {
+	const ta = localMsFromDateKey(a);
+	const tb = localMsFromDateKey(b);
+	if (ta == null || tb == null) return [];
+	const startMs = Math.min(ta, tb);
+	const endMs = Math.max(ta, tb);
+	const out: string[] = [];
+	const cur = new Date(startMs);
+	while (cur.getTime() <= endMs) {
+		out.push(localDateKeyFromMs(cur.getTime()));
+		cur.setDate(cur.getDate() + 1);
+		if (out.length > 4000) break;
+	}
+	return out;
+}
+
 /** ISO 周：周一为一周起始；返回 `{ year, week }`（week 为 1–53）。 */
 export function isoWeekPartsFromMs(ms: number): { year: number; week: number } {
 	const d = new Date(ms);
