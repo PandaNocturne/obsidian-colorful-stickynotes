@@ -3230,13 +3230,12 @@ export class StickyNoteDashboardView extends ItemView {
 		const heatField = this.calendarHeatField();
 		const heatToggleBtn = actions.createEl('button', {
 			type: 'button',
-			cls: `clickable-icon csn-dash-cal-heat-toggle${heatField === 'mtime' ? ' is-mtime' : ' is-ctime'}`,
+			cls: 'clickable-icon csn-dash-cal-heat-toggle',
 			attr: {
 				'aria-label':
 					heatField === 'mtime'
 						? t('DASH_CALENDAR_HEAT_MTIME_ARIA')
-						: t('DASH_CALENDAR_HEAT_CTIME_ARIA'),
-				'aria-pressed': heatField === 'mtime' ? 'true' : 'false'
+						: t('DASH_CALENDAR_HEAT_CTIME_ARIA')
 			}
 		});
 		setIcon(heatToggleBtn, heatField === 'mtime' ? 'calendar-clock' : 'calendar-plus');

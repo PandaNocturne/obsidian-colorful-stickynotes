@@ -3027,17 +3027,18 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   align-items: center;
   gap: 2px;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 120px;
   justify-content: flex-start;
 }
 .csn-dash-cal-pickers {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   justify-content: flex-start;
+  /* 勿 overflow:hidden，否则年月弹层会被裁切 */
 }
 .csn-dash-cal-ym {
   appearance: none;
@@ -3046,6 +3047,11 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   background: transparent !important;
   padding: 0 1px;
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-ui-small);
   line-height: 1.3;
   color: var(--text-muted);
@@ -3310,6 +3316,8 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   padding: 0;
   width: 26px;
   height: 26px;
+  flex: 0 0 26px;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3335,8 +3343,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   outline: none !important;
   border: none !important;
 }
-.csn-dash-cal-scope-btn.is-active,
-.csn-dash-cal-heat-toggle.is-mtime {
+.csn-dash-cal-scope-btn.is-active {
   color: var(--interactive-accent);
   background: color-mix(in srgb, var(--interactive-accent) 14%, transparent) !important;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 45%, transparent) !important;
