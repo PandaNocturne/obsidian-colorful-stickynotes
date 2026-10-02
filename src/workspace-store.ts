@@ -72,6 +72,39 @@ function normalizeTabGroups(raw: unknown): StickyWorkspaceTabGroup[] {
 	return groups;
 }
 
+/** 回收站中保留的分组元数据（不强制包含默认分组）。 */
+function normalizeTrashTabGroups(raw: unknown): StickyWorkspaceTabGroup[] {
+	if (!Array.isArray(raw)) return [];
+	const groups: StickyWorkspaceTabGroup[] = [];
+	const seen = new Set<string>();
+	for (const item of raw) {
+		if (!item || typeof item !== 'object') continue;
+		const id = (item as { id?: unknown }).id;
+		const name = (item as { name?: unknown }).name;
+		if (typeof id !== 'string' || id.length === 0) continue;
+		if (typeof name !== 'string' || !name.trim()) continue;
+		if (seen.has(id)) continue;
+		seen.add(id);
+		groups.push({ id, name: name.trim() });
+	}
+	return groups;
+}
+
+/** 解析回收站工作区的分组展示名（活动分组 + 已归档分组）。 */
+export function resolveTrashWorkspaceGroupLabel(
+	ws: Pick<StickyWorkspace, 'tabGroupId'>,
+	tabGroups: readonly StickyWorkspaceTabGroup[],
+	trashTabGroups: readonly StickyWorkspaceTabGroup[]
+): { key: string; label: string } {
+	const raw = ws.tabGroupId;
+	if (!raw || raw === WS_TAB_GROUP_UNGROUPED_ID) {
+		return { key: WS_TAB_GROUP_UNGROUPED_ID, label: t('DASH_AREA_UNGROUPED') };
+	}
+	const g = tabGroups.find(x => x.id === raw) ?? trashTabGroups.find(x => x.id === raw);
+	if (g) return { key: g.id, label: g.name };
+	return { key: `missing:${raw}`, label: t('WS_TRASH_GROUP_MISSING') };
+}
+
 /** 管理面板顶部分组筛选 id（`@all` 或有效分组 id；无效时回退为「全部」）。 */
 export function resolvePanelTabFilterId(
 	raw: unknown,
@@ -124,7 +157,8 @@ export function defaultWorkspacesFile(): WorkspacesFile {
 				updatedAt: now
 			}
 		],
-		trash: []
+		trash: [],
+		trashTabGroups: []
 	};
 }
 
@@ -185,13 +219,17 @@ export async function loadWorkspacesFile(plugin: Plugin): Promise<WorkspacesFile
 		const trash = Array.isArray(rawTrash)
 			? (rawTrash as typeof parsed.workspaces).map(mapWorkspace)
 			: [];
+		const trashTabGroups = normalizeTrashTabGroups(
+			(parsed as { trashTabGroups?: unknown }).trashTabGroups
+		);
 		return {
 			version: 1,
 			activeWorkspaceId: active,
 			tabGroups,
 			panelTabFilterId,
 			workspaces: parsed.workspaces.map(mapWorkspace),
-			trash
+			trash,
+			trashTabGroups
 		};
 	} catch {
 		return defaultWorkspacesFile();

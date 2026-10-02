@@ -68,7 +68,7 @@ import {
 	type StickyDateFilter
 } from '../utils/query-sticky-list';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
-import { isWorkspaceUngrouped, resolveWorkspaceTabGroupId } from '../workspace-store';
+import { isWorkspaceUngrouped, resolveTrashWorkspaceGroupLabel, resolveWorkspaceTabGroupId } from '../workspace-store';
 import { EmbeddedMarkdownEditorHost } from '../utils/embedded-markdown-editor';
 import {
 	collectStickyTagCatalog,
@@ -4769,8 +4769,8 @@ export class StickyNoteDashboardView extends ItemView {
 		if (group.id !== WS_TAB_GROUP_DEFAULT_ID) {
 			menu.addItem(item => {
 				item.setTitle(t('DASH_WS_MENU_DELETE')).setIcon('trash').onClick(() => {
-					new DeleteWorkspaceTabGroupConfirmModal(this.app, group.name, async () => {
-						await mgr.deleteWorkspaceTabGroup(group.id);
+					const runDelete = async (): Promise<void> => {
+						const result = await mgr.deleteWorkspaceTabGroup(group.id);
 						if (this.workspaceSel.kind === 'selection') {
 							const groupIds = this.workspaceSel.groupIds.filter(id => id !== group.id);
 							this.workspaceSel =
@@ -4785,7 +4785,14 @@ export class StickyNoteDashboardView extends ItemView {
 						this.syncWorkspaceFilterBar();
 						this.renderWorkspaceTree();
 						void this.renderDash();
-					}).open();
+						if (result === 'archived') new Notice(t('NOTICE_TAB_GROUP_ARCHIVED'));
+						else if (result === 'deleted') new Notice(t('NOTICE_TAB_GROUP_DELETED'));
+					};
+					if (mgr.countWorkspacesInTabGroup(group.id) === 0) {
+						void runDelete();
+						return;
+					}
+					new DeleteWorkspaceTabGroupConfirmModal(this.app, group.name, () => runDelete()).open();
 				});
 			});
 		}
@@ -5087,6 +5094,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 		type Bucket = { key: string; label: string; items: StickyWorkspace[] };
 		const tabGroups = file.tabGroups;
+		const trashTabGroups = file.trashTabGroups ?? [];
 		const bucketMap = new Map<string, Bucket>();
 		const ensure = (key: string, label: string): Bucket => {
 			let b = bucketMap.get(key);
@@ -5098,30 +5106,20 @@ export class StickyNoteDashboardView extends ItemView {
 		};
 
 		for (const ws of list) {
-			const raw = ws.tabGroupId;
-			if (!raw || raw === WS_TAB_GROUP_UNGROUPED_ID) {
-				ensure(WS_TAB_GROUP_UNGROUPED_ID, t('DASH_AREA_UNGROUPED')).items.push(ws);
-				continue;
-			}
-			const g = tabGroups.find(x => x.id === raw);
-			if (g) {
-				ensure(g.id, g.name).items.push(ws);
-			} else {
-				ensure(`missing:${raw}`, t('WS_TRASH_GROUP_MISSING')).items.push(ws);
-			}
+			const { key, label } = resolveTrashWorkspaceGroupLabel(ws, tabGroups, trashTabGroups);
+			ensure(key, label).items.push(ws);
 		}
 
 		const ordered: Bucket[] = [];
-		for (const g of tabGroups) {
+		const knownOrder = [...tabGroups, ...trashTabGroups];
+		for (const g of knownOrder) {
 			const b = bucketMap.get(g.id);
-			if (b) ordered.push(b);
+			if (b && !ordered.includes(b)) ordered.push(b);
 		}
 		const ungrouped = bucketMap.get(WS_TAB_GROUP_UNGROUPED_ID);
-		if (ungrouped) ordered.push(ungrouped);
-		for (const [key, b] of bucketMap) {
-			if (key === WS_TAB_GROUP_UNGROUPED_ID) continue;
-			if (tabGroups.some(g => g.id === key)) continue;
-			ordered.push(b);
+		if (ungrouped && !ordered.includes(ungrouped)) ordered.push(ungrouped);
+		for (const [, b] of bucketMap) {
+			if (!ordered.includes(b)) ordered.push(b);
 		}
 
 		for (const bucket of ordered) {

@@ -1276,6 +1276,7 @@ export class StickyNoteManager {
 		if (this.workspaces.workspaces.some(x => x.id === w.id)) return;
 		const memberFiles = this.workspaceMemberFiles(w);
 		w.updatedAt = Date.now();
+		this.restoreTabGroupFromTrashIfNeeded(w.tabGroupId);
 		this.workspaces.workspaces.push(w);
 		await this.flushWorkspacesToDisk();
 		await this.syncStickyWorkspaceYamlForFiles(memberFiles);
@@ -1288,9 +1289,11 @@ export class StickyNoteManager {
 		if (!this.assertWorkspaceMetaMutable()) return;
 		const trashed = this.workspaces.trash.find(x => x.id === wsId);
 		const memberFiles = trashed ? this.workspaceMemberFiles(trashed) : [];
+		const groupId = trashed?.tabGroupId;
 		const before = this.workspaces.trash.length;
 		this.workspaces.trash = this.workspaces.trash.filter(x => x.id !== wsId);
 		if (this.workspaces.trash.length === before) return;
+		if (groupId) this.pruneTrashTabGroupIfUnused(groupId);
 		await this.flushWorkspacesToDisk();
 		await this.syncStickyWorkspaceYamlForFiles(memberFiles);
 		if (this.plugin.settings.noteListWorkspaceFilterId === wsId) {
@@ -1409,23 +1412,123 @@ export class StickyNoteManager {
 		await this.flushWorkspacesToDisk();
 	}
 
-	/** 删除顶部分组标签；组内工作区移入默认分组。 */
-	async deleteWorkspaceTabGroup(groupId: string): Promise<void> {
-		if (!this.assertWorkspaceMetaMutable()) return;
-		if (groupId === WS_TAB_GROUP_DEFAULT_ID) return;
+	/** 统计某顶部分组下的活动工作区数量。 */
+	countWorkspacesInTabGroup(groupId: string): number {
 		const list = this.workspaces.tabGroups;
-		if (!list.some(g => g.id === groupId)) return;
-		const now = Date.now();
-		for (const ws of this.workspaces.workspaces) {
-			if (resolveWorkspaceTabGroupId(ws, list) !== groupId) continue;
-			ws.tabGroupId = undefined;
-			ws.updatedAt = now;
+		return this.workspaces.workspaces.filter(
+			ws => resolveWorkspaceTabGroupId(ws, list) === groupId
+		).length;
+	}
+
+	/**
+	 * 删除顶部分组：
+	 * - 组内无工作区：直接移除分组；
+	 * - 组内有工作区：整组（含工作区）移入回收站，并保留分组元数据以便回收站展示/还原。
+	 */
+	async deleteWorkspaceTabGroup(groupId: string): Promise<'deleted' | 'archived' | 'noop'> {
+		if (!this.assertWorkspaceMetaMutable()) return 'noop';
+		if (groupId === WS_TAB_GROUP_DEFAULT_ID) return 'noop';
+		const list = this.workspaces.tabGroups;
+		const group = list.find(g => g.id === groupId);
+		if (!group) return 'noop';
+
+		const members = this.workspaces.workspaces.filter(
+			ws => resolveWorkspaceTabGroupId(ws, list) === groupId
+		);
+
+		if (members.length === 0) {
+			this.workspaces.tabGroups = list.filter(g => g.id !== groupId);
+			if (this.workspaces.panelTabFilterId === groupId) {
+				this.workspaces.panelTabFilterId = WS_TAB_FILTER_ALL;
+			}
+			await this.flushWorkspacesToDisk();
+			return 'deleted';
 		}
-		this.workspaces.tabGroups = list.filter(g => g.id !== groupId);
-		if (this.workspaces.panelTabFilterId === groupId) {
-			this.workspaces.panelTabFilterId = WS_TAB_FILTER_ALL;
-		}
-		await this.flushWorkspacesToDisk();
+
+		const job = this.workspaceSwitchTail.then(async () => {
+			if (this.isWorkspacePersistFrozen()) return 'noop' as const;
+			this.workspaceSwitchGeneration++;
+
+			const now = Date.now();
+			const memberIds = new Set(members.map(m => m.id));
+			const toTrash: StickyWorkspace[] = [];
+			const remain: StickyWorkspace[] = [];
+			for (const ws of this.workspaces.workspaces) {
+				if (!memberIds.has(ws.id)) {
+					remain.push(ws);
+					continue;
+				}
+				ws.updatedAt = now;
+				ws.tabGroupId = groupId;
+				toTrash.push(ws);
+			}
+			this.workspaces.workspaces = remain;
+			this.workspaces.trash = [...toTrash, ...this.workspaces.trash];
+
+			if (!Array.isArray(this.workspaces.trashTabGroups)) {
+				this.workspaces.trashTabGroups = [];
+			}
+			if (!this.workspaces.trashTabGroups.some(g => g.id === groupId)) {
+				this.workspaces.trashTabGroups.unshift({ id: group.id, name: group.name });
+			}
+			this.workspaces.tabGroups = this.workspaces.tabGroups.filter(g => g.id !== groupId);
+			if (this.workspaces.panelTabFilterId === groupId) {
+				this.workspaces.panelTabFilterId = WS_TAB_FILTER_ALL;
+			}
+
+			const wasActive =
+				!!this.workspaces.activeWorkspaceId &&
+				memberIds.has(this.workspaces.activeWorkspaceId);
+			if (this.workspaces.workspaces.length === 0) {
+				const fresh = defaultWorkspacesFile();
+				this.workspaces.workspaces = fresh.workspaces;
+				this.workspaces.activeWorkspaceId = fresh.activeWorkspaceId;
+				this.closeAllOpenStickyWindows(true);
+			} else if (wasActive) {
+				this.workspaces.activeWorkspaceId = null;
+				this.closeAllOpenStickyWindows(true);
+			}
+
+			if (this.saveTimer !== null) {
+				window.clearTimeout(this.saveTimer);
+				this.saveTimer = null;
+			}
+			await this.flushWorkspacesToDisk();
+
+			const memberFiles = toTrash.flatMap(ws => this.workspaceMemberFiles(ws));
+			await this.syncStickyWorkspaceYamlForFiles(memberFiles);
+
+			for (const wsId of memberIds) {
+				if (this.plugin.settings.noteListWorkspaceFilterId === wsId) {
+					this.plugin.settings.noteListWorkspaceFilterId = null;
+					void this.plugin.saveSettings();
+					break;
+				}
+			}
+			this.plugin.refreshStickyListIfOpen();
+			return 'archived' as const;
+		});
+		this.workspaceSwitchTail = job.then(() => undefined).catch(() => undefined);
+		return job;
+	}
+
+	/** 若回收站中已无该分组的工作区，则清理 trashTabGroups。 */
+	private pruneTrashTabGroupIfUnused(groupId: string): void {
+		if (!groupId || groupId === WS_TAB_GROUP_UNGROUPED_ID) return;
+		const stillUsed = this.workspaces.trash.some(ws => ws.tabGroupId === groupId);
+		if (stillUsed) return;
+		if (!Array.isArray(this.workspaces.trashTabGroups)) return;
+		this.workspaces.trashTabGroups = this.workspaces.trashTabGroups.filter(g => g.id !== groupId);
+	}
+
+	/** 还原工作区时，若其分组仅存在于 trashTabGroups，则一并恢复到活动分组列表。 */
+	private restoreTabGroupFromTrashIfNeeded(tabGroupId: string | undefined): void {
+		if (!tabGroupId || tabGroupId === WS_TAB_GROUP_UNGROUPED_ID) return;
+		if (this.workspaces.tabGroups.some(g => g.id === tabGroupId)) return;
+		const archived = this.workspaces.trashTabGroups?.find(g => g.id === tabGroupId);
+		if (!archived) return;
+		this.workspaces.tabGroups.push({ id: archived.id, name: archived.name });
+		this.workspaces.trashTabGroups = this.workspaces.trashTabGroups.filter(g => g.id !== tabGroupId);
 	}
 
 	private resolveTabGroupIdForNewWorkspace(explicit?: string): string {

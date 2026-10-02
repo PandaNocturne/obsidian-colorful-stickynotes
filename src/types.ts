@@ -87,6 +87,11 @@ export interface WorkspacesFile {
 	panelTabFilterId: string;
 	/** 从面板删除的工作区快照，可还原或彻底删除（持久化在 `*-workspaces.json` 的 `trash` 字段）。 */
 	trash: StickyWorkspace[];
+	/**
+	 * 整组移入回收站时保留的分组元数据（仅用于回收站按组展示 / 还原时恢复分组）。
+	 * 活动 `tabGroups` 中不再包含这些 id。
+	 */
+	trashTabGroups: StickyWorkspaceTabGroup[];
 	/** 当前选中的便笺工作区；为 null 表示未选中（删除当前区后不应默认落到其它区，以免把当前浮动布局误写入该区快照）。 */
 	activeWorkspaceId: string | null;
 }

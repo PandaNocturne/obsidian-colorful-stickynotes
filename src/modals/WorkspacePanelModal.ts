@@ -8,6 +8,7 @@ import {
 	type StickyWorkspace,
 	type StickyWorkspaceTabGroup
 } from '../types';
+import { resolveTrashWorkspaceGroupLabel } from '../workspace-store';
 
 /** HTML5 DnD 用 payload（text/plain 兼容性最好） */
 const WORKSPACE_DND_MIME = 'text/plain';
@@ -483,7 +484,13 @@ export class WorkspacePanelModal extends Modal {
 				text: t('WS_TRASH_EMPTY')
 			});
 		} else {
-			this.renderTrashGrouped(gridEl, data.trash, data.tabGroups, () => this.render());
+			this.renderTrashGrouped(
+				gridEl,
+				data.trash,
+				data.tabGroups,
+				data.trashTabGroups ?? [],
+				() => this.render()
+			);
 		}
 
 		const toolbar = this.contentEl.createDiv({ cls: 'csn-ws-panel-toolbar' });
@@ -770,6 +777,7 @@ export class WorkspacePanelModal extends Modal {
 		gridEl: HTMLDivElement,
 		trash: readonly StickyWorkspace[],
 		tabGroups: readonly StickyWorkspaceTabGroup[],
+		trashTabGroups: readonly StickyWorkspaceTabGroup[],
 		refresh: () => void
 	): void {
 		type Bucket = { key: string; label: string; items: StickyWorkspace[] };
@@ -784,30 +792,20 @@ export class WorkspacePanelModal extends Modal {
 		};
 
 		for (const ws of trash) {
-			const raw = ws.tabGroupId;
-			if (!raw || raw === WS_TAB_GROUP_UNGROUPED_ID) {
-				ensure(WS_TAB_GROUP_UNGROUPED_ID, t('DASH_AREA_UNGROUPED')).items.push(ws);
-				continue;
-			}
-			const g = tabGroups.find(x => x.id === raw);
-			if (g) {
-				ensure(g.id, g.name).items.push(ws);
-			} else {
-				ensure(`missing:${raw}`, t('WS_TRASH_GROUP_MISSING')).items.push(ws);
-			}
+			const { key, label } = resolveTrashWorkspaceGroupLabel(ws, tabGroups, trashTabGroups);
+			ensure(key, label).items.push(ws);
 		}
 
 		const ordered: Bucket[] = [];
-		for (const g of tabGroups) {
+		const knownOrder = [...tabGroups, ...trashTabGroups];
+		for (const g of knownOrder) {
 			const b = bucketMap.get(g.id);
-			if (b) ordered.push(b);
+			if (b && !ordered.includes(b)) ordered.push(b);
 		}
 		const ungrouped = bucketMap.get(WS_TAB_GROUP_UNGROUPED_ID);
-		if (ungrouped) ordered.push(ungrouped);
-		for (const [key, b] of bucketMap) {
-			if (key === WS_TAB_GROUP_UNGROUPED_ID) continue;
-			if (tabGroups.some(g => g.id === key)) continue;
-			ordered.push(b);
+		if (ungrouped && !ordered.includes(ungrouped)) ordered.push(ungrouped);
+		for (const [, b] of bucketMap) {
+			if (!ordered.includes(b)) ordered.push(b);
 		}
 
 		for (const bucket of ordered) {
@@ -877,15 +875,21 @@ export class WorkspacePanelModal extends Modal {
 			}).open();
 		};
 		const openDeleteTabGroup = (): void => {
-			new DeleteWorkspaceTabGroupConfirmModal(this.app, group.name, async () => {
-				await mgr.deleteWorkspaceTabGroup(group.id);
+			const runDelete = async (): Promise<void> => {
+				const result = await mgr.deleteWorkspaceTabGroup(group.id);
 				if (this.activeTabFilterId === group.id) {
 					this.selectTabFilter(WS_TAB_FILTER_ALL, refresh);
 				} else {
 					refresh();
 				}
-				new Notice(t('NOTICE_TAB_GROUP_DELETED'));
-			}).open();
+				if (result === 'archived') new Notice(t('NOTICE_TAB_GROUP_ARCHIVED'));
+				else if (result === 'deleted') new Notice(t('NOTICE_TAB_GROUP_DELETED'));
+			};
+			if (mgr.countWorkspacesInTabGroup(group.id) === 0) {
+				void runDelete();
+				return;
+			}
+			new DeleteWorkspaceTabGroupConfirmModal(this.app, group.name, () => runDelete()).open();
 		};
 		const openTabGroupContextMenu = (e: MouseEvent): void => {
 			e.preventDefault();
