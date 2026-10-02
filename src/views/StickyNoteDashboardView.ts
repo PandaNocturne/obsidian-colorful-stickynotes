@@ -2073,7 +2073,9 @@ export class StickyNoteDashboardView extends ItemView {
 			this.closeTagFilterPanel();
 		});
 
-		const paneToggles = toolBar.createDiv({ cls: 'csn-dash-toolbar csn-dash-pane-toggles' });
+		const toolActions = toolBar.createDiv({ cls: 'csn-dash-tool-actions' });
+
+		const paneToggles = toolActions.createDiv({ cls: 'csn-dash-toolbar csn-dash-pane-toggles' });
 		this.leftPaneToggleBtn = paneToggles.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-dash-left-toggle-btn',
@@ -2102,7 +2104,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncLeftPaneToggleBtn();
 		this.syncComposerToggleBtn();
 
-		const toolbar = toolBar.createDiv({ cls: 'csn-dash-toolbar' });
+		const toolbar = toolActions.createDiv({ cls: 'csn-dash-toolbar' });
 
 		const newStickyBtn = toolbar.createEl('button', {
 			type: 'button',
