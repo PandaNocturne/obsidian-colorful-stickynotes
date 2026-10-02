@@ -63,6 +63,7 @@ export interface DashboardFilterState {
 	tagIncludeFilters: string[];
 	tagExcludeFilters: string[];
 	tagFilterLogic: 'and' | 'or';
+	workspaceFilterLogic: 'and' | 'or';
 	dateFilter: StickyDateFilter | null;
 	searchQuery: string;
 }
@@ -136,6 +137,7 @@ export const DEFAULT_DASHBOARD_FILTERS: DashboardFilterState = {
 	tagIncludeFilters: [],
 	tagExcludeFilters: [],
 	tagFilterLogic: 'or',
+	workspaceFilterLogic: 'or',
 	dateFilter: null,
 	searchQuery: ''
 };
@@ -156,6 +158,7 @@ export function normalizeDashboardFilterState(raw: unknown): DashboardFilterStat
 			)
 		: [];
 	const tagFilterLogic = obj.tagFilterLogic === 'and' ? 'and' : 'or';
+	const workspaceFilterLogic = obj.workspaceFilterLogic === 'and' ? 'and' : 'or';
 	const searchQuery = typeof obj.searchQuery === 'string' ? obj.searchQuery : '';
 	return {
 		areaMode,
@@ -165,6 +168,7 @@ export function normalizeDashboardFilterState(raw: unknown): DashboardFilterStat
 		tagIncludeFilters: normalizeDashStringList(obj.tagIncludeFilters),
 		tagExcludeFilters: normalizeDashStringList(obj.tagExcludeFilters),
 		tagFilterLogic,
+		workspaceFilterLogic,
 		dateFilter: normalizeDashDateFilter(obj.dateFilter),
 		searchQuery
 	};
@@ -179,6 +183,7 @@ export function dashboardFilterStateKey(state: DashboardFilterState): string {
 		tagIncludeFilters: [...state.tagIncludeFilters].sort(),
 		tagExcludeFilters: [...state.tagExcludeFilters].sort(),
 		tagFilterLogic: state.tagFilterLogic,
+		workspaceFilterLogic: state.workspaceFilterLogic,
 		dateFilter: state.dateFilter,
 		searchQuery: state.searchQuery
 	});

@@ -269,13 +269,24 @@ export class StickyNoteDashboardView extends ItemView {
 	private dateFilterWrapEl: HTMLElement | null = null;
 	private dateFilterAddBtn: HTMLButtonElement | null = null;
 	private dateFilterPanelEl: HTMLElement | null = null;
+	private dateFilterModeEl: HTMLElement | null = null;
 	private dateFilterInput: HTMLInputElement | null = null;
 	private dateFilterConfirmBtn: HTMLButtonElement | null = null;
+	private dateFilterPanelGroupsEl: HTMLElement | null = null;
+	private dateFilterPanelListEl: HTMLElement | null = null;
+	/** + 面板添加粒度：日可累加；年/月为单值筛选。 */
+	private dateFilterAddMode: 'day' | 'month' | 'year' = 'day';
+	private dateFilterPanelGroup: 'selected' | 'add' = 'add';
+	private readonly dateFilterModeBtns = new Map<'day' | 'month' | 'year', HTMLButtonElement>();
 	private wsFilterWrapEl: HTMLElement | null = null;
 	private wsFilterChipsEl: HTMLElement | null = null;
 	private wsFilterAddBtn: HTMLButtonElement | null = null;
 	private wsFilterPanelEl: HTMLElement | null = null;
 	private wsFilterPanelListEl: HTMLElement | null = null;
+	private wsFilterPanelGroupsEl: HTMLElement | null = null;
+	private wsFilterPanelSearchInput: HTMLInputElement | null = null;
+	private wsFilterPanelSearch = '';
+	private wsFilterPanelGroup: 'selected' | 'all' = 'all';
 	private colorBtns = new Map<StickyColorId, HTMLButtonElement>();
 	private archiveFilterBtns = new Map<NoteListArchiveFilter, HTMLButtonElement>();
 	private gridEl: HTMLElement | null = null;
@@ -321,7 +332,6 @@ export class StickyNoteDashboardView extends ItemView {
 	private tagPanelSearch = '';
 	private tagCatalog: StickyTagCount[] = [];
 	private tagFilterBtn: HTMLButtonElement | null = null;
-	private tagClearBtn: HTMLButtonElement | null = null;
 	private tagChipsEl: HTMLElement | null = null;
 	private tagPanelWrapEl: HTMLElement | null = null;
 	private tagPanelEl: HTMLElement | null = null;
@@ -331,6 +341,9 @@ export class StickyNoteDashboardView extends ItemView {
 	private tagLogicOrBtn: HTMLButtonElement | null = null;
 	private tagLogicAndBtn: HTMLButtonElement | null = null;
 	private workspaceSel: DashWorkspaceSel = { kind: 'all' };
+	private workspaceFilterLogic: 'and' | 'or' = 'or';
+	private wsLogicOrBtn: HTMLButtonElement | null = null;
+	private wsLogicAndBtn: HTMLButtonElement | null = null;
 	private collapsedGroupIds = new Set<string>();
 	private calYear: number;
 	private calMonth0: number;
@@ -1823,10 +1836,12 @@ export class StickyNoteDashboardView extends ItemView {
 				this.removeTagFilter(tag);
 				return;
 			}
-			const chip = hit.closest('button[data-csn-tag-chip]');
+			if (hit.closest('[data-csn-filter-more-clear]')) return;
+			const chip = hit.closest('button.csn-dash-tag-chip');
 			if (chip && this.tagChipsEl?.contains(chip)) {
 				evt.preventDefault();
 				evt.stopPropagation();
+				this.tagPanelGroup = 'selected';
 				this.openTagFilterPanel();
 			}
 		});
@@ -1846,21 +1861,6 @@ export class StickyNoteDashboardView extends ItemView {
 			evt.stopPropagation();
 			this.toggleTagFilterPanel();
 		});
-		this.tagClearBtn = tagWrap.createEl('button', {
-			type: 'button',
-			cls: 'csn-dash-tag-clear-btn csn-dash-tag-clear-btn--hidden',
-			attr: {
-				'aria-label': t('DASH_TAG_CLEAR_ARIA'),
-				'aria-hidden': 'true',
-				tabindex: '-1'
-			},
-			text: t('DASH_TAG_CLEAR')
-		});
-		this.registerDomEvent(this.tagClearBtn, 'click', (evt: MouseEvent) => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			this.clearAllTagFilters();
-		});
 		this.buildTagFilterPanel(tagWrap);
 		this.syncTagFilterButton();
 
@@ -1872,12 +1872,21 @@ export class StickyNoteDashboardView extends ItemView {
 			const hit = evt.target;
 			if (!(hit instanceof Element)) return;
 			const removeBtn = hit.closest('[data-csn-date-chip-remove]');
-			if (!removeBtn || !this.dateFilterChipsEl?.contains(removeBtn)) return;
-			evt.preventDefault();
-			evt.stopPropagation();
-			const key = (removeBtn as HTMLElement).dataset.csnDateChipRemove;
-			if (!key) return;
-			this.removeDateFilterChip(key);
+			if (removeBtn && this.dateFilterChipsEl?.contains(removeBtn)) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				const key = (removeBtn as HTMLElement).dataset.csnDateChipRemove;
+				if (!key) return;
+				this.removeDateFilterChip(key);
+				return;
+			}
+			if (hit.closest('[data-csn-filter-more-clear]')) return;
+			const chip = hit.closest('button.csn-dash-date-filter-chip');
+			if (chip && this.dateFilterChipsEl?.contains(chip)) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.openDateFilterPanel({ group: 'selected' });
+			}
 		});
 		this.dateFilterAddBtn = dateFilterWrap.createEl('button', {
 			type: 'button',
@@ -1906,15 +1915,24 @@ export class StickyNoteDashboardView extends ItemView {
 			const hit = evt.target;
 			if (!(hit instanceof Element)) return;
 			const removeBtn = hit.closest('[data-csn-ws-chip-remove]');
-			if (!removeBtn || !this.wsFilterChipsEl?.contains(removeBtn)) return;
-			evt.preventDefault();
-			evt.stopPropagation();
-			const el = removeBtn as HTMLElement;
-			const kind = el.dataset.csnWsChipKind;
-			const id = el.dataset.csnWsChipRemove;
-			if (!kind || !id) return;
-			if (kind === 'group' || kind === 'workspace') {
-				this.removeWorkspaceFilterChip(kind, id);
+			if (removeBtn && this.wsFilterChipsEl?.contains(removeBtn)) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				const el = removeBtn as HTMLElement;
+				const kind = el.dataset.csnWsChipKind;
+				const id = el.dataset.csnWsChipRemove;
+				if (!kind || !id) return;
+				if (kind === 'group' || kind === 'workspace') {
+					this.removeWorkspaceFilterChip(kind, id);
+				}
+				return;
+			}
+			if (hit.closest('[data-csn-filter-more-clear]')) return;
+			const chip = hit.closest('button.csn-dash-ws-filter-chip');
+			if (chip && this.wsFilterChipsEl?.contains(chip)) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.openWorkspaceFilterPanel({ group: 'selected' });
 			}
 		});
 		this.wsFilterAddBtn = wsFilterWrap.createEl('button', {
@@ -2002,10 +2020,9 @@ export class StickyNoteDashboardView extends ItemView {
 				/* 仅点击面板或触发控件内不关闭；勿用整块 tag-wrap（会占满筛选行空白） */
 				if (
 					!(
-						this.tagPanelEl?.contains(tEl) ||
-						this.tagFilterBtn?.contains(tEl) ||
-						this.tagChipsEl?.contains(tEl) ||
-						this.tagClearBtn?.contains(tEl)
+				this.tagPanelEl?.contains(tEl) ||
+				this.tagFilterBtn?.contains(tEl) ||
+				this.tagChipsEl?.contains(tEl)
 					)
 				) {
 					this.closeTagFilterPanel();
@@ -2465,23 +2482,77 @@ export class StickyNoteDashboardView extends ItemView {
 		return this.tagIncludeFilters.length + this.tagExcludeFilters.length;
 	}
 
+	/** 多项筛选时在芯片栏显示省略号；点击打开对应面板，X 清空该项筛选。 */
+	private appendFilterMoreChip(
+		host: HTMLElement,
+		chipCls: string,
+		count: number,
+		onOpen: () => void,
+		onClear: () => void,
+		clearAria: string
+	): void {
+		const chip = host.createEl('button', {
+			type: 'button',
+			cls: `${chipCls} csn-dash-filter-chip--more`,
+			attr: {
+				'data-csn-filter-more': '1',
+				title: t('DASH_FILTER_CHIPS_MORE_ARIA', { n: count }),
+				'aria-label': t('DASH_FILTER_CHIPS_MORE_ARIA', { n: count })
+			}
+		});
+		chip.createSpan({ cls: 'csn-dash-filter-chip-more-text', text: t('DASH_FILTER_CHIPS_MORE') });
+		chip.createSpan({ cls: 'csn-dash-filter-chip-more-count', text: String(count) });
+		const remove = chip.createSpan({
+			cls: 'csn-dash-filter-chip-more-remove',
+			attr: {
+				role: 'button',
+				tabindex: '0',
+				'data-csn-filter-more-clear': '1',
+				'aria-label': clearAria
+			}
+		});
+		setIcon(remove, 'x');
+		this.registerDomEvent(chip, 'click', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (hit instanceof Element && hit.closest('[data-csn-filter-more-clear]')) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				onClear();
+				return;
+			}
+			evt.preventDefault();
+			evt.stopPropagation();
+			onOpen();
+		});
+	}
+
 	private syncTagFilterButton(): void {
 		const btn = this.tagFilterBtn;
 		const chipsEl = this.tagChipsEl;
-		const clearBtn = this.tagClearBtn;
 		const hasFilters = this.activeTagFilterCount() > 0;
 		if (btn) {
 			/* 仅面板打开时高亮；已有筛选用 chips 表达，勿点亮 + */
 			btn.toggleClass('is-active', this.isTagFilterPanelOpen());
 			btn.setAttr('aria-expanded', this.isTagFilterPanelOpen() ? 'true' : 'false');
 		}
-		if (clearBtn) {
-			clearBtn.toggleClass('csn-dash-tag-clear-btn--hidden', !hasFilters);
-			clearBtn.setAttr('aria-hidden', hasFilters ? 'false' : 'true');
-			clearBtn.setAttr('tabindex', hasFilters ? '0' : '-1');
-		}
 		if (!chipsEl) return;
 		chipsEl.empty();
+		const total = this.activeTagFilterCount();
+		if (total === 0) return;
+		if (total > 1) {
+			this.appendFilterMoreChip(
+				chipsEl,
+				'csn-dash-tag-chip',
+				total,
+				() => {
+					this.tagPanelGroup = 'selected';
+					this.openTagFilterPanel();
+				},
+				() => this.clearAllTagFilters(),
+				t('DASH_TAG_CLEAR_ARIA')
+			);
+			return;
+		}
 		const addChip = (tag: string, mode: 'include' | 'exclude') => {
 			const chip = chipsEl.createEl('button', {
 				type: 'button',
@@ -2619,7 +2690,9 @@ export class StickyNoteDashboardView extends ItemView {
 			const tag = (item as HTMLButtonElement).dataset.csnTag;
 			if (!tag) return;
 			evt.preventDefault();
-			this.toggleTagInclude(tag);
+			/* 已选分组：单击取消该项；全部：切换包含 */
+			if (this.tagPanelGroup === 'selected') this.removeTagFilter(tag);
+			else this.toggleTagInclude(tag);
 		});
 		this.registerDomEvent(this.tagPanelListEl, 'contextmenu', (evt: MouseEvent) => {
 			const hit = evt.target;
@@ -2629,7 +2702,8 @@ export class StickyNoteDashboardView extends ItemView {
 			const tag = (item as HTMLButtonElement).dataset.csnTag;
 			if (!tag) return;
 			evt.preventDefault();
-			this.toggleTagExclude(tag);
+			if (this.tagPanelGroup === 'selected') this.removeTagFilter(tag);
+			else this.toggleTagExclude(tag);
 		});
 
 		const foot = panel.createDiv({ cls: 'csn-dash-tag-panel-foot' });
@@ -2649,7 +2723,10 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private toggleTagFilterPanel(): void {
 		if (this.isTagFilterPanelOpen()) this.closeTagFilterPanel();
-		else this.openTagFilterPanel();
+		else {
+			this.tagPanelGroup = 'all';
+			this.openTagFilterPanel();
+		}
 	}
 
 	private openTagFilterPanel(): void {
@@ -3314,6 +3391,103 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 	}
 
+	private setDateFilterAddMode(mode: 'day' | 'month' | 'year'): void {
+		if (this.dateFilterAddMode === mode) {
+			this.syncDateFilterAddModeUi();
+			return;
+		}
+		this.dateFilterAddMode = mode;
+		this.syncDateFilterAddModeUi();
+		this.fillDateFilterInputDefault(true);
+		window.setTimeout(() => this.dateFilterInput?.focus(), 0);
+	}
+
+	private fillDateFilterInputDefault(force = false): void {
+		const input = this.dateFilterInput;
+		if (!input) return;
+		const now = new Date();
+		const y = now.getFullYear();
+		const m = String(now.getMonth() + 1).padStart(2, '0');
+		const d = String(now.getDate()).padStart(2, '0');
+		/* 年/月/日共用 date 控件外观，仅提交时按粒度取值 */
+		if (force || !input.value) input.value = `${y}-${m}-${d}`;
+	}
+
+	private syncDateFilterAddModeUi(): void {
+		const mode = this.dateFilterAddMode;
+		for (const [id, btn] of this.dateFilterModeBtns) {
+			btn.toggleClass('is-active', id === mode);
+			btn.setAttr('aria-pressed', id === mode ? 'true' : 'false');
+		}
+		const input = this.dateFilterInput;
+		if (!input) return;
+		/* 统一 type=date，与「日」选择器视觉一致 */
+		input.type = 'date';
+		input.removeAttribute('min');
+		input.removeAttribute('max');
+		input.removeAttribute('step');
+		if (mode === 'day') {
+			input.setAttr('aria-label', t('DASH_DATE_FILTER_INPUT_ARIA'));
+		} else if (mode === 'month') {
+			input.setAttr('aria-label', t('DASH_DATE_FILTER_MONTH_INPUT_ARIA'));
+		} else {
+			input.setAttr('aria-label', t('DASH_DATE_FILTER_YEAR_INPUT_ARIA'));
+		}
+	}
+
+	/** 日期筛选粒度：数值越大范围越大。大范围不得覆盖小范围。 */
+	private dateFilterScopeRank(filter: StickyDateFilter | null): number {
+		if (!filter) return 0;
+		switch (filter.kind) {
+			case 'year':
+				return 3;
+			case 'month':
+			case 'week':
+				return 2;
+			case 'day':
+			case 'days':
+				return 1;
+		}
+	}
+
+	/** + 面板提交；大范围不会覆盖已有更小范围。 */
+	private commitDateFilterFromPanel(): void {
+		const raw = this.dateFilterInput?.value?.trim() ?? '';
+		if (!raw) return;
+		const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+		if (!parts) return;
+		const year = Number(parts[1]);
+		const month0 = Number(parts[2]) - 1;
+		const mode = this.dateFilterAddMode;
+		const curRank = this.dateFilterScopeRank(this.selectedDateFilter);
+
+		if (mode === 'day') {
+			this.calYear = year;
+			this.calMonth0 = month0;
+			this.addDateToFilter(raw);
+		} else if (mode === 'month') {
+			if (!Number.isFinite(year) || month0 < 0 || month0 > 11) return;
+			if (curRank > 0 && curRank < 2) {
+				new Notice(t('DASH_DATE_FILTER_NO_OVERWRITE_SMALLER'));
+				return;
+			}
+			this.calYear = year;
+			this.calMonth0 = month0;
+			this.applyDateFilter({ kind: 'month', year, month0 });
+		} else {
+			if (!Number.isInteger(year) || year < 1970 || year > 2100) return;
+			if (curRank > 0 && curRank < 3) {
+				new Notice(t('DASH_DATE_FILTER_NO_OVERWRITE_SMALLER'));
+				return;
+			}
+			this.calYear = year;
+			this.applyDateFilter({ kind: 'year', year });
+		}
+		this.dateFilterPanelGroup = 'selected';
+		if (this.isDateFilterPanelOpen()) this.renderDateFilterPanelBody();
+		window.setTimeout(() => this.dateFilterInput?.focus(), 0);
+	}
+
 	private isDateFilterPanelOpen(): boolean {
 		return !!this.dateFilterPanelEl && !this.dateFilterPanelEl.hasClass('csn-dash-date-filter-panel--hidden');
 	}
@@ -3328,11 +3502,33 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		});
 		this.dateFilterPanelEl = panel;
-		panel.createDiv({
-			cls: 'csn-dash-date-filter-panel-hint',
-			text: t('DASH_DATE_FILTER_MULTI_HINT')
-		});
-		const row = panel.createDiv({ cls: 'csn-dash-date-filter-panel-row' });
+
+		const tools = panel.createDiv({ cls: 'csn-dash-filter-panel-tools' });
+		const row = tools.createDiv({ cls: 'csn-dash-date-filter-panel-row' });
+		const modeRow = row.createDiv({ cls: 'csn-dash-date-filter-mode' });
+		this.dateFilterModeEl = modeRow;
+		this.dateFilterModeBtns.clear();
+		const mkMode = (id: 'day' | 'month' | 'year', labelKey: MessageKey) => {
+			const btn = modeRow.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-date-filter-mode-btn',
+				text: t(labelKey),
+				attr: {
+					'data-csn-date-filter-mode': id,
+					'aria-pressed': id === this.dateFilterAddMode ? 'true' : 'false'
+				}
+			});
+			this.dateFilterModeBtns.set(id, btn);
+			this.registerDomEvent(btn, 'click', (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.setDateFilterAddMode(id);
+			});
+		};
+		mkMode('day', 'DASH_DATE_FILTER_MODE_DAY');
+		mkMode('month', 'DASH_DATE_FILTER_MODE_MONTH');
+		mkMode('year', 'DASH_DATE_FILTER_MODE_YEAR');
+
 		this.dateFilterInput = row.createEl('input', {
 			type: 'date',
 			cls: 'csn-dash-date-filter-input',
@@ -3344,38 +3540,129 @@ export class StickyNoteDashboardView extends ItemView {
 			attr: { 'aria-label': t('DASH_DATE_FILTER_CONFIRM_ARIA') }
 		});
 		setIcon(this.dateFilterConfirmBtn, 'check');
-		const commitDate = () => {
-			const v = this.dateFilterInput?.value?.trim() ?? '';
-			if (!v) return;
-			this.addDateToFilter(v);
-			window.setTimeout(() => this.dateFilterInput?.focus(), 0);
-		};
 		this.registerDomEvent(this.dateFilterInput, 'click', (evt: MouseEvent) => {
 			evt.stopPropagation();
 		});
 		this.registerDomEvent(this.dateFilterInput, 'keydown', (evt: KeyboardEvent) => {
 			if (evt.key !== 'Enter') return;
 			evt.preventDefault();
-			commitDate();
+			this.commitDateFilterFromPanel();
 		});
 		this.registerDomEvent(this.dateFilterConfirmBtn, 'click', (evt: MouseEvent) => {
 			evt.preventDefault();
 			evt.stopPropagation();
-			commitDate();
+			this.commitDateFilterFromPanel();
 		});
+
+		const body = panel.createDiv({ cls: 'csn-dash-filter-panel-body' });
+		this.dateFilterPanelGroupsEl = body.createDiv({ cls: 'csn-dash-filter-panel-groups' });
+		const mkGroup = (id: 'selected' | 'add', labelKey: MessageKey) => {
+			const btn = this.dateFilterPanelGroupsEl!.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-filter-panel-group-btn',
+				attr: { 'data-csn-date-group': id }
+			});
+			btn.createSpan({ cls: 'csn-dash-filter-panel-group-label', text: t(labelKey) });
+			btn.createSpan({ cls: 'csn-dash-filter-panel-group-count', text: '0' });
+			this.registerDomEvent(btn, 'click', () => {
+				this.dateFilterPanelGroup = id;
+				this.renderDateFilterPanelBody();
+				if (id === 'add') window.setTimeout(() => this.dateFilterInput?.focus(), 0);
+			});
+		};
+		mkGroup('selected', 'DASH_DATE_FILTER_GROUP_SELECTED');
+		mkGroup('add', 'DASH_DATE_FILTER_GROUP_ADD');
+
+		this.dateFilterPanelListEl = body.createDiv({ cls: 'csn-dash-filter-panel-list' });
+
+		const foot = panel.createDiv({ cls: 'csn-dash-filter-panel-foot' });
+		foot.createSpan({ cls: 'csn-dash-filter-panel-hint', text: t('DASH_DATE_FILTER_HINT_APPEND') });
+		foot.createSpan({
+			cls: 'csn-dash-filter-panel-hint csn-dash-filter-panel-hint--end',
+			text: t('DASH_TAG_HINT_CLOSE')
+		});
+
+		this.syncDateFilterAddModeUi();
+		this.fillDateFilterInputDefault(true);
+		this.renderDateFilterPanelBody();
 	}
 
-	private openDateFilterPanel(): void {
+	private collectDateFilterPanelRows(): { label: string; removeKey: string }[] {
+		const f = this.selectedDateFilter;
+		if (!f) return [];
+		if (f.kind === 'days') return [...f.dateKeys].sort().map(key => ({ label: key, removeKey: key }));
+		if (f.kind === 'day') return [{ label: f.dateKey, removeKey: f.dateKey }];
+		return [{ label: this.formatDateFilterChipLabel(f), removeKey: stickyDateFilterKey(f) }];
+	}
+
+	/** 日期面板：已选列表 / 添加引导，布局对齐标签选择器。 */
+	private renderDateFilterPanelBody(): void {
+		const groupsEl = this.dateFilterPanelGroupsEl;
+		const listEl = this.dateFilterPanelListEl;
+		if (!groupsEl || !listEl) return;
+
+		const rows = this.collectDateFilterPanelRows();
+		for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-filter-panel-group-btn'))) {
+			if (!(btn instanceof HTMLElement)) continue;
+			const id = btn.dataset.csnDateGroup;
+			const countEl = btn.querySelector('.csn-dash-filter-panel-group-count');
+			if (countEl) {
+				countEl.setText(String(id === 'selected' ? rows.length : '·'));
+			}
+			btn.toggleClass('is-active', this.dateFilterPanelGroup === id);
+		}
+
+		listEl.empty();
+		if (this.dateFilterPanelGroup === 'add') {
+			listEl.createDiv({
+				cls: 'csn-dash-filter-panel-empty',
+				text: t('DASH_DATE_FILTER_ADD_GUIDE')
+			});
+			return;
+		}
+		if (rows.length === 0) {
+			listEl.createDiv({
+				cls: 'csn-dash-filter-panel-empty',
+				text: t('DASH_DATE_FILTER_SELECTED_EMPTY')
+			});
+			return;
+		}
+		for (const row of rows) {
+			const item = listEl.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-filter-panel-item is-selected',
+				attr: { 'aria-label': row.label }
+			});
+			const check = item.createSpan({
+				cls: 'csn-dash-filter-panel-item-check',
+				attr: { 'aria-hidden': 'true' }
+			});
+			setIcon(check, 'check-square');
+			const icon = item.createSpan({
+				cls: 'csn-dash-filter-panel-item-icon',
+				attr: { 'aria-hidden': 'true' }
+			});
+			setIcon(icon, 'calendar');
+			item.createSpan({ cls: 'csn-dash-filter-panel-item-label', text: row.label });
+			this.registerDomEvent(item, 'click', (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.removeDateFilterChip(row.removeKey);
+			});
+		}
+	}
+
+	private openDateFilterPanel(opts?: { group?: 'selected' | 'add' }): void {
 		const panel = this.dateFilterPanelEl;
 		const btn = this.dateFilterAddBtn;
 		if (!panel) return;
+		if (opts?.group) this.dateFilterPanelGroup = opts.group;
+		this.renderDateFilterPanelBody();
+		this.syncDateFilterAddModeUi();
+		this.fillDateFilterInputDefault(false);
 		panel.removeClass('csn-dash-date-filter-panel--hidden');
 		btn?.addClass('is-active');
 		btn?.setAttr('aria-expanded', 'true');
-		const today = localDateKeyFromMs(Date.now());
-		if (this.dateFilterInput && !this.dateFilterInput.value) {
-			this.dateFilterInput.value = today;
-		}
 		window.setTimeout(() => this.dateFilterInput?.focus(), 0);
 	}
 
@@ -3390,7 +3677,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private toggleDateFilterPanel(): void {
 		if (this.isDateFilterPanelOpen()) this.closeDateFilterPanel();
-		else this.openDateFilterPanel();
+		else this.openDateFilterPanel({ group: 'add' });
 	}
 
 	private syncDateFilterBar(): void {
@@ -3408,10 +3695,24 @@ export class StickyNoteDashboardView extends ItemView {
 			addBtn.toggleClass('is-active', this.isDateFilterPanelOpen());
 			addBtn.setAttr('aria-expanded', this.isDateFilterPanelOpen() ? 'true' : 'false');
 		}
+		if (this.isDateFilterPanelOpen()) this.renderDateFilterPanelBody();
 		if (!chipsEl) return;
 		chipsEl.empty();
 		const f = this.selectedDateFilter;
 		if (!f) return;
+
+		const dayCount = f.kind === 'days' ? f.dateKeys.length : 1;
+		if (dayCount > 1 && f.kind === 'days') {
+			this.appendFilterMoreChip(
+				chipsEl,
+				'csn-dash-date-filter-chip',
+				dayCount,
+				() => this.openDateFilterPanel({ group: 'selected' }),
+				() => this.clearDateFilter(),
+				t('DASH_DATE_FILTER_CLEAR_ARIA')
+			);
+			return;
+		}
 
 		const addChip = (label: string, removeKey: string) => {
 			const chip = chipsEl.createEl('button', {
@@ -3435,12 +3736,12 @@ export class StickyNoteDashboardView extends ItemView {
 			setIcon(remove, 'x');
 		};
 
-		if (f.kind === 'days') {
-			for (const key of [...f.dateKeys].sort()) addChip(key, key);
-			return;
-		}
 		if (f.kind === 'day') {
 			addChip(f.dateKey, f.dateKey);
+			return;
+		}
+		if (f.kind === 'days') {
+			addChip(f.dateKeys[0]!, f.dateKeys[0]!);
 			return;
 		}
 		addChip(this.formatDateFilterChipLabel(f), stickyDateFilterKey(f));
@@ -3783,6 +4084,7 @@ export class StickyNoteDashboardView extends ItemView {
 			tagIncludeFilters: [...this.tagIncludeFilters],
 			tagExcludeFilters: [...this.tagExcludeFilters],
 			tagFilterLogic: this.tagFilterLogic,
+			workspaceFilterLogic: this.workspaceFilterLogic,
 			dateFilter: this.selectedDateFilter,
 			searchQuery: this.searchInput?.value ?? this.plugin.settings.dashboardFilters.searchQuery
 		});
@@ -3805,6 +4107,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.tagIncludeFilters = [...saved.tagIncludeFilters];
 		this.tagExcludeFilters = [...saved.tagExcludeFilters];
 		this.tagFilterLogic = saved.tagFilterLogic;
+		this.workspaceFilterLogic = saved.workspaceFilterLogic;
 		this.selectedDateFilter = saved.dateFilter;
 		if (saved.dateFilter?.kind === 'day') {
 			this.lastCalDateClickKey = saved.dateFilter.dateKey;
@@ -3815,6 +4118,7 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 		this.applySavedDateFilterToCalendar(saved.dateFilter);
 		this.workspaceSel = this.pruneWorkspaceSel(saved.workspaceSel);
+		this.syncWorkspaceLogicButtons();
 		this.ensureVisibleAreaMode();
 		this.plugin.settings.dashboardFilters = {
 			...saved,
@@ -3885,6 +4189,23 @@ export class StickyNoteDashboardView extends ItemView {
 		this.setWorkspaceSel({ kind: 'selection', groupIds, workspaceIds });
 	}
 
+	/** + 面板「全部」：仅追加，不覆盖、不切换取消。 */
+	private appendWorkspaceFilterSel(
+		target: { kind: 'group'; id: string } | { kind: 'workspace'; id: string }
+	): void {
+		if (target.kind === 'group') {
+			if (this.isGroupSelActive(target.id)) return;
+		} else if (this.isWorkspaceSelActive(target.id)) {
+			return;
+		}
+		const cur = this.workspaceSel;
+		const groupIds = cur.kind === 'selection' ? [...cur.groupIds] : [];
+		const workspaceIds = cur.kind === 'selection' ? [...cur.workspaceIds] : [];
+		if (target.kind === 'group') groupIds.push(target.id);
+		else workspaceIds.push(target.id);
+		this.setWorkspaceSel({ kind: 'selection', groupIds, workspaceIds });
+	}
+
 	private isWorkspaceFilterPanelOpen(): boolean {
 		return !!this.wsFilterPanelEl && !this.wsFilterPanelEl.hasClass('csn-dash-ws-filter-panel--hidden');
 	}
@@ -3899,21 +4220,111 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		});
 		this.wsFilterPanelEl = panel;
-		panel.createDiv({
-			cls: 'csn-dash-ws-filter-panel-hint',
-			text: t('DASH_WS_FILTER_MULTI_HINT')
+
+		const tools = panel.createDiv({ cls: 'csn-dash-filter-panel-tools' });
+		const searchInner = tools.createDiv({ cls: 'csn-dash-filter-panel-search-inner' });
+		const searchIcon = searchInner.createSpan({
+			cls: 'csn-dash-filter-panel-search-icon',
+			attr: { 'aria-hidden': 'true' }
 		});
-		this.wsFilterPanelListEl = panel.createDiv({ cls: 'csn-dash-ws-filter-panel-list' });
+		setIcon(searchIcon, 'search');
+		this.wsFilterPanelSearchInput = searchInner.createEl('input', {
+			type: 'text',
+			cls: 'csn-dash-filter-panel-search-input',
+			attr: {
+				placeholder: t('DASH_WS_FILTER_SEARCH_PLACEHOLDER'),
+				spellcheck: 'false',
+				autocomplete: 'off'
+			}
+		});
+		this.registerDomEvent(this.wsFilterPanelSearchInput, 'input', () => {
+			this.wsFilterPanelSearch = this.wsFilterPanelSearchInput?.value ?? '';
+			this.renderWorkspaceFilterPanelList();
+		});
+		this.registerDomEvent(this.wsFilterPanelSearchInput, 'click', (evt: MouseEvent) => {
+			evt.stopPropagation();
+		});
+
+		const logic = tools.createDiv({ cls: 'csn-dash-tag-logic' });
+		logic.createSpan({ cls: 'csn-dash-tag-logic-label', text: t('DASH_TAG_LOGIC') });
+		this.wsLogicOrBtn = logic.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-logic-btn',
+			text: t('DASH_TAG_LOGIC_OR'),
+			attr: { 'aria-pressed': 'true' }
+		});
+		this.wsLogicAndBtn = logic.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-logic-btn',
+			text: t('DASH_TAG_LOGIC_AND'),
+			attr: { 'aria-pressed': 'false' }
+		});
+		this.registerDomEvent(this.wsLogicOrBtn, 'click', () => {
+			this.workspaceFilterLogic = 'or';
+			this.syncWorkspaceLogicButtons();
+			this.listPageIndex = 0;
+			void this.renderDash();
+		});
+		this.registerDomEvent(this.wsLogicAndBtn, 'click', () => {
+			this.workspaceFilterLogic = 'and';
+			this.syncWorkspaceLogicButtons();
+			this.listPageIndex = 0;
+			void this.renderDash();
+		});
+		this.syncWorkspaceLogicButtons();
+
+		const body = panel.createDiv({ cls: 'csn-dash-filter-panel-body' });
+		this.wsFilterPanelGroupsEl = body.createDiv({ cls: 'csn-dash-filter-panel-groups' });
+		const mkGroup = (id: 'selected' | 'all', labelKey: MessageKey) => {
+			const btn = this.wsFilterPanelGroupsEl!.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-filter-panel-group-btn',
+				attr: { 'data-csn-ws-group': id }
+			});
+			btn.createSpan({ cls: 'csn-dash-filter-panel-group-label', text: t(labelKey) });
+			btn.createSpan({ cls: 'csn-dash-filter-panel-group-count', text: '0' });
+			this.registerDomEvent(btn, 'click', () => {
+				this.wsFilterPanelGroup = id;
+				this.renderWorkspaceFilterPanelList();
+			});
+		};
+		mkGroup('selected', 'DASH_WS_FILTER_GROUP_SELECTED');
+		mkGroup('all', 'DASH_WS_FILTER_GROUP_ALL');
+
+		this.wsFilterPanelListEl = body.createDiv({ cls: 'csn-dash-filter-panel-list' });
+
+		const foot = panel.createDiv({ cls: 'csn-dash-filter-panel-foot' });
+		foot.createSpan({ cls: 'csn-dash-filter-panel-hint', text: t('DASH_WS_FILTER_HINT_SELECT') });
+		foot.createSpan({ cls: 'csn-dash-filter-panel-hint', text: t('DASH_WS_FILTER_HINT_MULTI') });
+		foot.createSpan({
+			cls: 'csn-dash-filter-panel-hint csn-dash-filter-panel-hint--end',
+			text: t('DASH_TAG_HINT_CLOSE')
+		});
 	}
 
-	private openWorkspaceFilterPanel(): void {
+	private syncWorkspaceLogicButtons(): void {
+		this.wsLogicOrBtn?.toggleClass('is-active', this.workspaceFilterLogic === 'or');
+		this.wsLogicAndBtn?.toggleClass('is-active', this.workspaceFilterLogic === 'and');
+		this.wsLogicOrBtn?.setAttr('aria-pressed', this.workspaceFilterLogic === 'or' ? 'true' : 'false');
+		this.wsLogicAndBtn?.setAttr('aria-pressed', this.workspaceFilterLogic === 'and' ? 'true' : 'false');
+	}
+
+	private clearWorkspaceFilters(): void {
+		if (this.workspaceSel.kind !== 'selection') return;
+		this.setWorkspaceSel({ kind: 'all' });
+		if (this.isWorkspaceFilterPanelOpen()) this.renderWorkspaceFilterPanelList();
+	}
+
+	private openWorkspaceFilterPanel(opts?: { group?: 'selected' | 'all' }): void {
 		const panel = this.wsFilterPanelEl;
 		const btn = this.wsFilterAddBtn;
 		if (!panel) return;
+		if (opts?.group) this.wsFilterPanelGroup = opts.group;
 		this.renderWorkspaceFilterPanelList();
 		panel.removeClass('csn-dash-ws-filter-panel--hidden');
 		btn?.addClass('is-active');
 		btn?.setAttr('aria-expanded', 'true');
+		window.setTimeout(() => this.wsFilterPanelSearchInput?.focus(), 0);
 	}
 
 	private closeWorkspaceFilterPanel(): void {
@@ -3927,79 +4338,114 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private toggleWorkspaceFilterPanel(): void {
 		if (this.isWorkspaceFilterPanelOpen()) this.closeWorkspaceFilterPanel();
-		else this.openWorkspaceFilterPanel();
+		else this.openWorkspaceFilterPanel({ group: 'all' });
 	}
 
-	private renderWorkspaceFilterPanelList(): void {
-		const list = this.wsFilterPanelListEl;
-		if (!list) return;
-		list.empty();
+	private collectWorkspaceFilterPanelRows(): {
+		kind: 'group' | 'workspace';
+		id: string;
+		label: string;
+		indent?: boolean;
+	}[] {
 		const file = this.plugin.stickies.workspaces;
 		const tabGroups = file.tabGroups;
 		const groups =
 			tabGroups.length > 0
 				? tabGroups
 				: [{ id: WS_TAB_GROUP_DEFAULT_ID, name: t('WS_TAB_GROUP_DEFAULT') }];
+		const rows: {
+			kind: 'group' | 'workspace';
+			id: string;
+			label: string;
+			indent?: boolean;
+		}[] = [];
+		const ungrouped = file.workspaces.filter(ws => isWorkspaceUngrouped(ws, tabGroups));
+		for (const ws of ungrouped) {
+			rows.push({ kind: 'workspace', id: ws.id, label: ws.name, indent: true });
+		}
+		for (const g of groups) {
+			rows.push({ kind: 'group', id: g.id, label: g.name });
+			for (const ws of file.workspaces.filter(
+				w => resolveWorkspaceTabGroupId(w, tabGroups) === g.id
+			)) {
+				rows.push({ kind: 'workspace', id: ws.id, label: ws.name, indent: true });
+			}
+		}
+		return rows;
+	}
 
-		const addRow = (
-			kind: 'group' | 'workspace',
-			id: string,
-			label: string,
-			opts?: { indent?: boolean }
-		) => {
+	private renderWorkspaceFilterPanelList(): void {
+		const groupsEl = this.wsFilterPanelGroupsEl;
+		const list = this.wsFilterPanelListEl;
+		if (!list) return;
+		list.empty();
+
+		const allRows = this.collectWorkspaceFilterPanelRows();
+		const selectedCount = allRows.filter(r =>
+			r.kind === 'group' ? this.isGroupSelActive(r.id) : this.isWorkspaceSelActive(r.id)
+		).length;
+
+		if (groupsEl) {
+			for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-filter-panel-group-btn'))) {
+				if (!(btn instanceof HTMLElement)) continue;
+				const id = btn.dataset.csnWsGroup;
+				const countEl = btn.querySelector('.csn-dash-filter-panel-group-count');
+				if (countEl) {
+					countEl.setText(String(id === 'selected' ? selectedCount : allRows.length));
+				}
+				btn.toggleClass('is-active', this.wsFilterPanelGroup === id);
+			}
+		}
+
+		const q = this.wsFilterPanelSearch.trim().toLowerCase();
+		let rows = allRows;
+		if (this.wsFilterPanelGroup === 'selected') {
+			rows = rows.filter(r =>
+				r.kind === 'group' ? this.isGroupSelActive(r.id) : this.isWorkspaceSelActive(r.id)
+			);
+		}
+		if (q) rows = rows.filter(r => r.label.toLowerCase().includes(q));
+
+		if (rows.length === 0) {
+			list.createDiv({
+				cls: 'csn-dash-filter-panel-empty',
+				text: t('DASH_WS_FILTER_EMPTY')
+			});
+			return;
+		}
+
+		for (const row of rows) {
 			const active =
-				kind === 'group' ? this.isGroupSelActive(id) : this.isWorkspaceSelActive(id);
-			const row = list.createEl('button', {
+				row.kind === 'group' ? this.isGroupSelActive(row.id) : this.isWorkspaceSelActive(row.id);
+			const item = list.createEl('button', {
 				type: 'button',
-				cls: `csn-dash-ws-filter-panel-item${opts?.indent ? ' is-indent' : ''}${
-					active ? ' is-active' : ''
+				cls: `csn-dash-filter-panel-item${row.indent ? ' is-indent' : ''}${
+					active ? ' is-selected' : ''
 				}`,
 				attr: { 'aria-pressed': active ? 'true' : 'false' }
 			});
-			const icon = row.createSpan({
-				cls: 'csn-dash-ws-filter-panel-item-icon',
+			const check = item.createSpan({
+				cls: 'csn-dash-filter-panel-item-check',
 				attr: { 'aria-hidden': 'true' }
 			});
-			setIcon(icon, kind === 'group' ? 'folder' : 'layers');
-			row.createSpan({ cls: 'csn-dash-ws-filter-panel-item-label', text: label });
-			this.registerDomEvent(row, 'click', (evt: MouseEvent) => {
+			setIcon(check, active ? 'check-square' : 'square');
+			const icon = item.createSpan({
+				cls: 'csn-dash-filter-panel-item-icon',
+				attr: { 'aria-hidden': 'true' }
+			});
+			setIcon(icon, row.kind === 'group' ? 'folder' : 'layers');
+			item.createSpan({ cls: 'csn-dash-filter-panel-item-label', text: row.label });
+			this.registerDomEvent(item, 'click', (evt: MouseEvent) => {
 				evt.preventDefault();
 				evt.stopPropagation();
-				this.clickWorkspaceTreeSel({ kind, id }, true);
+				/* 已选：单击取消单项；全部：单击只追加，不覆盖/切换 */
+				if (this.wsFilterPanelGroup === 'selected') {
+					this.removeWorkspaceFilterChip(row.kind, row.id);
+				} else {
+					this.appendWorkspaceFilterSel({ kind: row.kind, id: row.id });
+				}
 				this.renderWorkspaceFilterPanelList();
 			});
-		};
-
-		const ungrouped = file.workspaces.filter(ws => isWorkspaceUngrouped(ws, tabGroups));
-		if (ungrouped.length > 0) {
-			const section = list.createDiv({ cls: 'csn-dash-ws-filter-panel-section' });
-			const sectionIcon = section.createSpan({
-				cls: 'csn-dash-ws-filter-panel-section-icon',
-				attr: { 'aria-hidden': 'true' }
-			});
-			setIcon(sectionIcon, 'inbox');
-			section.createSpan({
-				cls: 'csn-dash-ws-filter-panel-section-label',
-				text: t('DASH_AREA_UNGROUPED')
-			});
-			for (const ws of ungrouped) {
-				addRow('workspace', ws.id, ws.name, { indent: true });
-			}
-		}
-
-		for (const g of groups) {
-			const groupWorkspaces = file.workspaces.filter(
-				ws => resolveWorkspaceTabGroupId(ws, tabGroups) === g.id
-			);
-			/* 空分组也保留，便于按分组筛选 */
-			addRow('group', g.id, g.name);
-			for (const ws of groupWorkspaces) {
-				addRow('workspace', ws.id, ws.name, { indent: true });
-			}
-		}
-
-		if (list.childElementCount === 0) {
-			list.createDiv({ cls: 'csn-dash-ws-filter-panel-empty', text: t('DASH_WS_FILTER_EMPTY') });
 		}
 	}
 
@@ -4016,6 +4462,19 @@ export class StickyNoteDashboardView extends ItemView {
 			addBtn.setAttr('aria-expanded', this.isWorkspaceFilterPanelOpen() ? 'true' : 'false');
 		}
 		if (!has) return;
+
+		const count = sel.groupIds.length + sel.workspaceIds.length;
+		if (count > 1) {
+			this.appendFilterMoreChip(
+				chipsEl,
+				'csn-dash-ws-filter-chip',
+				count,
+				() => this.openWorkspaceFilterPanel({ group: 'selected' }),
+				() => this.clearWorkspaceFilters(),
+				t('DASH_WS_FILTER_CLEAR_ARIA')
+			);
+			return;
+		}
 
 		const file = this.plugin.stickies.workspaces;
 		const groupName = (id: string) =>
@@ -4729,19 +5188,43 @@ export class StickyNoteDashboardView extends ItemView {
 		const sel = this.workspaceSel;
 		if (sel.kind === 'all') return null;
 		const groups = file.tabGroups;
-		const groupIdSet = new Set(sel.groupIds);
-		const workspaceIdSet = new Set(sel.workspaceIds);
-		const union = new Set<string>();
-		const pool = [...file.workspaces, ...file.trash];
-		for (const ws of pool) {
-			const inSelWs = workspaceIdSet.has(ws.id);
-			const inSelGroup =
-				file.workspaces.some(w => w.id === ws.id) &&
-				groupIdSet.has(resolveWorkspaceTabGroupId(ws, groups));
-			if (!inSelWs && !inSelGroup) continue;
-			for (const p of this.plugin.stickies.getWorkspaceMemberPathSet(ws)) union.add(p);
+		const criteria: Set<string>[] = [];
+		const mgr = this.plugin.stickies;
+
+		for (const wsId of sel.workspaceIds) {
+			const ws =
+				file.workspaces.find(w => w.id === wsId) ?? file.trash.find(w => w.id === wsId);
+			if (!ws) continue;
+			criteria.push(new Set(mgr.getWorkspaceMemberPathSet(ws)));
 		}
-		return union;
+		for (const groupId of sel.groupIds) {
+			const groupPaths = new Set<string>();
+			for (const ws of file.workspaces) {
+				if (resolveWorkspaceTabGroupId(ws, groups) !== groupId) continue;
+				for (const p of mgr.getWorkspaceMemberPathSet(ws)) groupPaths.add(p);
+			}
+			criteria.push(groupPaths);
+		}
+		if (criteria.length === 0) return new Set();
+
+		if (this.workspaceFilterLogic !== 'and') {
+			const union = new Set<string>();
+			for (const set of criteria) {
+				for (const p of set) union.add(p);
+			}
+			return union;
+		}
+
+		let inter = new Set(criteria[0]!);
+		for (let i = 1; i < criteria.length; i++) {
+			const next = criteria[i]!;
+			const kept = new Set<string>();
+			for (const p of inter) {
+				if (next.has(p)) kept.add(p);
+			}
+			inter = kept;
+		}
+		return inter;
 	}
 
 	private selectedCreateColor(): StickyColorId {
@@ -5438,6 +5921,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private buildDashFilterKey(
 		workspaceSel: DashWorkspaceSel,
+		workspaceLogic: 'and' | 'or',
 		dateFilter: StickyDateFilter | null,
 		query: string,
 		colorFilters: readonly StickyColorId[],
@@ -5451,6 +5935,7 @@ export class StickyNoteDashboardView extends ItemView {
 	): string {
 		return JSON.stringify({
 			workspaceSel,
+			workspaceLogic,
 			dateFilter: stickyDateFilterKey(dateFilter),
 			search: query,
 			colors: [...colorFilters].sort(),
@@ -5466,6 +5951,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private buildDashStructureKey(
 		workspaceSel: DashWorkspaceSel,
+		workspaceLogic: 'and' | 'or',
 		dateFilter: StickyDateFilter | null,
 		query: string,
 		colorFilters: readonly StickyColorId[],
@@ -5483,6 +5969,7 @@ export class StickyNoteDashboardView extends ItemView {
 		return JSON.stringify({
 			filter: this.buildDashFilterKey(
 				workspaceSel,
+				workspaceLogic,
 				dateFilter,
 				query,
 				colorFilters,
@@ -5652,6 +6139,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 			const filterKey = this.buildDashFilterKey(
 				this.workspaceSel,
+				this.workspaceFilterLogic,
 				this.selectedDateFilter,
 				query,
 				this.colorFilters,
@@ -5665,6 +6153,7 @@ export class StickyNoteDashboardView extends ItemView {
 			);
 			const structureKey = this.buildDashStructureKey(
 				this.workspaceSel,
+				this.workspaceFilterLogic,
 				this.selectedDateFilter,
 				query,
 				this.colorFilters,
@@ -5791,13 +6280,21 @@ export class StickyNoteDashboardView extends ItemView {
 		this.dateFilterWrapEl = null;
 		this.dateFilterAddBtn = null;
 		this.dateFilterPanelEl = null;
+		this.dateFilterModeEl = null;
+		this.dateFilterModeBtns.clear();
 		this.dateFilterInput = null;
 		this.dateFilterConfirmBtn = null;
+		this.dateFilterPanelGroupsEl = null;
+		this.dateFilterPanelListEl = null;
 		this.wsFilterWrapEl = null;
 		this.wsFilterChipsEl = null;
 		this.wsFilterAddBtn = null;
 		this.wsFilterPanelEl = null;
 		this.wsFilterPanelListEl = null;
+		this.wsFilterPanelGroupsEl = null;
+		this.wsFilterPanelSearchInput = null;
+		this.wsLogicOrBtn = null;
+		this.wsLogicAndBtn = null;
 		this.composerEditor?.destroy();
 		this.composerEditor = null;
 		this.composerHostEl = null;
