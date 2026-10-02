@@ -1499,13 +1499,17 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 /* 外框承担缩放；内部 .csn-dash-composer-cm 才是 CM 挂载点 */
 .csn-dash-composer-editor {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
+  --csn-composer-zoom: var(--csn-sticky-view-content-zoom, 0.65);
+  /* absolute + 1/zoom：抵消 zoom 缩小占位，避免底部留白 */
+  position: absolute;
+  inset: 0;
+  width: calc(100% / var(--csn-composer-zoom));
+  height: calc(100% / var(--csn-composer-zoom));
   overflow: hidden;
-  padding: 8px 12px 40px;
+  /* 底部留白按 zoom 反算，缩放后仍约 40px 给悬浮按钮 */
+  padding: 8px 12px calc(40px / var(--csn-composer-zoom));
   box-sizing: border-box;
-  zoom: var(--csn-sticky-view-content-zoom, 0.65);
+  zoom: var(--csn-composer-zoom);
   cursor: text;
   display: flex;
   flex-direction: column;
@@ -1543,7 +1547,8 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 .csn-dash-composer-cm .cm-content {
   padding: 4px 0 !important;
-  min-height: 72px !important;
+  min-height: 100% !important;
+  box-sizing: border-box;
 }
 .csn-dash-composer-cm .cm-gutters {
   display: none;
