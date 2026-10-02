@@ -3578,11 +3578,17 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 .csn-dash-ws-tree {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 6px 6px 6px 6px;
+  padding: 6px;
+}
+.csn-dash-tree-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
 }
 .csn-dash-ws-filter {
   flex-shrink: 0;
@@ -3726,12 +3732,15 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 .csn-dash-tree-ws--archived .csn-dash-tree-label {
   color: var(--text-muted);
 }
-/* 分组内子工作区整体缩进 10px；根目录未分组与分组标题对齐 */
+/* 分组内子工作区整体缩进；与分组标题留一点间距 */
 .csn-dash-tree-item.csn-dash-tree-ws:not(.csn-dash-tree-ws--root) {
   margin-left: 10px;
   width: calc(100% - 10px);
   padding-left: 8px;
   box-sizing: border-box;
+}
+.csn-dash-tree-group > .csn-dash-tree-group-btn {
+  margin-bottom: 1px;
 }
 .csn-dash-tree-item.csn-dash-tree-ws--root {
   margin-left: 0;
