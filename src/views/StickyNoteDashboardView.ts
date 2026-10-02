@@ -3417,10 +3417,11 @@ export class StickyNoteDashboardView extends ItemView {
 		window.setTimeout(() => this.dateFilterInput?.focus(), 0);
 	}
 
-	/** 默认值跟随日历当前年/月（csn-dash-cal-ym），非固定今天。 */
+	/** 默认值跟随日历当前年/月（csn-dash-cal-ym），按模式写入对应控件格式。 */
 	private fillDateFilterInputDefault(force = false): void {
 		const input = this.dateFilterInput;
 		if (!input) return;
+		if (!force && input.value) return;
 		const now = new Date();
 		const y = this.calYear;
 		const m0 = this.calMonth0;
@@ -3430,17 +3431,17 @@ export class StickyNoteDashboardView extends ItemView {
 			day = now.getDate();
 		}
 		const d = String(day).padStart(2, '0');
-		/* 年/月/日共用 date 控件外观，仅提交时按粒度取值 */
-		if (force || !input.value) input.value = `${y}-${m}-${d}`;
+		/* 三种模式共用 date 控件外观，提交时再按粒度取值 */
+		input.value = `${y}-${m}-${d}`;
 	}
 
 	private syncDateFilterModeLabels(): void {
 		const yearBtn = this.dateFilterModeBtns.get('year');
 		const monthBtn = this.dateFilterModeBtns.get('month');
 		const dayBtn = this.dateFilterModeBtns.get('day');
-		if (yearBtn) yearBtn.setText(this.formatCalYearText(this.calYear));
-		if (monthBtn) monthBtn.setText(this.formatCalMonthText(this.calMonth0));
 		if (dayBtn) dayBtn.setText(t('DASH_DATE_FILTER_MODE_DAY'));
+		if (monthBtn) monthBtn.setText(t('DASH_DATE_FILTER_MODE_MONTH'));
+		if (yearBtn) yearBtn.setText(t('DASH_DATE_FILTER_MODE_YEAR'));
 	}
 
 	private syncDateFilterAddModeUi(): void {
@@ -3452,7 +3453,6 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 		const input = this.dateFilterInput;
 		if (!input) return;
-		/* 统一 type=date，与「日」选择器视觉一致 */
 		input.type = 'date';
 		input.removeAttribute('min');
 		input.removeAttribute('max');
@@ -3485,12 +3485,13 @@ export class StickyNoteDashboardView extends ItemView {
 	private commitDateFilterFromPanel(): void {
 		const raw = this.dateFilterInput?.value?.trim() ?? '';
 		if (!raw) return;
+		const mode = this.dateFilterAddMode;
+		const curRank = this.dateFilterScopeRank(this.selectedDateFilter);
+
 		const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
 		if (!parts) return;
 		const year = Number(parts[1]);
 		const month0 = Number(parts[2]) - 1;
-		const mode = this.dateFilterAddMode;
-		const curRank = this.dateFilterScopeRank(this.selectedDateFilter);
 
 		if (mode === 'day') {
 			this.calYear = year;
