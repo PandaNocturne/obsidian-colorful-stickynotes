@@ -760,6 +760,36 @@ export class StickyNoteManager {
 		this.plugin.refreshStickyListIfOpen();
 	}
 
+	/**
+	 * 将便笺移入目标工作区：从其它活动工作区移除后加入目标。
+	 * 不关闭已打开的浮动窗口。
+	 */
+	async moveFilesToWorkspace(targetWsId: string, files: TFile[]): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		const target = this.workspaces.workspaces.find(w => w.id === targetWsId);
+		if (!target || files.length === 0) return;
+		let changed = false;
+		for (const f of files) {
+			for (const ws of this.workspaces.workspaces) {
+				if (ws.id === targetWsId) continue;
+				const idx = this.findWorkspaceWindowIndex(ws, f);
+				if (idx < 0) continue;
+				ws.windows.splice(idx, 1);
+				ws.updatedAt = Date.now();
+				changed = true;
+			}
+			if (this.isStickyInWorkspace(f, targetWsId)) continue;
+			this.upsertStickyInWorkspace(target, f, this.buildSerializedWindowForFile(f, { open: true }));
+			changed = true;
+		}
+		if (!changed) return;
+		target.updatedAt = Date.now();
+		await this.flushWorkspacesToDisk();
+		await this.syncStickyWorkspaceYamlForFiles(files);
+		this.refreshStickyListIfActiveWorkspaceFilter();
+		this.plugin.refreshStickyListIfOpen({ tree: 'counts' });
+	}
+
 	/** 将便笺加入当前活动工作区成员，并同步 frontmatter 工作区属性。 */
 	async ensureStickyInActiveWorkspace(file: TFile): Promise<void> {
 		const ws = this.activeWorkspace();
@@ -1804,15 +1834,29 @@ export class StickyNoteManager {
 			onOpenNoteList: () => void this.plugin.openNoteListView(),
 			onDeleteCurrentSticky: () => void this.deleteCurrentStickyNote(id),
 			onToggleArchiveCurrentSticky: () => void this.toggleArchiveCurrentStickyForPopover(id),
+			getWorkspacesForAddMenu: () => {
+				const file = this.getPopoverFileById(id);
+				if (!(file instanceof TFile)) return [];
+				return this.workspaces.workspaces.map(ws => ({
+					id: ws.id,
+					name: ws.name,
+					alreadyIn: this.isStickyInWorkspace(file, ws.id)
+				}));
+			},
+			onAddToWorkspace: (wsId: string) => void this.addStickyToWorkspaceForPopover(id, wsId),
 			getWorkspacesForRemoveMenu: () => {
-				const pop = this.popovers.get(id);
-				const file =
-					pop?.leaf?.view && 'file' in pop.leaf.view
-						? (pop.leaf.view as { file?: TFile }).file
-						: undefined;
+				const file = this.getPopoverFileById(id);
 				return file instanceof TFile ? this.getWorkspacesContainingFileForMenu(file) : [];
 			},
 			onRemoveFromWorkspace: (wsId: string) => void this.removeStickyFromWorkspaceForPopover(id, wsId),
+			getWorkspacesForMoveMenu: () => {
+				const file = this.getPopoverFileById(id);
+				if (!(file instanceof TFile)) return [];
+				return this.workspaces.workspaces
+					.filter(ws => !this.isStickyInWorkspace(file, ws.id))
+					.map(ws => ({ id: ws.id, name: ws.name }));
+			},
+			onMoveToWorkspace: (wsId: string) => void this.moveStickyToWorkspaceForPopover(id, wsId),
 			onActivate: () => this.bringStickyToFrontById(id),
 			onDragStart: e => this.handleDragStart(id, e),
 			onDragMove: (next, e) => this.handleDragMove(id, next, e),
@@ -1868,14 +1912,27 @@ export class StickyNoteManager {
 		if (nextArchived) this.closeSticky(popoverId);
 	}
 
-	private async removeStickyFromWorkspaceForPopover(popoverId: string, wsId: string): Promise<void> {
+	private getPopoverFileById(popoverId: string): TFile | undefined {
 		const pop = this.popovers.get(popoverId);
-		const file =
-			pop?.leaf?.view && 'file' in pop.leaf.view
-				? (pop.leaf.view as { file?: TFile }).file
-				: undefined;
+		return pop ? this.getPopoverFile(pop) : undefined;
+	}
+
+	private async addStickyToWorkspaceForPopover(popoverId: string, wsId: string): Promise<void> {
+		const file = this.getPopoverFileById(popoverId);
+		if (!(file instanceof TFile)) return;
+		await this.addFilesToWorkspace(wsId, [file]);
+	}
+
+	private async removeStickyFromWorkspaceForPopover(popoverId: string, wsId: string): Promise<void> {
+		const file = this.getPopoverFileById(popoverId);
 		if (!(file instanceof TFile)) return;
 		await this.removeFilesFromWorkspace(wsId, [file]);
+	}
+
+	private async moveStickyToWorkspaceForPopover(popoverId: string, wsId: string): Promise<void> {
+		const file = this.getPopoverFileById(popoverId);
+		if (!(file instanceof TFile)) return;
+		await this.moveFilesToWorkspace(wsId, [file]);
 	}
 
 	private getWorkspacesContainingFileForMenu(file: TFile): Array<{ id: string; name: string }> {

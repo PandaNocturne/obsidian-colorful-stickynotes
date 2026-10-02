@@ -66,10 +66,18 @@ export interface StickyNotePopoverOptions {
 
 	/** 切换当前便笺 frontmatter 归档状态（无 Markdown 文件时由实现侧忽略）。 */
 	onToggleArchiveCurrentSticky: () => void;
+	/** 可加入的工作区（含已属于，供勾选禁用）。 */
+	getWorkspacesForAddMenu: () => Array<{ id: string; name: string; alreadyIn: boolean }>;
+	/** 将当前便笺加入指定工作区。 */
+	onAddToWorkspace: (wsId: string) => void;
 	/** 便笺所属、可从中移除的工作区列表（头部菜单子项）。 */
 	getWorkspacesForRemoveMenu: () => Array<{ id: string; name: string }>;
 	/** 从指定工作区移除该便笺成员（不关闭窗口）。 */
 	onRemoveFromWorkspace: (wsId: string) => void;
+	/** 可移入的其它工作区（不含当前已属）。 */
+	getWorkspacesForMoveMenu: () => Array<{ id: string; name: string }>;
+	/** 从现有工作区移出并加入目标工作区（不关闭窗口）。 */
+	onMoveToWorkspace: (wsId: string) => void;
 	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
 	onActivate: () => void;
 	onDragStart?: (e: PointerEvent) => void;
@@ -439,6 +447,24 @@ export class StickyNotePopover {
 		if (file instanceof TFile && file.extension === 'md') {
 			canArchiveOrDelete = true;
 			archived = await resolveStickyArchivedForFile(this.plugin.app, file);
+			const addTargets = this.options.getWorkspacesForAddMenu();
+			if (addTargets.length > 0) {
+				menu.addItem(item => {
+					item.setTitle(t('LIST_ADD_TO_WORKSPACE')).setIcon('folder-plus');
+					const sub = item.setSubmenu();
+					for (const ws of addTargets) {
+						sub.addItem(si => {
+							si.setTitle(ws.name)
+								.setIcon('layers')
+								.setChecked(ws.alreadyIn)
+								.setDisabled(ws.alreadyIn)
+								.onClick(() => {
+									this.options.onAddToWorkspace(ws.id);
+								});
+						});
+					}
+				});
+			}
 			const removeTargets = this.options.getWorkspacesForRemoveMenu();
 			if (removeTargets.length > 0) {
 				menu.addItem(item => {
@@ -450,6 +476,22 @@ export class StickyNotePopover {
 								.setIcon('layers')
 								.onClick(() => {
 									this.options.onRemoveFromWorkspace(ws.id);
+								});
+						});
+					}
+				});
+			}
+			const moveTargets = this.options.getWorkspacesForMoveMenu();
+			if (moveTargets.length > 0) {
+				menu.addItem(item => {
+					item.setTitle(t('LIST_MOVE_TO_WORKSPACE')).setIcon('folder-input');
+					const sub = item.setSubmenu();
+					for (const ws of moveTargets) {
+						sub.addItem(si => {
+							si.setTitle(ws.name)
+								.setIcon('layers')
+								.onClick(() => {
+									this.options.onMoveToWorkspace(ws.id);
 								});
 						});
 					}
