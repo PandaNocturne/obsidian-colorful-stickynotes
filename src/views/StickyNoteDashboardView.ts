@@ -5313,10 +5313,6 @@ export class StickyNoteDashboardView extends ItemView {
 					onSubmit: () => {
 						void this.commitComposer();
 					},
-					onEscape: () => {
-						this.composerEditor?.setValue('');
-						this.persistComposerDraft('');
-					},
 					onChange: md => {
 						this.schedulePersistComposerDraft(md);
 					}

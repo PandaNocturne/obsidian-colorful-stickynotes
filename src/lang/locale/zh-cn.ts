@@ -156,7 +156,7 @@ export const zhCn: Record<MessageKey, string> = {
 
 	DISPLAY_STICKY_LIST: '便笺列表',
 	DISPLAY_STICKY_DASHBOARD: 'StickyNote DashBoard',
-	DASH_COMPOSER_PLACEHOLDER: '请输入内容...',
+	DASH_COMPOSER_PLACEHOLDER: '请输入内容… Ctrl+Enter 完成',
 	DASH_COMPOSER_DONE: '完成',
 	DASH_COMPOSER_COLOR_ARIA: '选择新建便笺颜色',
 	DASH_COMPOSER_DONE_ARIA: '完成并添加便笺',

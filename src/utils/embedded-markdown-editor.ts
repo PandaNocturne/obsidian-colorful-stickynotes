@@ -92,7 +92,7 @@ export interface EmbeddedMarkdownEditorOptions {
 	initialValue?: string;
 	/** Mod/Ctrl+Enter 提交。 */
 	onSubmit: (markdown: string) => void;
-	/** Escape。 */
+	/** Escape；未提供时按键仍被吞掉，不做清空/失焦。 */
 	onEscape?: () => void;
 	/** 文档内容变化（含程序 setValue）。 */
 	onChange?: (markdown: string) => void;

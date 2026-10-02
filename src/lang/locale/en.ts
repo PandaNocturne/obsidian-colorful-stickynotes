@@ -170,7 +170,7 @@ export const en = {
 
 	DISPLAY_STICKY_LIST: 'Sticky list',
 	DISPLAY_STICKY_DASHBOARD: 'StickyNote DashBoard',
-	DASH_COMPOSER_PLACEHOLDER: 'Enter content...',
+	DASH_COMPOSER_PLACEHOLDER: 'Enter content… Ctrl+Enter to finish',
 	DASH_COMPOSER_DONE: 'Done',
 	DASH_COMPOSER_COLOR_ARIA: 'Choose new sticky color',
 	DASH_COMPOSER_DONE_ARIA: 'Finish and add sticky',
