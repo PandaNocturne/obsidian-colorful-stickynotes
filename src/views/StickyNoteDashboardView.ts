@@ -344,8 +344,10 @@ export class StickyNoteDashboardView extends ItemView {
 	private lastSelectedListNotePath: string | null = null;
 	/** 选中卡片所属工作区，用于树节点高亮（不改变筛选）。 */
 	private cardFocusWorkspaceIds: string[] = [];
-	/** 从拖拽手柄拖拽时，附着在 `document.body` 上的 Canvas 行为说明浮层。 */
+	/** 从拖拽手柄拖拽时，附着在 `document.body` 上的拖拽行为说明浮层。 */
 	private canvasDragCanvasHintEl: HTMLElement | null = null;
+	/** 当前浮层提示类型：Canvas / 工作区。 */
+	private cardDragHintKind: 'none' | 'canvas' | 'workspace' = 'none';
 
 	private dashRenderChain: Promise<void> = Promise.resolve();
 	private debouncedStructureRefresh: Debouncer<[], void> | null = null;
@@ -701,6 +703,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private hideCanvasDragBehaviorHint(): void {
 		this.canvasDragCanvasHintEl?.remove();
 		this.canvasDragCanvasHintEl = null;
+		this.cardDragHintKind = 'none';
 	}
 
 	private updateCanvasDragBehaviorHintPos(clientX: number, clientY: number): void {
@@ -717,7 +720,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private updateCanvasDragBehaviorHintState(ctrlOrCmd: boolean, shift: boolean): void {
 		const wrap = this.canvasDragCanvasHintEl;
-		if (!wrap) return;
+		if (!wrap || this.cardDragHintKind !== 'canvas') return;
 		const plainEl = wrap.querySelector('[data-csn-drag-mode="plain"]');
 		const fileRefEl = wrap.querySelector('[data-csn-drag-mode="fileRef"]');
 		const shiftEl = wrap.querySelector('[data-csn-drag-mode="deleteOriginal"]');
@@ -732,11 +735,58 @@ export class StickyNoteDashboardView extends ItemView {
 		shiftEl.toggleClass('is-active', isDeleteOriginal);
 	}
 
+	private updateWorkspaceDragBehaviorHintState(ctrlOrCmd: boolean): void {
+		const wrap = this.canvasDragCanvasHintEl;
+		if (!wrap || this.cardDragHintKind !== 'workspace') return;
+		const moveEl = wrap.querySelector('[data-csn-drag-mode="move"]');
+		const copyEl = wrap.querySelector('[data-csn-drag-mode="copy"]');
+		if (!(moveEl instanceof HTMLElement) || !(copyEl instanceof HTMLElement)) return;
+		moveEl.toggleClass('is-active', !ctrlOrCmd);
+		copyEl.toggleClass('is-active', ctrlOrCmd);
+	}
+
+	private updateActiveCardDragHint(evt: DragEvent): void {
+		this.updateCanvasDragBehaviorHintPos(evt.clientX, evt.clientY);
+		if (this.cardDragHintKind === 'workspace') {
+			this.updateWorkspaceDragBehaviorHintState(evt.ctrlKey || evt.metaKey);
+			return;
+		}
+		if (this.cardDragHintKind === 'canvas') {
+			this.updateCanvasDragBehaviorHintState(evt.ctrlKey || evt.metaKey, evt.shiftKey);
+		}
+	}
+
+	/** 仪表盘拖到工作区：移动 / Ctrl 复制。 */
+	private showWorkspaceDragBehaviorHint(selectedCount: number, evt?: DragEvent): void {
+		this.hideCanvasDragBehaviorHint();
+		const wrap = document.body.createDiv({ cls: 'csn-canvas-drag-hint', attr: { 'aria-live': 'polite' } });
+		this.canvasDragCanvasHintEl = wrap;
+		this.cardDragHintKind = 'workspace';
+		wrap.createDiv({ cls: 'csn-canvas-drag-hint-title', text: t('DASH_DRAG_WS_HINT_TITLE') });
+		if (selectedCount > 1) {
+			wrap.createDiv({
+				cls: 'csn-canvas-drag-hint-batch',
+				text: t('DASH_DRAG_WS_HINT_BATCH', { n: selectedCount })
+			});
+		}
+		const ul = wrap.createEl('ul', { cls: 'csn-canvas-drag-hint-list' });
+		ul.createEl('li', { text: t('DASH_DRAG_WS_HINT_MOVE'), attr: { 'data-csn-drag-mode': 'move' } });
+		ul.createEl('li', { text: t('DASH_DRAG_WS_HINT_COPY'), attr: { 'data-csn-drag-mode': 'copy' } });
+		wrap.createDiv({ cls: 'csn-canvas-drag-hint-note', text: t('DASH_DRAG_WS_HINT_NOTE') });
+		if (evt) {
+			this.updateCanvasDragBehaviorHintPos(evt.clientX, evt.clientY);
+			this.updateWorkspaceDragBehaviorHintState(evt.ctrlKey || evt.metaKey);
+		} else {
+			this.updateWorkspaceDragBehaviorHintState(false);
+		}
+	}
+
 	/** 从仪表盘拖向 Canvas（或编辑器）期间的按键说明：跟随指针，不拦截指针。 */
 	private showCanvasDragBehaviorHint(selectedCount: number, evt?: DragEvent): void {
 		this.hideCanvasDragBehaviorHint();
 		const wrap = document.body.createDiv({ cls: 'csn-canvas-drag-hint', attr: { 'aria-live': 'polite' } });
 		this.canvasDragCanvasHintEl = wrap;
+		this.cardDragHintKind = 'canvas';
 		wrap.createDiv({ cls: 'csn-canvas-drag-hint-title', text: t('LIST_DRAG_CANVAS_HINT_TITLE') });
 		if (selectedCount > 1) {
 			wrap.createDiv({
@@ -854,9 +904,8 @@ export class StickyNoteDashboardView extends ItemView {
 			window.removeEventListener('dragover', onDragOverCapture, true);
 		};
 		const onDragOverCapture = (evt: DragEvent): void => {
-			if (!this.plugin.settings.canvasLinkShowDragHint) return;
-			this.updateCanvasDragBehaviorHintPos(evt.clientX, evt.clientY);
-			this.updateCanvasDragBehaviorHintState(evt.ctrlKey || evt.metaKey, evt.shiftKey);
+			if (this.cardDragHintKind === 'none') return;
+			this.updateActiveCardDragHint(evt);
 		};
 		const onDropCapture = (evt: DragEvent): void => {
 			const v = getCanvasViewFromDropEvent(evt);
@@ -1065,14 +1114,6 @@ export class StickyNoteDashboardView extends ItemView {
 		this.applyCardFocusWorkspaceChrome(true);
 	}
 
-	private isCardHeadDragExcluded(hit: Element): boolean {
-		return !!(
-			hit.closest('.csn-list-card-pin-btn') ||
-			hit.closest('.csn-list-card-menu-btn') ||
-			hit.closest('.csn-list-card-archive-wrap')
-		);
-	}
-
 	private beginStickyCardDrag(evt: DragEvent, card: HTMLElement): boolean {
 		const path = card.dataset.csnNotePath;
 		if (!path) return false;
@@ -1103,9 +1144,7 @@ export class StickyNoteDashboardView extends ItemView {
 		);
 		dt.effectAllowed = 'copyMove';
 		this.wsTreeDragKind = 'sticky';
-		if (this.plugin.settings.canvasLinkShowDragHint) {
-			this.showCanvasDragBehaviorHint(items.length, evt);
-		}
+		this.showWorkspaceDragBehaviorHint(items.length, evt);
 		this.beginCanvasDropSessionForFiles(items);
 		return true;
 	}
@@ -1196,13 +1235,13 @@ export class StickyNoteDashboardView extends ItemView {
 		this.registerDomEvent(this.gridEl, 'dragstart', (evt: DragEvent) => {
 			const hit = evt.target;
 			if (!(hit instanceof Element)) return;
-			if (this.isCardHeadDragExcluded(hit)) {
-				evt.preventDefault();
+			const dragHandleEl = hit.closest('.csn-list-card-drag-handle');
+			if (!dragHandleEl || !this.gridEl?.contains(dragHandleEl)) {
+				/* 仅拖拽符可拖；头部其它区域禁止原生拖拽 */
+				if (hit.closest('.csn-list-card-head')) evt.preventDefault();
 				return;
 			}
-			const origin = hit.closest('.csn-list-card-drag-handle, .csn-list-card-head');
-			if (!origin || !this.gridEl?.contains(origin)) return;
-			const card = origin.closest('.csn-list-card');
+			const card = dragHandleEl.closest('.csn-list-card');
 			if (!(card instanceof HTMLElement)) return;
 			if (!this.beginStickyCardDrag(evt, card)) evt.preventDefault();
 		});
@@ -4893,10 +4932,7 @@ export class StickyNoteDashboardView extends ItemView {
 		card.remove();
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
-		const head = card.createDiv({
-			cls: 'csn-list-card-head',
-			attr: { draggable: 'true' }
-		});
+		const head = card.createDiv({ cls: 'csn-list-card-head' });
 		const headLeft = head.createDiv({ cls: 'csn-list-card-head-left' });
 		const archiveWrap = headLeft.createEl('label', {
 			cls: `csn-list-card-archive-wrap${archived ? ' is-archived' : ''}`,
@@ -4917,8 +4953,8 @@ export class StickyNoteDashboardView extends ItemView {
 				cls: 'csn-list-card-drag-handle',
 				attr: {
 					draggable: 'true',
-					'aria-label': t('LIST_CARD_TITLE_DRAG_ARIA'),
-					title: t('LIST_CARD_TITLE_DRAG_TITLE')
+					'aria-label': t('DASH_CARD_DRAG_ARIA'),
+					title: t('DASH_CARD_DRAG_TITLE')
 				}
 			},
 			(el: HTMLDivElement) => setIcon(el, 'grip-vertical')
