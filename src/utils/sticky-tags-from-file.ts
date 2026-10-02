@@ -91,3 +91,97 @@ export function filterStickyFilesByTags(
 		return inc.some(t => tags.has(t));
 	});
 }
+
+/**
+ * 写入便笺 YAML `tags`（无 `#` 前缀的数组）；空则删除 `tags`/`tag`。
+ */
+export async function writeStickyTagsToFile(
+	app: App,
+	file: TFile,
+	tags: readonly string[]
+): Promise<void> {
+	const forFm = [
+		...new Set(
+			tags
+				.map(normalizeStickyTag)
+				.filter(Boolean)
+				.map(tag => (tag.startsWith('#') ? tag.slice(1) : tag))
+		)
+	];
+	await app.fileManager.processFrontMatter(file, fm => {
+		const obj = fm as Record<string, unknown>;
+		delete obj.tag;
+		if (forFm.length === 0) delete obj.tags;
+		else obj.tags = forFm;
+	});
+}
+
+/** 从 Obsidian 全库标签索引收集（`metadataCache.getTags`）。 */
+export function collectVaultTagCatalog(app: App): StickyTagCount[] {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const raw = (app.metadataCache as any).getTags?.() as Record<string, number> | undefined;
+	if (!raw || typeof raw !== 'object') return [];
+	return Object.entries(raw)
+		.map(([tag, count]) => ({
+			tag: normalizeStickyTag(tag),
+			count: typeof count === 'number' ? count : 0
+		}))
+		.filter(row => row.tag)
+		.sort((a, b) => a.tag.localeCompare(b.tag));
+}
+
+/** Obsidian 层级标签树节点（`parent/child`）。 */
+export interface StickyTagTreeNode {
+	/** 当前段名（不含父路径）。 */
+	name: string;
+	/** 完整标签（带 `#`）。 */
+	fullTag: string;
+	count: number;
+	children: StickyTagTreeNode[];
+}
+
+/** 将扁平标签列表建成 `/` 分层树；缺失的中间父节点会补齐。 */
+export function buildStickyTagTree(rows: readonly StickyTagCount[]): StickyTagTreeNode[] {
+	const root: StickyTagTreeNode[] = [];
+	const map = new Map<string, StickyTagTreeNode>();
+
+	const ensure = (fullPath: string, segment: string): StickyTagTreeNode => {
+		const fullTag = normalizeStickyTag(fullPath);
+		let node = map.get(fullTag);
+		if (node) return node;
+		node = { name: segment, fullTag, count: 0, children: [] };
+		map.set(fullTag, node);
+		const slash = fullPath.lastIndexOf('/');
+		if (slash < 0) {
+			root.push(node);
+		} else {
+			const parentPath = fullPath.slice(0, slash);
+			const parentSeg = parentPath.includes('/')
+				? parentPath.slice(parentPath.lastIndexOf('/') + 1)
+				: parentPath;
+			ensure(parentPath, parentSeg).children.push(node);
+		}
+		return node;
+	};
+
+	for (const row of rows) {
+		const path = displayStickyTag(row.tag);
+		if (!path) continue;
+		const parts = path.split('/').filter(Boolean);
+		if (parts.length === 0) continue;
+		let acc = '';
+		for (let i = 0; i < parts.length; i++) {
+			const seg = parts[i]!;
+			acc = acc ? `${acc}/${seg}` : seg;
+			const node = ensure(acc, seg);
+			if (i === parts.length - 1) node.count = row.count;
+		}
+	}
+
+	const sortRec = (nodes: StickyTagTreeNode[]) => {
+		nodes.sort((a, b) => a.name.localeCompare(b.name));
+		for (const n of nodes) sortRec(n.children);
+	};
+	sortRec(root);
+	return root;
+}

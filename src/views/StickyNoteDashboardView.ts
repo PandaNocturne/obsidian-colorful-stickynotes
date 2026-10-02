@@ -76,11 +76,15 @@ import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
 import { isWorkspaceUngrouped, resolveTrashWorkspaceGroupLabel, resolveWorkspaceTabGroupId } from '../workspace-store';
 import { EmbeddedMarkdownEditorHost } from '../utils/embedded-markdown-editor';
 import {
+	buildStickyTagTree,
 	collectStickyTagCatalog,
+	collectVaultTagCatalog,
 	displayStickyTag,
 	filterStickyFilesByTags,
 	normalizeStickyTag,
-	type StickyTagCount
+	writeStickyTagsToFile,
+	type StickyTagCount,
+	type StickyTagTreeNode
 } from '../utils/sticky-tags-from-file';
 import {
 	dragEventHasMime,
@@ -240,7 +244,24 @@ export class StickyNoteDashboardView extends ItemView {
 	private composerColorWrapEl: HTMLElement | null = null;
 	private composerPaletteEl: HTMLElement | null = null;
 	private composerColorSwatchBtns = new Map<StickyColorId, HTMLButtonElement>();
+	private composerCancelBtn: HTMLButtonElement | null = null;
 	private composerDoneBtn: HTMLButtonElement | null = null;
+	private composerTagWrapEl: HTMLElement | null = null;
+	private composerTagBtn: HTMLButtonElement | null = null;
+	private composerTagChipsEl: HTMLElement | null = null;
+	private composerTagPanelEl: HTMLElement | null = null;
+	private composerTagPanelSearchInput: HTMLInputElement | null = null;
+	private composerTagPanelGroupsEl: HTMLElement | null = null;
+	private composerTagPanelListEl: HTMLElement | null = null;
+	/** 输入区待写入 YAML 的标签（带 #）。 */
+	private composerTags: string[] = [];
+	private composerTagPanelGroup: 'added' | 'current' | 'sticky' | 'vault' = 'current';
+	private composerTagPanelSearch = '';
+	private composerTagCatalogCurrent: StickyTagCount[] = [];
+	private composerTagCatalogSticky: StickyTagCount[] = [];
+	private composerTagCatalogVault: StickyTagCount[] = [];
+	/** 标签树折叠的完整标签（带 #）。 */
+	private composerTagTreeCollapsed = new Set<string>();
 	/** 输入区新建便笺颜色（可在完成按钮旁切换）。 */
 	private composerCreateColor: StickyColorId = 'yellow';
 	private treeEl: HTMLElement | null = null;
@@ -1691,10 +1712,37 @@ export class StickyNoteDashboardView extends ItemView {
 			this.composerFallbackEl?.focus();
 		});
 		const actions = composerWrap.createDiv({ cls: 'csn-dash-composer-actions' });
-		this.composerColorWrapEl = actions.createDiv({ cls: 'csn-dash-composer-color-wrap' });
+		const actionsLeft = actions.createDiv({ cls: 'csn-dash-composer-actions-left' });
+		const actionsRight = actions.createDiv({ cls: 'csn-dash-composer-actions-right' });
+
+		this.composerColorWrapEl = actionsLeft.createDiv({ cls: 'csn-dash-composer-color-wrap' });
+		this.composerColorBtn = this.composerColorWrapEl.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-composer-color clickable-icon',
+			attr: {
+				'aria-label': t('DASH_COMPOSER_COLOR_ARIA'),
+				'aria-expanded': 'false',
+				'aria-haspopup': 'true',
+				'data-csn-color': this.composerCreateColor,
+				title: t('DASH_COMPOSER_COLOR_ARIA')
+			}
+		});
+		setIcon(this.composerColorBtn, 'palette');
+		this.registerDomEvent(this.composerColorBtn, 'pointerdown', (evt: PointerEvent) => {
+			evt.stopPropagation();
+		});
+		this.registerDomEvent(this.composerColorBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleComposerColorPalette();
+		});
 		this.composerPaletteEl = this.composerColorWrapEl.createDiv({
 			cls: 'csn-dash-composer-palette',
-			attr: { role: 'group', 'aria-label': t('DASH_COMPOSER_COLOR_ARIA') }
+			attr: {
+				role: 'group',
+				'aria-label': t('DASH_COMPOSER_COLOR_ARIA'),
+				hidden: 'true'
+			}
 		});
 		this.composerColorSwatchBtns.clear();
 		for (const c of SHEET_COLOR_ORDER) {
@@ -1713,35 +1761,71 @@ export class StickyNoteDashboardView extends ItemView {
 				evt.stopPropagation();
 				this.composerCreateColor = c.id;
 				this.syncComposerColorBtn();
-				this.closeComposerColorPalette();
 			});
 		}
-		this.composerColorBtn = this.composerColorWrapEl.createEl('button', {
-			type: 'button',
-			cls: 'csn-dash-composer-color',
-			attr: {
-				'aria-label': t('DASH_COMPOSER_COLOR_ARIA'),
-				'aria-haspopup': 'true',
-				'aria-expanded': 'false',
-				'data-csn-color': this.composerCreateColor
+
+		this.composerTagWrapEl = actionsLeft.createDiv({ cls: 'csn-dash-composer-tag-wrap' });
+		const tagLabel = this.composerTagWrapEl.createSpan({
+			cls: 'csn-dash-composer-tag-label',
+			attr: { 'aria-hidden': 'true' }
+		});
+		setIcon(tagLabel, 'tags');
+		this.composerTagChipsEl = this.composerTagWrapEl.createDiv({ cls: 'csn-dash-composer-tag-chips' });
+		this.registerDomEvent(this.composerTagChipsEl, 'click', (evt: MouseEvent) => {
+			const hit = evt.target;
+			if (!(hit instanceof Element)) return;
+			const removeBtn = hit.closest('[data-csn-composer-tag-remove]');
+			if (removeBtn && this.composerTagChipsEl?.contains(removeBtn)) {
+				const tag = (removeBtn as HTMLElement).dataset.csnComposerTagRemove;
+				if (!tag) return;
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.removeComposerTag(tag);
 			}
 		});
-		setIcon(this.composerColorBtn, 'palette');
-		this.registerDomEvent(this.composerColorWrapEl, 'mouseenter', () => {
-			this.openComposerColorPalette();
+		const tagAddWrap = this.composerTagWrapEl.createDiv({ cls: 'csn-dash-composer-tag-add-wrap' });
+		this.composerTagBtn = tagAddWrap.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-composer-tag-add-btn clickable-icon',
+			attr: {
+				'aria-label': t('DASH_COMPOSER_TAG_ARIA'),
+				'aria-haspopup': 'dialog',
+				'aria-expanded': 'false',
+				title: t('DASH_COMPOSER_TAG_ARIA')
+			}
 		});
-		this.registerDomEvent(this.composerColorWrapEl, 'mouseleave', () => {
-			this.closeComposerColorPalette();
-		});
-		this.registerDomEvent(this.composerColorBtn, 'focus', () => {
-			this.openComposerColorPalette();
-		});
-		this.registerDomEvent(this.composerColorBtn, 'click', (evt: MouseEvent) => {
-			/* 悬停已展开；点击仅阻止冒泡到输入区，避免收起/抢焦点 */
-			evt.preventDefault();
+		setIcon(this.composerTagBtn, 'plus');
+		this.registerDomEvent(this.composerTagBtn, 'pointerdown', (evt: PointerEvent) => {
 			evt.stopPropagation();
 		});
-		this.composerDoneBtn = actions.createEl('button', {
+		this.registerDomEvent(this.composerTagBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleComposerTagPanel();
+		});
+		this.buildComposerTagPanel(tagAddWrap);
+
+		this.composerCancelBtn = actionsRight.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-composer-cancel',
+			attr: {
+				'aria-label': t('DASH_COMPOSER_CANCEL_ARIA'),
+				hidden: 'true'
+			}
+		});
+		setIcon(this.composerCancelBtn.createSpan({ cls: 'csn-dash-composer-cancel-icon' }), 'x');
+		this.composerCancelBtn.createSpan({
+			cls: 'csn-dash-composer-cancel-label',
+			text: t('DASH_COMPOSER_CANCEL')
+		});
+		this.registerDomEvent(this.composerCancelBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.clearComposer();
+			this.composerEditor?.focus();
+			this.composerFallbackEl?.focus();
+		});
+		this.composerDoneBtn = actionsRight.createEl('button', {
 			type: 'button',
 			cls: 'csn-dash-composer-done',
 			attr: { 'aria-label': t('DASH_COMPOSER_DONE_ARIA') }
@@ -1755,6 +1839,8 @@ export class StickyNoteDashboardView extends ItemView {
 			void this.commitComposer();
 		});
 		this.syncComposerColorBtn();
+		this.syncComposerTagChips();
+		this.syncComposerCancelBtn();
 
 		const splitH = colRight.createEl('div', {
 			cls: 'csn-dash-splitter csn-dash-splitter--h',
@@ -2035,12 +2121,28 @@ export class StickyNoteDashboardView extends ItemView {
 				/* 仅点击面板或触发控件内不关闭；勿用整块 tag-wrap（会占满筛选行空白） */
 				if (
 					!(
-				this.tagPanelEl?.contains(tEl) ||
-				this.tagFilterBtn?.contains(tEl) ||
-				this.tagChipsEl?.contains(tEl)
+						this.tagPanelEl?.contains(tEl) ||
+						this.tagFilterBtn?.contains(tEl) ||
+						this.tagChipsEl?.contains(tEl)
 					)
 				) {
 					this.closeTagFilterPanel();
+				}
+			}
+			if (this.isComposerColorPaletteOpen()) {
+				if (!this.composerColorWrapEl?.contains(tEl)) {
+					this.closeComposerColorPalette();
+				}
+			}
+			if (this.isComposerTagPanelOpen()) {
+				if (
+					!(
+						this.composerTagPanelEl?.contains(tEl) ||
+						this.composerTagBtn?.contains(tEl) ||
+						this.composerTagChipsEl?.contains(tEl)
+					)
+				) {
+					this.closeComposerTagPanel();
 				}
 			}
 			if (this.isDateFilterPanelOpen()) {
@@ -2066,27 +2168,61 @@ export class StickyNoteDashboardView extends ItemView {
 				}
 			}
 		});
-		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
-			if (evt.key !== 'Escape') return;
-			if (this.isAreaVisibilityPanelOpen()) {
+		this.registerDomEvent(
+			document,
+			'keydown',
+			(evt: KeyboardEvent) => {
+				if (evt.key !== 'Escape') return;
+				/* 仅在本仪表盘为活动视图时拦截，避免 Esc 切走标签页 */
+				if (this.app.workspace.getActiveViewOfType(StickyNoteDashboardView) !== this) return;
+
+				if (this.isAreaVisibilityPanelOpen()) {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.closeAreaVisibilityPanel();
+					return;
+				}
+				if (this.isWorkspaceFilterPanelOpen()) {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.closeWorkspaceFilterPanel();
+					return;
+				}
+				if (this.isDateFilterPanelOpen()) {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.closeDateFilterPanel();
+					return;
+				}
+				if (this.isTagFilterPanelOpen()) {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.closeTagFilterPanel();
+					return;
+				}
+				if (this.isComposerTagPanelOpen()) {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.closeComposerTagPanel();
+					return;
+				}
+				if (this.isComposerColorPaletteOpen()) {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.closeComposerColorPalette();
+					return;
+				}
+
+				/* 吞掉 Esc，防止 Obsidian 默认切走当前标签；输入区仅失焦不清空 */
 				evt.preventDefault();
-				this.closeAreaVisibilityPanel();
-				return;
-			}
-			if (this.isWorkspaceFilterPanelOpen()) {
-				evt.preventDefault();
-				this.closeWorkspaceFilterPanel();
-				return;
-			}
-			if (this.isDateFilterPanelOpen()) {
-				evt.preventDefault();
-				this.closeDateFilterPanel();
-				return;
-			}
-			if (!this.isTagFilterPanelOpen()) return;
-			evt.preventDefault();
-			this.closeTagFilterPanel();
-		});
+				evt.stopPropagation();
+				const ae = document.activeElement;
+				if (ae instanceof HTMLElement && this.contentEl.contains(ae)) {
+					ae.blur();
+				}
+			},
+			true
+		);
 
 		const toolActions = toolBar.createDiv({ cls: 'csn-dash-tool-actions' });
 
@@ -5502,17 +5638,349 @@ export class StickyNoteDashboardView extends ItemView {
 			sw.toggleClass('is-active', id === this.composerCreateColor);
 			sw.setAttr('aria-pressed', id === this.composerCreateColor ? 'true' : 'false');
 		}
+		this.syncComposerColorPalette();
+	}
+
+	private isComposerColorPaletteOpen(): boolean {
+		return !!this.composerColorWrapEl?.hasClass('is-expanded');
+	}
+
+	private toggleComposerColorPalette(): void {
+		if (this.isComposerColorPaletteOpen()) this.closeComposerColorPalette();
+		else this.openComposerColorPalette();
 	}
 
 	private openComposerColorPalette(): void {
-		if (!this.composerColorWrapEl || !this.composerColorBtn) return;
-		this.composerColorWrapEl.addClass('is-expanded');
-		this.composerColorBtn.setAttr('aria-expanded', 'true');
+		this.composerColorWrapEl?.addClass('is-expanded');
+		this.syncComposerColorPalette();
+		const active = this.composerColorSwatchBtns.get(this.composerCreateColor);
+		window.setTimeout(() => {
+			(active ?? this.composerPaletteEl?.querySelector('button'))?.focus();
+		}, 0);
 	}
 
 	private closeComposerColorPalette(): void {
 		this.composerColorWrapEl?.removeClass('is-expanded');
-		this.composerColorBtn?.setAttr('aria-expanded', 'false');
+		this.syncComposerColorPalette();
+	}
+
+	private syncComposerColorPalette(): void {
+		const open = this.isComposerColorPaletteOpen();
+		this.composerColorBtn?.setAttr('aria-expanded', open ? 'true' : 'false');
+		this.composerColorBtn?.toggleClass('is-active', open);
+		if (open) this.composerPaletteEl?.removeAttribute('hidden');
+		else this.composerPaletteEl?.setAttr('hidden', 'true');
+	}
+
+	private buildComposerTagPanel(host: HTMLElement): void {
+		const panel = host.createDiv({
+			cls: 'csn-dash-composer-tag-panel csn-dash-composer-tag-panel--hidden',
+			attr: {
+				role: 'dialog',
+				'aria-label': t('DASH_COMPOSER_TAG_PANEL_ARIA'),
+				hidden: 'true'
+			}
+		});
+		this.composerTagPanelEl = panel;
+
+		const tools = panel.createDiv({ cls: 'csn-dash-tag-panel-tools' });
+		const searchInner = tools.createDiv({ cls: 'csn-dash-tag-search-inner' });
+		const searchIcon = searchInner.createSpan({
+			cls: 'csn-dash-tag-search-icon',
+			attr: { 'aria-hidden': 'true' }
+		});
+		setIcon(searchIcon, 'search');
+		this.composerTagPanelSearchInput = searchInner.createEl('input', {
+			type: 'text',
+			cls: 'csn-dash-tag-search-input',
+			attr: {
+				placeholder: t('DASH_COMPOSER_TAG_SEARCH_PLACEHOLDER'),
+				spellcheck: 'false',
+				autocomplete: 'off'
+			}
+		});
+		this.registerDomEvent(this.composerTagPanelSearchInput, 'input', () => {
+			this.composerTagPanelSearch = this.composerTagPanelSearchInput?.value ?? '';
+			this.renderComposerTagPanelBody();
+		});
+		this.registerDomEvent(this.composerTagPanelSearchInput, 'keydown', (evt: KeyboardEvent) => {
+			if (evt.key !== 'Enter') return;
+			evt.preventDefault();
+			evt.stopPropagation();
+			const created = this.tryCreateComposerTagFromSearch();
+			if (created) this.composerTagPanelSearchInput!.value = '';
+			this.composerTagPanelSearch = '';
+			this.renderComposerTagPanelBody();
+		});
+		this.registerDomEvent(this.composerTagPanelSearchInput, 'click', (evt: MouseEvent) => {
+			evt.stopPropagation();
+		});
+
+		const body = panel.createDiv({ cls: 'csn-dash-tag-panel-body' });
+		this.composerTagPanelGroupsEl = body.createDiv({ cls: 'csn-dash-tag-groups' });
+		const groups: Array<{ id: 'added' | 'current' | 'sticky' | 'vault'; labelKey: MessageKey }> = [
+			{ id: 'added', labelKey: 'DASH_COMPOSER_TAG_GROUP_ADDED' },
+			{ id: 'current', labelKey: 'DASH_COMPOSER_TAG_GROUP_CURRENT' },
+			{ id: 'sticky', labelKey: 'DASH_COMPOSER_TAG_GROUP_STICKY' },
+			{ id: 'vault', labelKey: 'DASH_COMPOSER_TAG_GROUP_VAULT' }
+		];
+		for (const g of groups) {
+			const btn = this.composerTagPanelGroupsEl.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-tag-group-btn',
+				attr: { 'data-csn-composer-tag-group': g.id }
+			});
+			btn.createSpan({ cls: 'csn-dash-tag-group-label', text: t(g.labelKey) });
+			btn.createSpan({ cls: 'csn-dash-tag-group-count', text: '0' });
+			this.registerDomEvent(btn, 'click', () => {
+				this.composerTagPanelGroup = g.id;
+				this.renderComposerTagPanelBody();
+			});
+		}
+		this.composerTagPanelListEl = body.createDiv({ cls: 'csn-dash-tag-list' });
+	}
+
+	private isComposerTagPanelOpen(): boolean {
+		return (
+			!!this.composerTagPanelEl &&
+			!this.composerTagPanelEl.hasClass('csn-dash-composer-tag-panel--hidden')
+		);
+	}
+
+	private toggleComposerTagPanel(): void {
+		if (this.isComposerTagPanelOpen()) this.closeComposerTagPanel();
+		else this.openComposerTagPanel();
+	}
+
+	private openComposerTagPanel(): void {
+		if (!this.composerTagPanelEl) return;
+		this.refreshComposerTagCatalogs();
+		this.composerTagPanelEl.removeClass('csn-dash-composer-tag-panel--hidden');
+		this.composerTagPanelEl.removeAttribute('hidden');
+		this.composerTagBtn?.setAttr('aria-expanded', 'true');
+		this.composerTagBtn?.addClass('is-active');
+		this.renderComposerTagPanelBody();
+		window.setTimeout(() => this.composerTagPanelSearchInput?.focus(), 0);
+	}
+
+	private closeComposerTagPanel(): void {
+		this.composerTagPanelEl?.addClass('csn-dash-composer-tag-panel--hidden');
+		this.composerTagPanelEl?.setAttr('hidden', 'true');
+		this.composerTagBtn?.setAttr('aria-expanded', 'false');
+		this.composerTagBtn?.removeClass('is-active');
+	}
+
+	private listStickyFolderFiles(): TFile[] {
+		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
+		const folderAbs = this.app.vault.getAbstractFileByPath(folder);
+		if (!folderAbs || !(folderAbs instanceof TFolder)) return [];
+		return collectMarkdownUnderFolder(folderAbs);
+	}
+
+	private refreshComposerTagCatalogs(): void {
+		const allSticky = this.listStickyFolderFiles();
+		this.composerTagCatalogSticky = collectStickyTagCatalog(this.app, allSticky);
+		const wsPaths = this.resolveWorkspacePathFilter();
+		const currentFiles =
+			wsPaths == null ? allSticky : allSticky.filter(f => wsPaths.has(normalizePath(f.path)));
+		this.composerTagCatalogCurrent = collectStickyTagCatalog(this.app, currentFiles);
+		this.composerTagCatalogVault = collectVaultTagCatalog(this.app);
+	}
+
+	private renderComposerTagPanelBody(): void {
+		const groupsEl = this.composerTagPanelGroupsEl;
+		const listEl = this.composerTagPanelListEl;
+		if (!groupsEl || !listEl) return;
+
+		const counts: Record<'added' | 'current' | 'sticky' | 'vault', number> = {
+			added: this.composerTags.length,
+			current: this.composerTagCatalogCurrent.length,
+			sticky: this.composerTagCatalogSticky.length,
+			vault: this.composerTagCatalogVault.length
+		};
+		for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-tag-group-btn'))) {
+			if (!(btn instanceof HTMLElement)) continue;
+			const id = btn.dataset.csnComposerTagGroup as
+				| 'added'
+				| 'current'
+				| 'sticky'
+				| 'vault'
+				| undefined;
+			if (!id) continue;
+			const countEl = btn.querySelector('.csn-dash-tag-group-count');
+			if (countEl) countEl.setText(String(counts[id]));
+			btn.toggleClass('is-active', this.composerTagPanelGroup === id);
+		}
+
+		const q = this.composerTagPanelSearch.trim().toLowerCase().replace(/^#/, '');
+		let rows: StickyTagCount[] = [];
+		if (this.composerTagPanelGroup === 'added') {
+			rows = this.composerTags.map(tag => ({ tag, count: 1 }));
+		} else if (this.composerTagPanelGroup === 'current') {
+			rows = this.composerTagCatalogCurrent;
+		} else if (this.composerTagPanelGroup === 'sticky') {
+			rows = this.composerTagCatalogSticky;
+		} else {
+			rows = this.composerTagCatalogVault;
+		}
+		if (q) {
+			rows = rows.filter(
+				r => displayStickyTag(r.tag).toLowerCase().includes(q) || r.tag.includes(q)
+			);
+		}
+
+		listEl.empty();
+		if (rows.length === 0) {
+			listEl.createDiv({ cls: 'csn-dash-tag-empty', text: t('DASH_COMPOSER_TAG_EMPTY') });
+			return;
+		}
+
+		/* 搜索时扁平展示完整路径，便于定位；否则按 / 层级树展示 */
+		if (q) {
+			for (const row of rows) {
+				this.appendComposerTagListItem(listEl, {
+					fullTag: row.tag,
+					label: displayStickyTag(row.tag),
+					count: row.count,
+					depth: 0,
+					hasChildren: false,
+					collapsed: false
+				});
+			}
+			return;
+		}
+
+		const tree = buildStickyTagTree(rows);
+		const walk = (nodes: StickyTagTreeNode[], depth: number) => {
+			for (const node of nodes) {
+				const hasChildren = node.children.length > 0;
+				const collapsed = hasChildren && this.composerTagTreeCollapsed.has(node.fullTag);
+				this.appendComposerTagListItem(listEl, {
+					fullTag: node.fullTag,
+					label: node.name,
+					count: node.count,
+					depth,
+					hasChildren,
+					collapsed
+				});
+				if (hasChildren && !collapsed) walk(node.children, depth + 1);
+			}
+		};
+		walk(tree, 0);
+	}
+
+	private appendComposerTagListItem(
+		listEl: HTMLElement,
+		opts: {
+			fullTag: string;
+			label: string;
+			count: number;
+			depth: number;
+			hasChildren: boolean;
+			collapsed: boolean;
+		}
+	): void {
+		const addedSet = new Set(this.composerTags);
+		const item = listEl.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-item csn-dash-tag-item--tree',
+			attr: {
+				'data-csn-tag': opts.fullTag,
+				style: `--csn-tag-depth: ${opts.depth}`
+			}
+		});
+		const toggle = item.createSpan({
+			cls: 'csn-dash-tag-tree-toggle',
+			attr: { 'aria-hidden': 'true' }
+		});
+		if (opts.hasChildren) {
+			toggle.addClass('is-toggle');
+			setIcon(toggle, opts.collapsed ? 'chevron-right' : 'chevron-down');
+			this.registerDomEvent(toggle, 'click', (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				if (this.composerTagTreeCollapsed.has(opts.fullTag)) {
+					this.composerTagTreeCollapsed.delete(opts.fullTag);
+				} else {
+					this.composerTagTreeCollapsed.add(opts.fullTag);
+				}
+				this.renderComposerTagPanelBody();
+			});
+		}
+		const check = item.createSpan({ cls: 'csn-dash-tag-check', attr: { 'aria-hidden': 'true' } });
+		const selected = addedSet.has(opts.fullTag);
+		if (selected) {
+			item.addClass('is-included');
+			setIcon(check, 'check-square');
+		} else {
+			setIcon(check, 'square');
+		}
+		item.createSpan({ cls: 'csn-dash-tag-item-text', text: opts.label });
+		if (this.composerTagPanelGroup !== 'added' && opts.count > 0) {
+			item.createSpan({ cls: 'csn-dash-tag-item-count', text: String(opts.count) });
+		}
+		this.registerDomEvent(item, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleComposerTag(opts.fullTag);
+		});
+	}
+
+	private tryCreateComposerTagFromSearch(): boolean {
+		const q = this.composerTagPanelSearch.trim();
+		if (!q) return false;
+		this.addComposerTag(q);
+		return true;
+	}
+
+	private addComposerTag(raw: string): void {
+		const tag = normalizeStickyTag(raw);
+		if (!tag) return;
+		if (this.composerTags.includes(tag)) return;
+		this.composerTags.push(tag);
+		this.syncComposerTagChips();
+		this.syncComposerCancelBtn();
+		if (this.isComposerTagPanelOpen()) this.renderComposerTagPanelBody();
+	}
+
+	private removeComposerTag(raw: string): void {
+		const tag = normalizeStickyTag(raw);
+		this.composerTags = this.composerTags.filter(x => x !== tag);
+		this.syncComposerTagChips();
+		this.syncComposerCancelBtn();
+		if (this.isComposerTagPanelOpen()) this.renderComposerTagPanelBody();
+	}
+
+	private toggleComposerTag(raw: string): void {
+		const tag = normalizeStickyTag(raw);
+		if (!tag) return;
+		if (this.composerTags.includes(tag)) this.removeComposerTag(tag);
+		else this.addComposerTag(tag);
+	}
+
+	private syncComposerTagChips(): void {
+		const el = this.composerTagChipsEl;
+		if (!el) return;
+		el.empty();
+		for (const tag of this.composerTags) {
+			const chip = el.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-composer-tag-chip',
+				attr: { 'data-csn-composer-tag': tag }
+			});
+			chip.createSpan({ cls: 'csn-dash-composer-tag-chip-text', text: displayStickyTag(tag) });
+			const remove = chip.createSpan({
+				cls: 'csn-dash-composer-tag-chip-remove',
+				attr: {
+					'data-csn-composer-tag-remove': tag,
+					'aria-label': t('DASH_COMPOSER_TAG_CHIP_REMOVE_ARIA', {
+						tag: displayStickyTag(tag)
+					}),
+					role: 'button'
+				}
+			});
+			setIcon(remove, 'x');
+		}
 	}
 
 	/** 挂载 Obsidian 原生 Markdown 编辑器；失败时回退到 textarea。 */
@@ -5537,15 +6005,19 @@ export class StickyNoteDashboardView extends ItemView {
 					getFile: () => null,
 					placeholder: t('DASH_COMPOSER_PLACEHOLDER'),
 					initialValue: draft,
-					onSubmit: () => {
-						void this.commitComposer();
+					onEscape: () => {
+						/* 失焦即可，勿清空草稿 */
+						const ae = document.activeElement;
+						if (ae instanceof HTMLElement && host.contains(ae)) ae.blur();
 					},
 					onChange: md => {
 						this.schedulePersistComposerDraft(md);
+						this.syncComposerCancelBtn();
 					}
 				});
 				this.composerEditor.mount();
 				this.applyComposerContentZoom();
+				this.syncComposerCancelBtn();
 				return;
 			} catch (e) {
 				console.error('[colorful-sticky-notes] mount composer markdown editor failed', e);
@@ -5568,13 +6040,9 @@ export class StickyNoteDashboardView extends ItemView {
 		this.applyComposerContentZoom();
 		this.registerDomEvent(this.composerFallbackEl, 'input', () => {
 			this.schedulePersistComposerDraft(this.composerFallbackEl?.value ?? '');
+			this.syncComposerCancelBtn();
 		});
-		this.registerDomEvent(this.composerFallbackEl, 'keydown', (evt: KeyboardEvent) => {
-			if ((evt.ctrlKey || evt.metaKey) && evt.key === 'Enter') {
-				evt.preventDefault();
-				void this.commitComposer();
-			}
-		});
+		this.syncComposerCancelBtn();
 	}
 
 	/** 插件稍后解析到内部 MarkdownEditor 类时，从 textarea 升级为 CM 编辑区。 */
@@ -5626,8 +6094,21 @@ export class StickyNoteDashboardView extends ItemView {
 		} else if (this.composerFallbackEl) {
 			this.composerFallbackEl.value = '';
 		}
+		this.composerTags = [];
 		this.debouncedPersistComposerDraft?.cancel();
 		this.persistComposerDraft('');
+		this.closeComposerTagPanel();
+		this.syncComposerTagChips();
+		this.syncComposerCancelBtn();
+	}
+
+	private syncComposerCancelBtn(): void {
+		const btn = this.composerCancelBtn;
+		if (!btn) return;
+		const hasContent =
+			this.getComposerMarkdown().trim().length > 0 || this.composerTags.length > 0;
+		btn.toggleClass('is-visible', hasContent);
+		btn.toggleAttribute('hidden', !hasContent);
 	}
 
 	/**
@@ -5678,6 +6159,7 @@ export class StickyNoteDashboardView extends ItemView {
 		if (this.composing) return;
 		const extra = this.getComposerMarkdown().trim();
 		if (!extra) return;
+		const tagsToWrite = [...this.composerTags];
 		this.composing = true;
 		try {
 			const created = await this.plugin.stickies.addStickyWindow(
@@ -5689,6 +6171,9 @@ export class StickyNoteDashboardView extends ItemView {
 			try {
 				const cur = await this.app.vault.read(created);
 				await this.app.vault.modify(created, injectMarkdownAfterFrontmatter(cur, extra));
+				if (tagsToWrite.length > 0) {
+					await writeStickyTagsToFile(this.app, created, tagsToWrite);
+				}
 				await this.assignCreatedStickyToFilterWorkspaces(created);
 				this.clearComposer();
 				this.listPageIndex = 0;
@@ -6562,7 +7047,16 @@ export class StickyNoteDashboardView extends ItemView {
 		this.composerColorWrapEl = null;
 		this.composerPaletteEl = null;
 		this.composerColorSwatchBtns.clear();
+		this.composerCancelBtn = null;
 		this.composerDoneBtn = null;
+		this.composerTagWrapEl = null;
+		this.composerTagBtn = null;
+		this.composerTagChipsEl = null;
+		this.composerTagPanelEl = null;
+		this.composerTagPanelSearchInput = null;
+		this.composerTagPanelGroupsEl = null;
+		this.composerTagPanelListEl = null;
+		this.composerTags = [];
 		this.treeEl = null;
 		this.areaNavEl = null;
 		this.areaPanelEl = null;

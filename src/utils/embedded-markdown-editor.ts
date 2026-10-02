@@ -90,8 +90,6 @@ export interface EmbeddedMarkdownEditorOptions {
 	getFile: () => TFile | null;
 	placeholder?: string;
 	initialValue?: string;
-	/** Mod/Ctrl+Enter 提交。 */
-	onSubmit: (markdown: string) => void;
 	/** Escape；未提供时按键仍被吞掉，不做清空/失焦。 */
 	onEscape?: () => void;
 	/** 文档内容变化（含程序 setValue）。 */
@@ -122,7 +120,6 @@ export class EmbeddedMarkdownEditorHost {
 			getFile,
 			placeholder,
 			initialValue,
-			onSubmit,
 			onEscape,
 			onChange
 		} = this.opts;
@@ -158,6 +155,13 @@ export class EmbeddedMarkdownEditorHost {
 									// eslint-disable-next-line @typescript-eslint/no-explicit-any
 									(app.workspace as any).activeEditor = owner;
 								});
+								return false;
+							},
+							keydown: (evt: KeyboardEvent) => {
+								if (evt.key !== 'Escape') return false;
+								evt.preventDefault();
+								evt.stopPropagation();
+								onEscape?.();
 								return true;
 							}
 						})
@@ -187,14 +191,6 @@ export class EmbeddedMarkdownEditorHost {
 								key: 'Enter',
 								run: handleEnter(false, false),
 								shift: handleEnter(false, true),
-								preventDefault: true
-							},
-							{
-								key: 'Mod-Enter',
-								run: (cm: EditorView) => {
-									onSubmit(cm.state.doc.toString());
-									return true;
-								},
 								preventDefault: true
 							},
 							{
