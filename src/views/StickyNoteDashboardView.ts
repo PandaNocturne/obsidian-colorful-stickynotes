@@ -23,10 +23,14 @@ import {
 	DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
 	DASH_LEFT_PANE_AUTO_COLLAPSE_BELOW,
 	DASH_LEFT_PANE_WIDTH_DEFAULT,
+	dashboardChromeStateKey,
 	dashboardFilterStateKey,
+	normalizeDashboardChromeState,
 	normalizeDashboardFilterState,
 	normalizeDashboardVisibleAreaModes,
-	type DashboardFilterState
+	type DashboardChromeState,
+	type DashboardFilterState,
+	type DashboardWsTreeSortMode
 } from '../settings';
 import {
 	VIEW_STICKY_NOTE_DASHBOARD,
@@ -107,7 +111,7 @@ const DASH_AREA_MODE_SPECS: Array<{
 
 type DashLeftPanelId = 'area' | 'workspace';
 
-type DashWsTreeSort = 'manual' | 'name-asc' | 'name-desc' | 'mtime-desc';
+type DashWsTreeSort = DashboardWsTreeSortMode;
 
 const DASH_WS_TREE_SORT_SPECS: Array<{
 	mode: DashWsTreeSort;
@@ -383,10 +387,8 @@ export class StickyNoteDashboardView extends ItemView {
 		private readonly plugin: ColorfulStickyNotesPlugin
 	) {
 		super(leaf);
-		const now = new Date();
-		this.calYear = now.getFullYear();
-		this.calMonth0 = now.getMonth();
 		this.composerCreateColor = this.plugin.settings.defaultNewStickyBackground ?? 'yellow';
+		this.restoreDashboardChromeFromSettings();
 		this.restoreDashboardFiltersFromSettings();
 	}
 
@@ -1508,6 +1510,12 @@ export class StickyNoteDashboardView extends ItemView {
 	async onOpen(): Promise<void> {
 		/* 进入仪表盘即关闭当前激活的便笺工作区会话 */
 		await this.plugin.stickies.deselectActiveStickyWorkspace();
+		/* 工作区文件已就绪后再裁剪一次选中，避免构造期 prune 过早 */
+		this.workspaceSel = this.pruneWorkspaceSel(this.workspaceSel);
+		this.plugin.settings.dashboardFilters = {
+			...this.plugin.settings.dashboardFilters,
+			workspaceSel: this.workspaceSel
+		};
 
 		const root = this.contentEl;
 		root.empty();
@@ -1626,6 +1634,7 @@ export class StickyNoteDashboardView extends ItemView {
 				'aria-label': t('DASH_WS_FILTER_PLACEHOLDER')
 			}
 		});
+		this.wsTreeFilterInput.value = this.wsTreeFilterQuery;
 		this.wsTreeShowArchivedBtn = wsFilterRow.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-dash-ws-action-btn csn-dash-ws-archived-toggle',
@@ -1643,6 +1652,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const debouncedWsFilter = debounce(
 			() => {
 				this.wsTreeFilterQuery = this.wsTreeFilterInput?.value ?? '';
+				this.persistDashboardChrome();
 				this.renderWorkspaceTree();
 			},
 			100,
@@ -3904,6 +3914,7 @@ export class StickyNoteDashboardView extends ItemView {
 					.setChecked(spec.mode === this.wsTreeSortMode)
 					.onClick(() => {
 						this.wsTreeSortMode = spec.mode;
+						this.persistDashboardChrome();
 						this.syncWsTreeSortBtn();
 						this.renderWorkspaceTree();
 					});
@@ -3966,6 +3977,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.wsTreeShowArchived = !this.wsTreeShowArchived;
 		/* 切换列表模式时清空选中，避免跨模式残留筛选 */
 		this.setWorkspaceSel({ kind: 'all' });
+		this.persistDashboardChrome();
 		this.syncWsTreeShowArchivedBtn();
 		this.renderWorkspaceTree();
 	}
@@ -4153,6 +4165,37 @@ export class StickyNoteDashboardView extends ItemView {
 		void this.plugin.saveSettings();
 	}
 
+	private snapshotDashboardChrome(): DashboardChromeState {
+		return normalizeDashboardChromeState({
+			wsTreeFilterQuery: this.wsTreeFilterInput?.value ?? this.wsTreeFilterQuery,
+			wsTreeSortMode: this.wsTreeSortMode,
+			wsTreeShowArchived: this.wsTreeShowArchived,
+			listPageIndex: this.listPageIndex,
+			calYear: this.calYear,
+			calMonth0: this.calMonth0
+		});
+	}
+
+	private persistDashboardChrome(): void {
+		const next = this.snapshotDashboardChrome();
+		if (dashboardChromeStateKey(next) === dashboardChromeStateKey(this.plugin.settings.dashboardChrome)) {
+			return;
+		}
+		this.plugin.settings.dashboardChrome = next;
+		void this.plugin.saveSettings();
+	}
+
+	private restoreDashboardChromeFromSettings(): void {
+		const saved = normalizeDashboardChromeState(this.plugin.settings.dashboardChrome);
+		this.wsTreeFilterQuery = saved.wsTreeFilterQuery;
+		this.wsTreeSortMode = saved.wsTreeSortMode;
+		this.wsTreeShowArchived = saved.wsTreeShowArchived;
+		this.listPageIndex = saved.listPageIndex;
+		this.calYear = saved.calYear;
+		this.calMonth0 = saved.calMonth0;
+		this.plugin.settings.dashboardChrome = saved;
+	}
+
 	private restoreDashboardFiltersFromSettings(): void {
 		const saved = normalizeDashboardFilterState(this.plugin.settings.dashboardFilters);
 		this.areaMode = saved.areaMode;
@@ -4186,8 +4229,14 @@ export class StickyNoteDashboardView extends ItemView {
 		if (sel.kind !== 'selection') return { kind: 'all' };
 		const file = this.plugin.stickies?.workspaces;
 		if (!file) return sel;
-		const liveWs = new Set(file.workspaces.map(w => w.id));
-		const liveGroups = new Set(file.tabGroups.map(g => g.id));
+		const liveWs = new Set([
+			...file.workspaces.map(w => w.id),
+			...file.trash.map(w => w.id)
+		]);
+		const liveGroups = new Set([
+			...file.tabGroups.map(g => g.id),
+			...(file.trashTabGroups ?? []).map(g => g.id)
+		]);
 		const workspaceIds = sel.workspaceIds.filter(id => liveWs.has(id));
 		const groupIds = sel.groupIds.filter(id => liveGroups.has(id) || id === WS_TAB_GROUP_UNGROUPED_ID);
 		if (workspaceIds.length === 0 && groupIds.length === 0) return { kind: 'all' };
@@ -4835,6 +4884,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private ensureManualWsTreeSort(): void {
 		if (this.wsTreeSortMode === 'manual') return;
 		this.wsTreeSortMode = 'manual';
+		this.persistDashboardChrome();
 		this.syncWsTreeSortBtn();
 	}
 
@@ -6455,6 +6505,7 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		} finally {
 			this.persistDashboardFilters();
+			this.persistDashboardChrome();
 			if (this.plugin.listPrioritizeStickyPath) {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
@@ -6467,6 +6518,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.flushComposerDraftToSettings();
 		this.debouncedPersistComposerDraft = null;
 		this.persistDashboardFilters();
+		this.persistDashboardChrome();
 		this.detachCalPickerDocClose();
 		this.calPicker = null;
 		this.leftPaneAutoCollapsedForWidth = false;

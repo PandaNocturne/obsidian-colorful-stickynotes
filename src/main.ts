@@ -5,6 +5,7 @@ import {
 	clampDashLeftPaneWidth,
 	clampViewContentZoom,
 	normalizeNoteListDimensionCss,
+	normalizeDashboardChromeState,
 	normalizeDashboardFilterState,
 	normalizeDashboardVisibleAreaModes,
 	ColorfulStickyNotesSettingTab,
@@ -440,6 +441,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				: [];
 		}
 		this.settings.dashboardFilters = normalizeDashboardFilterState(this.settings.dashboardFilters);
+		this.settings.dashboardChrome = normalizeDashboardChromeState(this.settings.dashboardChrome);
 
 		const nls = this.settings.noteListSort;
 		if (typeof nls !== 'string' || !VALID_NOTE_LIST_SORT.some(s => s === nls)) {

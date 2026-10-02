@@ -68,6 +68,68 @@ export interface DashboardFilterState {
 	searchQuery: string;
 }
 
+/** 仪表盘 UI 会话态（工作区树、日历浏览、分页等）。 */
+export type DashboardWsTreeSortMode = 'manual' | 'name-asc' | 'name-desc' | 'mtime-desc';
+
+export interface DashboardChromeState {
+	wsTreeFilterQuery: string;
+	wsTreeSortMode: DashboardWsTreeSortMode;
+	wsTreeShowArchived: boolean;
+	listPageIndex: number;
+	calYear: number;
+	calMonth0: number;
+}
+
+export const DEFAULT_DASHBOARD_CHROME: DashboardChromeState = {
+	wsTreeFilterQuery: '',
+	wsTreeSortMode: 'manual',
+	wsTreeShowArchived: false,
+	listPageIndex: 0,
+	calYear: new Date().getFullYear(),
+	calMonth0: new Date().getMonth()
+};
+
+const VALID_DASH_WS_TREE_SORT: DashboardWsTreeSortMode[] = [
+	'manual',
+	'name-asc',
+	'name-desc',
+	'mtime-desc'
+];
+
+export function normalizeDashboardChromeState(raw: unknown): DashboardChromeState {
+	const obj = raw && typeof raw === 'object' ? (raw as Partial<DashboardChromeState>) : {};
+	const now = new Date();
+	const wsTreeSortMode =
+		typeof obj.wsTreeSortMode === 'string' &&
+		VALID_DASH_WS_TREE_SORT.includes(obj.wsTreeSortMode as DashboardWsTreeSortMode)
+			? (obj.wsTreeSortMode as DashboardWsTreeSortMode)
+			: DEFAULT_DASHBOARD_CHROME.wsTreeSortMode;
+	const calYear =
+		typeof obj.calYear === 'number' && Number.isFinite(obj.calYear)
+			? Math.round(obj.calYear)
+			: now.getFullYear();
+	const calMonth0 =
+		typeof obj.calMonth0 === 'number' && Number.isFinite(obj.calMonth0)
+			? Math.max(0, Math.min(11, Math.round(obj.calMonth0)))
+			: now.getMonth();
+	const listPageIndex =
+		typeof obj.listPageIndex === 'number' && Number.isFinite(obj.listPageIndex)
+			? Math.max(0, Math.round(obj.listPageIndex))
+			: 0;
+	return {
+		wsTreeFilterQuery: typeof obj.wsTreeFilterQuery === 'string' ? obj.wsTreeFilterQuery : '',
+		wsTreeSortMode,
+		wsTreeShowArchived: obj.wsTreeShowArchived === true,
+		listPageIndex,
+		calYear,
+		calMonth0
+	};
+}
+
+export function dashboardChromeStateKey(state: DashboardChromeState): string {
+	return JSON.stringify(state);
+}
+
 function normalizeDashStringList(raw: unknown): string[] {
 	if (!Array.isArray(raw)) return [];
 	const out: string[] = [];
@@ -338,6 +400,8 @@ export interface ColorfulStickyNotesSettings {
 	dashboardCollapsedLeftPanelIds: string[];
 	/** 仪表盘上次使用的筛选（重新打开时恢复）。 */
 	dashboardFilters: DashboardFilterState;
+	/** 仪表盘 UI 会话态：工作区树筛选/排序/归档、日历浏览月、分页。 */
+	dashboardChrome: DashboardChromeState;
 	/** 便笺列表排序（默认：创建时间新在前）。 */
 	noteListSort: NoteListSort;
 	/** 便笺列表置顶路径（靠前优先显示；顺序即置顶顺序）。 */
@@ -417,6 +481,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	dashboardCollapsedWorkspaceGroupIds: [],
 	dashboardCollapsedLeftPanelIds: [],
 	dashboardFilters: { ...DEFAULT_DASHBOARD_FILTERS, workspaceSel: { kind: 'all' } },
+	dashboardChrome: { ...DEFAULT_DASHBOARD_CHROME },
 	noteListSort: 'ctime-desc',
 	noteListPinnedPaths: [],
 	noteListColorFilters: [],
