@@ -15,6 +15,10 @@ import {
 import { t } from '../lang/helpers';
 import type { FloatingBounds, StickyColorId } from '../types';
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
+import {
+	appendGroupedWorkspacePicker,
+	type WorkspaceMenuGroupSection
+} from '../utils/workspace-transfer-menu';
 import { clampViewContentZoom } from '../settings';
 import { SHEET_COLOR_ORDER } from './sticky-color-order';
 
@@ -66,16 +70,16 @@ export interface StickyNotePopoverOptions {
 
 	/** 切换当前便笺 frontmatter 归档状态（无 Markdown 文件时由实现侧忽略）。 */
 	onToggleArchiveCurrentSticky: () => void;
-	/** 可加入的工作区（含已属于，供勾选禁用）。 */
-	getWorkspacesForAddMenu: () => Array<{ id: string; name: string; alreadyIn: boolean }>;
+	/** 可加入的工作区（按分组；含已属于，供勾选禁用）。 */
+	getWorkspacesForAddMenu: () => WorkspaceMenuGroupSection[];
 	/** 将当前便笺加入指定工作区。 */
 	onAddToWorkspace: (wsId: string) => void;
-	/** 便笺所属、可从中移除的工作区列表（头部菜单子项）。 */
-	getWorkspacesForRemoveMenu: () => Array<{ id: string; name: string }>;
+	/** 便笺所属、可从中移除的工作区列表（按分组）。 */
+	getWorkspacesForRemoveMenu: () => WorkspaceMenuGroupSection[];
 	/** 从指定工作区移除该便笺成员（不关闭窗口）。 */
 	onRemoveFromWorkspace: (wsId: string) => void;
-	/** 可移入的其它工作区（不含当前已属）。 */
-	getWorkspacesForMoveMenu: () => Array<{ id: string; name: string }>;
+	/** 可移入的其它工作区（按分组；不含当前已属）。 */
+	getWorkspacesForMoveMenu: () => WorkspaceMenuGroupSection[];
 	/** 从现有工作区移出并加入目标工作区（不关闭窗口）。 */
 	onMoveToWorkspace: (wsId: string) => void;
 	/** 用户与本窗口交互或成为活动便笺时：提升到其他便笺之上。 */
@@ -447,54 +451,31 @@ export class StickyNotePopover {
 		if (file instanceof TFile && file.extension === 'md') {
 			canArchiveOrDelete = true;
 			archived = await resolveStickyArchivedForFile(this.plugin.app, file);
-			const addTargets = this.options.getWorkspacesForAddMenu();
-			if (addTargets.length > 0) {
+			const addGroups = this.options.getWorkspacesForAddMenu();
+			if (addGroups.some(g => g.workspaces.length > 0)) {
 				menu.addItem(item => {
 					item.setTitle(t('LIST_ADD_TO_WORKSPACE')).setIcon('folder-plus');
-					const sub = item.setSubmenu();
-					for (const ws of addTargets) {
-						sub.addItem(si => {
-							si.setTitle(ws.name)
-								.setIcon('layers')
-								.setChecked(ws.alreadyIn)
-								.setDisabled(ws.alreadyIn)
-								.onClick(() => {
-									this.options.onAddToWorkspace(ws.id);
-								});
-						});
-					}
+					appendGroupedWorkspacePicker(item.setSubmenu(), addGroups, wsId => {
+						this.options.onAddToWorkspace(wsId);
+					});
 				});
 			}
-			const removeTargets = this.options.getWorkspacesForRemoveMenu();
-			if (removeTargets.length > 0) {
+			const removeGroups = this.options.getWorkspacesForRemoveMenu();
+			if (removeGroups.some(g => g.workspaces.length > 0)) {
 				menu.addItem(item => {
 					item.setTitle(t('REMOVE_FROM_WORKSPACE')).setIcon('folder-minus');
-					const sub = item.setSubmenu();
-					for (const ws of removeTargets) {
-						sub.addItem(si => {
-							si.setTitle(ws.name)
-								.setIcon('layers')
-								.onClick(() => {
-									this.options.onRemoveFromWorkspace(ws.id);
-								});
-						});
-					}
+					appendGroupedWorkspacePicker(item.setSubmenu(), removeGroups, wsId => {
+						this.options.onRemoveFromWorkspace(wsId);
+					});
 				});
 			}
-			const moveTargets = this.options.getWorkspacesForMoveMenu();
-			if (moveTargets.length > 0) {
+			const moveGroups = this.options.getWorkspacesForMoveMenu();
+			if (moveGroups.some(g => g.workspaces.length > 0)) {
 				menu.addItem(item => {
 					item.setTitle(t('LIST_MOVE_TO_WORKSPACE')).setIcon('folder-input');
-					const sub = item.setSubmenu();
-					for (const ws of moveTargets) {
-						sub.addItem(si => {
-							si.setTitle(ws.name)
-								.setIcon('layers')
-								.onClick(() => {
-									this.options.onMoveToWorkspace(ws.id);
-								});
-						});
-					}
+					appendGroupedWorkspacePicker(item.setSubmenu(), moveGroups, wsId => {
+						this.options.onMoveToWorkspace(wsId);
+					});
 				});
 			}
 		}

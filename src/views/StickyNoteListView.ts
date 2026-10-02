@@ -40,6 +40,10 @@ import {
 	filterStickyFilesByKeywords,
 	pinnedSortRank
 } from '../utils/query-sticky-list';
+import {
+	appendGroupedWorkspacePicker,
+	buildWorkspaceMenuGroups
+} from '../utils/workspace-transfer-menu';
 
 /** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
 function listPreviewEmbedMarkdown(file: TFile): string {
@@ -1090,66 +1094,64 @@ export class StickyNoteListView extends ItemView {
 	private appendListCardWorkspaceTransferMenus(
 		menu: Menu,
 		files: TFile[],
-		activeWs: { id: string; name: string } | null,
+		_activeWs: { id: string; name: string } | null,
 		batchCount: number
 	): void {
-		const workspaces = this.plugin.stickies.workspaces.workspaces;
-		if (workspaces.length === 0) return;
+		const file = this.plugin.stickies.workspaces;
+		if (file.workspaces.length === 0) return;
 
-		menu.addItem(item => {
-			item.setTitle(this.titleWithBatchCount(t('LIST_ADD_TO_WORKSPACE'), batchCount)).setIcon('folder-plus');
-			const sub = item.setSubmenu();
-			for (const ws of workspaces) {
-				const allIn = files.every(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id));
-				sub.addItem(si => {
-					si.setTitle(ws.name)
-						.setIcon('layers')
-						.setChecked(allIn)
-						.setDisabled(allIn)
-						.onClick(() => {
-							void this.plugin.stickies.addFilesToWorkspace(ws.id, files);
-						});
-				});
-			}
-		});
-
-		const removeTargets = workspaces.filter(ws =>
-			files.some(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id))
+		const addGroups = buildWorkspaceMenuGroups(
+			file,
+			() => true,
+			ws => ({
+				id: ws.id,
+				name: ws.name,
+				alreadyIn: files.every(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id))
+			})
 		);
-		if (removeTargets.length > 0) {
+		if (addGroups.some(g => g.workspaces.length > 0)) {
+			menu.addItem(item => {
+				item
+					.setTitle(this.titleWithBatchCount(t('LIST_ADD_TO_WORKSPACE'), batchCount))
+					.setIcon('folder-plus');
+				appendGroupedWorkspacePicker(item.setSubmenu(), addGroups, wsId => {
+					void this.plugin.stickies.addFilesToWorkspace(wsId, files);
+				});
+			});
+		}
+
+		const removeGroups = buildWorkspaceMenuGroups(
+			file,
+			ws => files.some(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id)),
+			ws => ({ id: ws.id, name: ws.name })
+		);
+		if (removeGroups.some(g => g.workspaces.length > 0)) {
 			menu.addItem(item => {
 				item
 					.setTitle(this.titleWithBatchCount(t('REMOVE_FROM_WORKSPACE'), batchCount))
 					.setIcon('folder-minus');
-				const sub = item.setSubmenu();
-				for (const ws of removeTargets) {
-					const targets = files.filter(f => this.plugin.stickies.isStickyInWorkspace(f, ws.id));
-					sub.addItem(si => {
-						si.setTitle(ws.name)
-							.setIcon('layers')
-							.onClick(() => {
-								void this.plugin.stickies.removeFilesFromWorkspace(ws.id, targets);
-							});
-					});
-				}
+				appendGroupedWorkspacePicker(item.setSubmenu(), removeGroups, wsId => {
+					const targets = files.filter(f => this.plugin.stickies.isStickyInWorkspace(f, wsId));
+					void this.plugin.stickies.removeFilesFromWorkspace(wsId, targets);
+				});
 			});
 		}
 
-		if (!activeWs) return;
-		const moveTargets = workspaces.filter(ws => ws.id !== activeWs.id);
-		if (moveTargets.length === 0) return;
-
-		menu.addItem(item => {
-			item.setTitle(this.titleWithBatchCount(t('LIST_MOVE_TO_WORKSPACE'), batchCount)).setIcon('folder-input');
-			const sub = item.setSubmenu();
-			for (const ws of moveTargets) {
-				sub.addItem(si => {
-					si.setTitle(ws.name).setIcon('layers').onClick(() => {
-						void this.plugin.stickies.moveFilesFromActiveWorkspaceTo(ws.id, files);
-					});
+		const moveGroups = buildWorkspaceMenuGroups(
+			file,
+			ws => files.some(f => !this.plugin.stickies.isStickyInWorkspace(f, ws.id)),
+			ws => ({ id: ws.id, name: ws.name })
+		);
+		if (moveGroups.some(g => g.workspaces.length > 0)) {
+			menu.addItem(item => {
+				item
+					.setTitle(this.titleWithBatchCount(t('LIST_MOVE_TO_WORKSPACE'), batchCount))
+					.setIcon('folder-input');
+				appendGroupedWorkspacePicker(item.setSubmenu(), moveGroups, wsId => {
+					void this.plugin.stickies.moveFilesToWorkspace(wsId, files);
 				});
-			}
-		});
+			});
+		}
 	}
 
 	private stickyFolderRoot(): string {

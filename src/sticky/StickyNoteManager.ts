@@ -26,6 +26,7 @@ import {
 	resolveStickyArchivedWorkspacesForFile,
 	resolveStickyWorkspacesForFile
 } from '../utils/sticky-workspace-yaml';
+import { buildWorkspaceMenuGroups } from '../utils/workspace-transfer-menu';
 import { BlankStickyDeleteConfirmModal } from '../modals/BlankStickyDeleteConfirmModal';
 import {
 	defaultWorkspacesFile,
@@ -1837,24 +1838,35 @@ export class StickyNoteManager {
 			getWorkspacesForAddMenu: () => {
 				const file = this.getPopoverFileById(id);
 				if (!(file instanceof TFile)) return [];
-				return this.workspaces.workspaces.map(ws => ({
-					id: ws.id,
-					name: ws.name,
-					alreadyIn: this.isStickyInWorkspace(file, ws.id)
-				}));
+				return buildWorkspaceMenuGroups(
+					this.workspaces,
+					() => true,
+					ws => ({
+						id: ws.id,
+						name: ws.name,
+						alreadyIn: this.isStickyInWorkspace(file, ws.id)
+					})
+				);
 			},
 			onAddToWorkspace: (wsId: string) => void this.addStickyToWorkspaceForPopover(id, wsId),
 			getWorkspacesForRemoveMenu: () => {
 				const file = this.getPopoverFileById(id);
-				return file instanceof TFile ? this.getWorkspacesContainingFileForMenu(file) : [];
+				if (!(file instanceof TFile)) return [];
+				return buildWorkspaceMenuGroups(
+					this.workspaces,
+					ws => this.isStickyInWorkspace(file, ws.id),
+					ws => ({ id: ws.id, name: ws.name })
+				);
 			},
 			onRemoveFromWorkspace: (wsId: string) => void this.removeStickyFromWorkspaceForPopover(id, wsId),
 			getWorkspacesForMoveMenu: () => {
 				const file = this.getPopoverFileById(id);
 				if (!(file instanceof TFile)) return [];
-				return this.workspaces.workspaces
-					.filter(ws => !this.isStickyInWorkspace(file, ws.id))
-					.map(ws => ({ id: ws.id, name: ws.name }));
+				return buildWorkspaceMenuGroups(
+					this.workspaces,
+					ws => !this.isStickyInWorkspace(file, ws.id),
+					ws => ({ id: ws.id, name: ws.name })
+				);
 			},
 			onMoveToWorkspace: (wsId: string) => void this.moveStickyToWorkspaceForPopover(id, wsId),
 			onActivate: () => this.bringStickyToFrontById(id),
@@ -1933,12 +1945,6 @@ export class StickyNoteManager {
 		const file = this.getPopoverFileById(popoverId);
 		if (!(file instanceof TFile)) return;
 		await this.moveFilesToWorkspace(wsId, [file]);
-	}
-
-	private getWorkspacesContainingFileForMenu(file: TFile): Array<{ id: string; name: string }> {
-		return this.workspaces.workspaces
-			.filter(ws => this.isStickyInWorkspace(file, ws.id))
-			.map(ws => ({ id: ws.id, name: ws.name }));
 	}
 
 	/** 关闭所有展示该文件的便笺窗口并将文件移入回收站。 */
