@@ -1169,7 +1169,9 @@ export class StickyNoteManager {
 
 	async updateWorkspace(wsId: string, name: string, remark: string): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
-		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
+		const ws =
+			this.workspaces.workspaces.find(w => w.id === wsId) ??
+			this.workspaces.trash.find(w => w.id === wsId);
 		if (!ws) return;
 		const next = name.trim();
 		if (!next) {
@@ -1347,6 +1349,48 @@ export class StickyNoteManager {
 		return id;
 	}
 
+	/**
+	 * 在已归档列表中新建分组（写入 `trashTabGroups`，仅用于组织回收站工作区）。
+	 * 返回新分组 id。
+	 */
+	async createTrashTabGroup(name?: string): Promise<string | null> {
+		if (!this.assertWorkspaceMetaMutable()) return null;
+		if (!Array.isArray(this.workspaces.trashTabGroups)) {
+			this.workspaces.trashTabGroups = [];
+		}
+		const n = this.workspaces.trashTabGroups.length + this.workspaces.tabGroups.length + 1;
+		const id = newStickyWorkspaceTabGroupId();
+		const finalName = name?.trim() || t('WS_TAB_GROUP_AUTO_NAME', { n });
+		if (
+			this.workspaces.tabGroups.some(g => g.id === id) ||
+			this.workspaces.trashTabGroups.some(g => g.id === id)
+		) {
+			return null;
+		}
+		this.workspaces.trashTabGroups.push({ id, name: finalName });
+		await this.flushWorkspacesToDisk();
+		return id;
+	}
+
+	/** 将回收站中的工作区移到指定分组（活动分组或已归档分组）。 */
+	async moveTrashWorkspaceToTabGroup(workspaceId: string, tabGroupId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		const ws = this.workspaces.trash.find(w => w.id === workspaceId);
+		if (!ws) return;
+		if (tabGroupId === WS_TAB_GROUP_UNGROUPED_ID) {
+			ws.tabGroupId = WS_TAB_GROUP_UNGROUPED_ID;
+			ws.updatedAt = Date.now();
+			await this.flushWorkspacesToDisk();
+			return;
+		}
+		const inActive = this.workspaces.tabGroups.some(g => g.id === tabGroupId);
+		const inTrash = (this.workspaces.trashTabGroups ?? []).some(g => g.id === tabGroupId);
+		if (!inActive && !inTrash) return;
+		ws.tabGroupId = tabGroupId;
+		ws.updatedAt = Date.now();
+		await this.flushWorkspacesToDisk();
+	}
+
 	/** 将顶部分组标签拖到另一标签前。 */
 	async reorderWorkspaceTabGroupBefore(draggedId: string, beforeId: string): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
@@ -1398,10 +1442,12 @@ export class StickyNoteManager {
 		await this.flushWorkspacesToDisk();
 	}
 
-	/** 重命名顶部分组标签。 */
+	/** 重命名顶部分组标签（活动分组或已归档分组）。 */
 	async renameWorkspaceTabGroup(groupId: string, name: string): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
-		const group = this.workspaces.tabGroups.find(g => g.id === groupId);
+		const group =
+			this.workspaces.tabGroups.find(g => g.id === groupId) ??
+			(this.workspaces.trashTabGroups ?? []).find(g => g.id === groupId);
 		if (!group) return;
 		const next = name.trim();
 		if (!next) {

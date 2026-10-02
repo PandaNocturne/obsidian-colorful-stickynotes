@@ -252,7 +252,7 @@ export class PermanentlyDeleteStickyWorkspaceConfirmModal extends Modal {
 	}
 }
 
-class NewWorkspaceTabGroupModal extends Modal {
+export class NewWorkspaceTabGroupModal extends Modal {
 	constructor(
 		app: App,
 		private readonly autoNamePreview: string,
@@ -565,6 +565,21 @@ export class WorkspacePanelModal extends Modal {
 				this.panelMode = 'workspaces';
 				this.render();
 			});
+
+			const btnAddGroup = inner.createEl('button', {
+				cls: 'csn-ws-panel-toolbar-btn csn-ws-panel-icon-btn--bordered',
+				attr: { 'aria-label': t('DASH_WS_NEW_ARCHIVED_GROUP_ARIA'), type: 'button' }
+			});
+			setIcon(btnAddGroup, 'folder-plus');
+			btnAddGroup.addEventListener('click', () => {
+				const nextN =
+					(data.trashTabGroups?.length ?? 0) + data.tabGroups.length + 1;
+				const autoPreview = t('WS_TAB_GROUP_AUTO_NAME', { n: nextN });
+				new NewWorkspaceTabGroupModal(this.app, autoPreview, async name => {
+					await mgr.createTrashTabGroup(name.trim() ? name : undefined);
+					this.render();
+				}).open();
+			});
 		}
 
 		if (this.panelMode === 'workspaces' && this.clearInitialWorkspaceTileFocusPending) {
@@ -780,20 +795,33 @@ export class WorkspacePanelModal extends Modal {
 		trashTabGroups: readonly StickyWorkspaceTabGroup[],
 		refresh: () => void
 	): void {
-		type Bucket = { key: string; label: string; items: StickyWorkspace[] };
+		type Bucket = {
+			key: string;
+			label: string;
+			items: StickyWorkspace[];
+			editable: boolean;
+		};
 		const bucketMap = new Map<string, Bucket>();
-		const ensure = (key: string, label: string): Bucket => {
+		const ensure = (key: string, label: string, editable: boolean): Bucket => {
 			let b = bucketMap.get(key);
 			if (!b) {
-				b = { key, label, items: [] };
+				b = { key, label, items: [], editable };
 				bucketMap.set(key, b);
 			}
 			return b;
 		};
 
+		for (const g of trashTabGroups) {
+			ensure(g.id, g.name, true);
+		}
+
 		for (const ws of trash) {
 			const { key, label } = resolveTrashWorkspaceGroupLabel(ws, tabGroups, trashTabGroups);
-			ensure(key, label).items.push(ws);
+			const editable =
+				key !== WS_TAB_GROUP_UNGROUPED_ID &&
+				!key.startsWith('missing:') &&
+				(tabGroups.some(g => g.id === key) || trashTabGroups.some(g => g.id === key));
+			ensure(key, label, editable).items.push(ws);
 		}
 
 		const ordered: Bucket[] = [];
@@ -808,12 +836,33 @@ export class WorkspacePanelModal extends Modal {
 			if (!ordered.includes(b)) ordered.push(b);
 		}
 
+		const mgr = this.plugin.stickies;
 		for (const bucket of ordered) {
 			const section = gridEl.createDiv({ cls: 'csn-ws-panel-trash-section' });
-			section.createDiv({
-				cls: 'csn-ws-panel-trash-section-title',
-				text: bucket.label
+			const title = section.createDiv({
+				cls: `csn-ws-panel-trash-section-title${bucket.editable ? ' is-editable' : ''}`,
+				text: bucket.label,
+				attr: bucket.editable
+					? { title: t('DASH_WS_MENU_RENAME'), role: 'button', tabindex: '0' }
+					: undefined
 			});
+			if (bucket.editable) {
+				const openRename = (): void => {
+					new RenameWorkspaceTabGroupModal(this.app, bucket.label, async name => {
+						await mgr.renameWorkspaceTabGroup(bucket.key, name);
+						refresh();
+					}).open();
+				};
+				title.addEventListener('dblclick', e => {
+					e.preventDefault();
+					openRename();
+				});
+				title.addEventListener('keydown', (e: KeyboardEvent) => {
+					if (e.key !== 'Enter' && e.key !== ' ') return;
+					e.preventDefault();
+					openRename();
+				});
+			}
 			const list = section.createDiv({ cls: 'csn-ws-panel-trash-section-grid' });
 			for (const ws of bucket.items) {
 				this.renderTrashTile(list, ws, refresh);
@@ -1175,6 +1224,19 @@ export class WorkspacePanelModal extends Modal {
 		});
 
 		const actions = footer.createDiv({ cls: 'csn-ws-panel-item-float-actions' });
+		const btnEdit = actions.createEl('button', {
+			cls: 'csn-ws-panel-icon-btn',
+			attr: { 'aria-label': t('WS_EDIT_WORKSPACE_ARIA') }
+		});
+		setIcon(btnEdit, 'pen-line');
+		btnEdit.addEventListener('click', e => {
+			e.stopPropagation();
+			new EditStickyWorkspaceModal(this.app, ws.name, ws.remark ?? '', async ({ name, remark }) => {
+				await mgr.updateWorkspace(ws.id, name, remark);
+				refresh();
+			}).open();
+		});
+
 		const btnRestore = actions.createEl('button', {
 			cls: 'csn-ws-panel-icon-btn',
 			attr: { 'aria-label': t('WS_RESTORE_ARIA') }

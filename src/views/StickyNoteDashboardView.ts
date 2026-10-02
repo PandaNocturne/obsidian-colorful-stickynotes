@@ -45,6 +45,7 @@ import {
 	DeleteStickyWorkspaceConfirmModal,
 	DeleteWorkspaceTabGroupConfirmModal,
 	NewBlankWorkspaceModal,
+	NewWorkspaceTabGroupModal,
 	PermanentlyDeleteStickyWorkspaceConfirmModal
 } from '../modals/WorkspacePanelModal';
 import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-folder';
@@ -257,6 +258,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private wsTreeSortBtn: HTMLButtonElement | null = null;
 	private wsTreeCollapseBtn: HTMLButtonElement | null = null;
 	private wsTreeShowArchivedBtn: HTMLButtonElement | null = null;
+	private wsTreeAddBtn: HTMLButtonElement | null = null;
 	/** 选中卡片时是否自动定位工作区树。 */
 	private wsTreeCardFocusBtn: HTMLButtonElement | null = null;
 	/** 工作区树是否显示已归档（trash）工作区。 */
@@ -1590,11 +1592,13 @@ export class StickyNoteDashboardView extends ItemView {
 					cls: 'clickable-icon csn-dash-ws-add-btn',
 					attr: { 'aria-label': t('DASH_WS_NEW_ARIA') }
 				});
+				this.wsTreeAddBtn = newWsBtn;
 				setIcon(newWsBtn, 'plus');
 				this.registerDomEvent(newWsBtn, 'click', (evt: MouseEvent) => {
 					evt.preventDefault();
 					evt.stopPropagation();
-					void this.openNewWorkspaceModal();
+					if (this.wsTreeShowArchived) void this.openNewArchivedGroupModal();
+					else void this.openNewWorkspaceModal();
 				});
 			}
 		});
@@ -3974,10 +3978,16 @@ export class StickyNoteDashboardView extends ItemView {
 		btn.setAttr('aria-pressed', on ? 'true' : 'false');
 		btn.setAttr('aria-label', on ? t('DASH_WS_HIDE_ARCHIVED_ARIA') : t('DASH_WS_SHOW_ARCHIVED_ARIA'));
 		btn.title = on ? t('DASH_WS_HIDE_ARCHIVED_ARIA') : t('DASH_WS_SHOW_ARCHIVED_ARIA');
-		this.wsPanelEl
-			?.querySelector('.csn-dash-ws-add-btn')
-			?.toggleClass('csn-dash-ws-add-btn--hidden', on);
 		this.wsTreeCollapseBtn?.toggleClass('csn-dash-ws-action-btn--hidden', on);
+		const addBtn = this.wsTreeAddBtn;
+		if (addBtn) {
+			addBtn.removeClass('csn-dash-ws-add-btn--hidden');
+			addBtn.setAttr(
+				'aria-label',
+				on ? t('DASH_WS_NEW_ARCHIVED_GROUP_ARIA') : t('DASH_WS_NEW_ARIA')
+			);
+			addBtn.title = on ? t('DASH_WS_NEW_ARCHIVED_GROUP_ARIA') : t('DASH_WS_NEW_ARIA');
+		}
 		const titleBtn = this.leftPanelTitleBtns.get('workspace');
 		const titleText = titleBtn?.querySelector('.csn-dash-panel-title-text');
 		if (titleText instanceof HTMLElement) {
@@ -4619,6 +4629,17 @@ export class StickyNoteDashboardView extends ItemView {
 		}).open();
 	}
 
+	private async openNewArchivedGroupModal(): Promise<void> {
+		const mgr = this.plugin.stickies;
+		const nextN =
+			(mgr.workspaces.trashTabGroups?.length ?? 0) + mgr.workspaces.tabGroups.length + 1;
+		const autoPreview = t('WS_TAB_GROUP_AUTO_NAME', { n: nextN });
+		new NewWorkspaceTabGroupModal(this.app, autoPreview, async name => {
+			await mgr.createTrashTabGroup(name.trim() ? name : undefined);
+			this.renderWorkspaceTree();
+		}).open();
+	}
+
 	private renameWorkspace(ws: StickyWorkspace): void {
 		const row = this.treeEl?.querySelector(
 			`.csn-dash-tree-ws[data-csn-ws-id="${CSS.escape(ws.id)}"]`
@@ -4633,7 +4654,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private renameWorkspaceGroup(group: StickyWorkspaceTabGroup): void {
 		const row = this.treeEl?.querySelector(
-			`.csn-dash-tree-group-btn[data-csn-ws-group="${CSS.escape(group.id)}"]`
+			`.csn-dash-tree-group-btn[data-csn-ws-group="${CSS.escape(group.id)}"], .csn-dash-tree-group-btn[data-csn-ws-group-archived="${CSS.escape(group.id)}"]`
 		);
 		if (!(row instanceof HTMLElement)) return;
 		this.beginInlineTreeRename(row, group.name, async name => {
@@ -5084,30 +5105,41 @@ export class StickyNoteDashboardView extends ItemView {
 			list = list.filter(ws => matchText(ws.name) || matchText(ws.remark ?? ''));
 		}
 		list = this.sortWorkspacesForTree(list);
-		if (list.length === 0) {
-			host.createDiv({
-				cls: 'csn-dash-ws-tree-empty',
-				text: t('DASH_WS_ARCHIVED_EMPTY')
-			});
-			return;
-		}
 
-		type Bucket = { key: string; label: string; items: StickyWorkspace[] };
+		type Bucket = { key: string; label: string; items: StickyWorkspace[]; editable: boolean };
 		const tabGroups = file.tabGroups;
 		const trashTabGroups = file.trashTabGroups ?? [];
 		const bucketMap = new Map<string, Bucket>();
-		const ensure = (key: string, label: string): Bucket => {
+		const ensure = (key: string, label: string, editable: boolean): Bucket => {
 			let b = bucketMap.get(key);
 			if (!b) {
-				b = { key, label, items: [] };
+				b = { key, label, items: [], editable };
 				bucketMap.set(key, b);
 			}
 			return b;
 		};
 
+		/* 已归档分组即使暂无工作区也展示，便于新建后编辑/迁入 */
+		for (const g of trashTabGroups) {
+			if (q && !matchText(g.name)) continue;
+			ensure(g.id, g.name, true);
+		}
+
 		for (const ws of list) {
 			const { key, label } = resolveTrashWorkspaceGroupLabel(ws, tabGroups, trashTabGroups);
-			ensure(key, label).items.push(ws);
+			const editable =
+				key !== WS_TAB_GROUP_UNGROUPED_ID &&
+				!key.startsWith('missing:') &&
+				(tabGroups.some(g => g.id === key) || trashTabGroups.some(g => g.id === key));
+			ensure(key, label, editable).items.push(ws);
+		}
+
+		if (bucketMap.size === 0) {
+			host.createDiv({
+				cls: 'csn-dash-ws-tree-empty',
+				text: t('DASH_WS_ARCHIVED_EMPTY')
+			});
+			return;
 		}
 
 		const ordered: Bucket[] = [];
@@ -5123,6 +5155,7 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 
 		for (const bucket of ordered) {
+			if (q && bucket.items.length === 0 && !matchText(bucket.label)) continue;
 			const groupRow = host.createDiv({ cls: 'csn-dash-tree-group' });
 			const groupBtn = groupRow.createEl('button', {
 				type: 'button',
@@ -5138,6 +5171,19 @@ export class StickyNoteDashboardView extends ItemView {
 				cls: 'csn-dash-tree-count',
 				text: String(bucket.items.length)
 			});
+
+			if (bucket.editable) {
+				const group: StickyWorkspaceTabGroup = { id: bucket.key, name: bucket.label };
+				this.registerDomEvent(groupBtn, 'dblclick', (evt: MouseEvent) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.renameWorkspaceGroup(group);
+				});
+				this.registerDomEvent(groupBtn, 'contextmenu', (evt: MouseEvent) => {
+					this.openArchivedGroupContextMenu(evt, group);
+				});
+			}
+
 			for (const ws of bucket.items) {
 				this.appendArchivedWorkspaceTreeItem(groupRow, ws);
 			}
@@ -5163,15 +5209,66 @@ export class StickyNoteDashboardView extends ItemView {
 				evt.ctrlKey || evt.metaKey
 			);
 		});
+		this.registerDomEvent(wsBtn, 'dblclick', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.renameWorkspace(ws);
+		});
 		this.registerDomEvent(wsBtn, 'contextmenu', (evt: MouseEvent) => {
 			this.openArchivedWorkspaceContextMenu(evt, ws);
 		});
+	}
+
+	private openArchivedGroupContextMenu(evt: MouseEvent, group: StickyWorkspaceTabGroup): void {
+		evt.preventDefault();
+		const menu = new Menu();
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_RENAME')).setIcon('pencil').onClick(() => {
+				this.renameWorkspaceGroup(group);
+			});
+		});
+		menu.showAtMouseEvent(evt);
 	}
 
 	private openArchivedWorkspaceContextMenu(evt: MouseEvent, ws: StickyWorkspace): void {
 		evt.preventDefault();
 		const menu = new Menu();
 		const mgr = this.plugin.stickies;
+		const file = mgr.workspaces;
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_RENAME')).setIcon('pencil').onClick(() => {
+				this.renameWorkspace(ws);
+			});
+		});
+
+		const moveTargets: StickyWorkspaceTabGroup[] = [];
+		const seen = new Set<string>();
+		for (const g of [...file.tabGroups, ...(file.trashTabGroups ?? [])]) {
+			if (seen.has(g.id)) continue;
+			seen.add(g.id);
+			moveTargets.push(g);
+		}
+		menu.addItem(item => {
+			item.setTitle(t('DASH_WS_MENU_MOVE_TO')).setIcon('folder-input');
+			const sub = item.setSubmenu();
+			sub.addItem(subItem => {
+				subItem.setTitle(t('DASH_AREA_UNGROUPED')).onClick(() => {
+					void mgr.moveTrashWorkspaceToTabGroup(ws.id, WS_TAB_GROUP_UNGROUPED_ID).then(() => {
+						this.renderWorkspaceTree();
+					});
+				});
+			});
+			for (const g of moveTargets) {
+				sub.addItem(subItem => {
+					subItem.setTitle(g.name).onClick(() => {
+						void mgr.moveTrashWorkspaceToTabGroup(ws.id, g.id).then(() => {
+							this.renderWorkspaceTree();
+						});
+					});
+				});
+			}
+		});
+
 		menu.addItem(item => {
 			item.setTitle(t('DASH_WS_MENU_RESTORE')).setIcon('rotate-ccw').onClick(() => {
 				void (async () => {
@@ -6414,6 +6511,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.wsTreeSortBtn = null;
 		this.wsTreeCollapseBtn = null;
 		this.wsTreeShowArchivedBtn = null;
+		this.wsTreeAddBtn = null;
 		this.wsTreeCardFocusBtn = null;
 		this.searchInput = null;
 		this.searchInnerEl = null;
