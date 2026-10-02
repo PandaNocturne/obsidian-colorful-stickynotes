@@ -251,6 +251,8 @@ export class StickyNoteDashboardView extends ItemView {
 	private wsTreeSortBtn: HTMLButtonElement | null = null;
 	private wsTreeCollapseBtn: HTMLButtonElement | null = null;
 	private wsTreeShowArchivedBtn: HTMLButtonElement | null = null;
+	/** 选中卡片时是否自动定位工作区树。 */
+	private wsTreeCardFocusBtn: HTMLButtonElement | null = null;
 	/** 工作区树是否显示已归档（trash）工作区。 */
 	private wsTreeShowArchived = false;
 	private searchInput: HTMLInputElement | null = null;
@@ -1082,6 +1084,11 @@ export class StickyNoteDashboardView extends ItemView {
 
 	/** 选中卡片后展开所属分组并滚动到对应工作区，不改筛选。 */
 	private revealCardFocusWorkspacesInTree(): void {
+		if (!this.plugin.settings.dashboardCardFocusWorkspace) {
+			this.cardFocusWorkspaceIds = [];
+			this.applyCardFocusWorkspaceChrome(false);
+			return;
+		}
 		this.cardFocusWorkspaceIds = this.collectWorkspaceIdsForSelectedCards();
 		if (this.cardFocusWorkspaceIds.length === 0) {
 			this.applyCardFocusWorkspaceChrome(false);
@@ -1114,6 +1121,27 @@ export class StickyNoteDashboardView extends ItemView {
 			return;
 		}
 		this.applyCardFocusWorkspaceChrome(true);
+	}
+
+	private async toggleWsTreeCardFocus(): Promise<void> {
+		this.plugin.settings.dashboardCardFocusWorkspace = !this.plugin.settings.dashboardCardFocusWorkspace;
+		this.syncWsTreeCardFocusBtn();
+		await this.plugin.saveSettings();
+		if (this.plugin.settings.dashboardCardFocusWorkspace) {
+			this.revealCardFocusWorkspacesInTree();
+		} else {
+			this.cardFocusWorkspaceIds = [];
+			this.applyCardFocusWorkspaceChrome(false);
+		}
+	}
+
+	private syncWsTreeCardFocusBtn(): void {
+		const btn = this.wsTreeCardFocusBtn;
+		if (!btn) return;
+		const on = !!this.plugin.settings.dashboardCardFocusWorkspace;
+		btn.toggleClass('is-active', on);
+		btn.setAttr('aria-pressed', on ? 'true' : 'false');
+		btn.setAttr('aria-label', t(on ? 'DASH_WS_CARD_FOCUS_ON_ARIA' : 'DASH_WS_CARD_FOCUS_OFF_ARIA'));
 	}
 
 	private beginStickyCardDrag(evt: DragEvent, card: HTMLElement): boolean {
@@ -1503,6 +1531,20 @@ export class StickyNoteDashboardView extends ItemView {
 					evt.stopPropagation();
 					this.toggleWsTreeCollapseAll();
 				});
+				this.wsTreeCardFocusBtn = wsActions.createEl('button', {
+					type: 'button',
+					cls: 'clickable-icon csn-dash-ws-action-btn',
+					attr: {
+						'aria-label': t('DASH_WS_CARD_FOCUS_ON_ARIA'),
+						'aria-pressed': 'true'
+					}
+				});
+				setIcon(this.wsTreeCardFocusBtn, 'crosshair');
+				this.registerDomEvent(this.wsTreeCardFocusBtn, 'click', (evt: MouseEvent) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					void this.toggleWsTreeCardFocus();
+				});
 				this.wsTreeShowArchivedBtn = wsActions.createEl('button', {
 					type: 'button',
 					cls: 'clickable-icon csn-dash-ws-action-btn',
@@ -1534,6 +1576,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const left = wsMount.body;
 		left.addClass('csn-dash-left');
 		this.syncWsTreeCollapseBtn();
+		this.syncWsTreeCardFocusBtn();
 		this.treeEl = left.createDiv({ cls: 'csn-dash-ws-tree' });
 		const wsFilter = left.createDiv({ cls: 'csn-dash-ws-filter' });
 		const wsFilterInner = wsFilter.createDiv({ cls: 'csn-dash-ws-filter-inner' });
@@ -5553,6 +5596,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.wsTreeSortBtn = null;
 		this.wsTreeCollapseBtn = null;
 		this.wsTreeShowArchivedBtn = null;
+		this.wsTreeCardFocusBtn = null;
 		this.searchInput = null;
 		this.searchInnerEl = null;
 		this.searchClearBtn = null;

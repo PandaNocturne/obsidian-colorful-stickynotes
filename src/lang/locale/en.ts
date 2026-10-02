@@ -227,6 +227,8 @@ export const en = {
 	DASH_WS_EXPAND_GROUP_ARIA: 'Expand group',
 	DASH_WS_SHOW_ARCHIVED_ARIA: 'Show archived workspaces',
 	DASH_WS_HIDE_ARCHIVED_ARIA: 'Hide archived workspaces',
+	DASH_WS_CARD_FOCUS_ON_ARIA: 'Auto-focus workspace for selected card: on',
+	DASH_WS_CARD_FOCUS_OFF_ARIA: 'Auto-focus workspace for selected card: off',
 	DASH_WS_ARCHIVED_SECTION: 'Archived',
 	DASH_WS_ARCHIVED_EMPTY: 'No archived workspaces',
 	DASH_WS_MENU_RESTORE: 'Restore',

@@ -213,6 +213,8 @@ export const zhCn: Record<MessageKey, string> = {
 	DASH_WS_EXPAND_GROUP_ARIA: '展开分组',
 	DASH_WS_SHOW_ARCHIVED_ARIA: '显示已归档工作区',
 	DASH_WS_HIDE_ARCHIVED_ARIA: '隐藏已归档工作区',
+	DASH_WS_CARD_FOCUS_ON_ARIA: '选中卡片时自动定位工作区：开',
+	DASH_WS_CARD_FOCUS_OFF_ARIA: '选中卡片时自动定位工作区：关',
 	DASH_WS_ARCHIVED_SECTION: '已归档',
 	DASH_WS_ARCHIVED_EMPTY: '暂无已归档工作区',
 	DASH_WS_MENU_RESTORE: '恢复',

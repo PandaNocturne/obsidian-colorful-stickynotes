@@ -407,6 +407,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.dashboardComposerDraft !== 'string') {
 			this.settings.dashboardComposerDraft = '';
 		}
+		if (typeof this.settings.dashboardCardFocusWorkspace !== 'boolean') {
+			this.settings.dashboardCardFocusWorkspace = true;
+		}
 		{
 			const rawIds = this.settings.dashboardCollapsedWorkspaceGroupIds;
 			this.settings.dashboardCollapsedWorkspaceGroupIds = Array.isArray(rawIds)

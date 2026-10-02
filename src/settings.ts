@@ -303,6 +303,8 @@ export interface ColorfulStickyNotesSettings {
 	dashboardComposerHidden: boolean;
 	/** 仪表盘快速输入区未提交草稿（关闭/重开后恢复）。 */
 	dashboardComposerDraft: string;
+	/** 选中便笺卡片时，工作区树是否自动定位到所属工作区。 */
+	dashboardCardFocusWorkspace: boolean;
 	/** 仪表盘工作区树中已折叠的分组 id。 */
 	dashboardCollapsedWorkspaceGroupIds: string[];
 	/** 仪表盘左侧面板折叠：`area` | `workspace`。 */
@@ -382,6 +384,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	dashboardComposerPaneHeight: DASH_COMPOSER_PANE_HEIGHT_DEFAULT,
 	dashboardComposerHidden: false,
 	dashboardComposerDraft: '',
+	dashboardCardFocusWorkspace: true,
 	dashboardCollapsedWorkspaceGroupIds: [],
 	dashboardCollapsedLeftPanelIds: [],
 	dashboardFilters: { ...DEFAULT_DASHBOARD_FILTERS, workspaceSel: { kind: 'all' } },
