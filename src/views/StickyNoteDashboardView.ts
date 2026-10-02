@@ -2982,6 +2982,23 @@ export class StickyNoteDashboardView extends ItemView {
 		this.calMonth0 = now.getMonth();
 		this.calPicker = null;
 		this.detachCalPickerDocClose();
+		this.afterCalViewChanged();
+	}
+
+	/** 日历年/月变更后：若当前是年或月筛选，同步到当前视图。 */
+	private afterCalViewChanged(): void {
+		const f = this.selectedDateFilter;
+		if (f?.kind === 'year' && f.year !== this.calYear) {
+			this.applyDateFilter({ kind: 'year', year: this.calYear });
+			return;
+		}
+		if (
+			f?.kind === 'month' &&
+			(f.year !== this.calYear || f.month0 !== this.calMonth0)
+		) {
+			this.applyDateFilter({ kind: 'month', year: this.calYear, month0: this.calMonth0 });
+			return;
+		}
 		this.renderCalendar();
 	}
 
@@ -3009,7 +3026,7 @@ export class StickyNoteDashboardView extends ItemView {
 		if (!this.calPicker) return;
 		this.calPicker = null;
 		this.detachCalPickerDocClose();
-		this.renderCalendar();
+		this.afterCalViewChanged();
 	}
 
 	private formatCalYearText(year: number): string {
@@ -3179,9 +3196,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const yearFilterBtn = actions.createEl('button', {
 			type: 'button',
 			cls: `clickable-icon csn-dash-cal-scope-btn csn-dash-cal-scope-year${
-				this.selectedDateFilter?.kind === 'year' && this.selectedDateFilter.year === this.calYear
-					? ' is-active'
-					: ''
+				this.selectedDateFilter?.kind === 'year' ? ' is-active' : ''
 			}`,
 			attr: { 'aria-label': t('DASH_CALENDAR_SELECT_YEAR', { year: this.calYear }) }
 		});
@@ -3189,11 +3204,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const monthFilterBtn = actions.createEl('button', {
 			type: 'button',
 			cls: `clickable-icon csn-dash-cal-scope-btn csn-dash-cal-scope-month${
-				this.selectedDateFilter?.kind === 'month' &&
-				this.selectedDateFilter.year === this.calYear &&
-				this.selectedDateFilter.month0 === this.calMonth0
-					? ' is-active'
-					: ''
+				this.selectedDateFilter?.kind === 'month' ? ' is-active' : ''
 			}`,
 			attr: {
 				'aria-label': t('DASH_CALENDAR_SELECT_MONTH', {
@@ -3229,7 +3240,7 @@ export class StickyNoteDashboardView extends ItemView {
 			} else {
 				this.calMonth0 -= 1;
 			}
-			this.renderCalendar();
+			this.afterCalViewChanged();
 		});
 		this.registerDomEvent(next, 'click', () => {
 			this.calPicker = null;
@@ -3240,7 +3251,7 @@ export class StickyNoteDashboardView extends ItemView {
 			} else {
 				this.calMonth0 += 1;
 			}
-			this.renderCalendar();
+			this.afterCalViewChanged();
 		});
 		this.registerDomEvent(todayBtn, 'click', () => this.goToToday());
 		this.registerDomEvent(yearBtn, 'click', evt => {
@@ -3309,6 +3320,10 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 
 		this.updateCalendarMarks();
+		if (this.isDateFilterPanelOpen()) {
+			this.syncDateFilterModeLabels();
+			this.fillDateFilterInputDefault(true);
+		}
 	}
 
 	private updateCalendarMarks(): void {
@@ -3326,13 +3341,11 @@ export class StickyNoteDashboardView extends ItemView {
 
 		host.querySelector('.csn-dash-cal-scope-year')?.toggleClass(
 			'is-active',
-			this.selectedDateFilter?.kind === 'year' && this.selectedDateFilter.year === this.calYear
+			this.selectedDateFilter?.kind === 'year'
 		);
 		host.querySelector('.csn-dash-cal-scope-month')?.toggleClass(
 			'is-active',
-			this.selectedDateFilter?.kind === 'month' &&
-				this.selectedDateFilter.year === this.calYear &&
-				this.selectedDateFilter.month0 === this.calMonth0
+			this.selectedDateFilter?.kind === 'month'
 		);
 
 		this.syncDateFilterBar();
@@ -3402,19 +3415,35 @@ export class StickyNoteDashboardView extends ItemView {
 		window.setTimeout(() => this.dateFilterInput?.focus(), 0);
 	}
 
+	/** 默认值跟随日历当前年/月（csn-dash-cal-ym），非固定今天。 */
 	private fillDateFilterInputDefault(force = false): void {
 		const input = this.dateFilterInput;
 		if (!input) return;
 		const now = new Date();
-		const y = now.getFullYear();
-		const m = String(now.getMonth() + 1).padStart(2, '0');
-		const d = String(now.getDate()).padStart(2, '0');
+		const y = this.calYear;
+		const m0 = this.calMonth0;
+		const m = String(m0 + 1).padStart(2, '0');
+		let day = 1;
+		if (now.getFullYear() === y && now.getMonth() === m0) {
+			day = now.getDate();
+		}
+		const d = String(day).padStart(2, '0');
 		/* 年/月/日共用 date 控件外观，仅提交时按粒度取值 */
 		if (force || !input.value) input.value = `${y}-${m}-${d}`;
 	}
 
+	private syncDateFilterModeLabels(): void {
+		const yearBtn = this.dateFilterModeBtns.get('year');
+		const monthBtn = this.dateFilterModeBtns.get('month');
+		const dayBtn = this.dateFilterModeBtns.get('day');
+		if (yearBtn) yearBtn.setText(this.formatCalYearText(this.calYear));
+		if (monthBtn) monthBtn.setText(this.formatCalMonthText(this.calMonth0));
+		if (dayBtn) dayBtn.setText(t('DASH_DATE_FILTER_MODE_DAY'));
+	}
+
 	private syncDateFilterAddModeUi(): void {
 		const mode = this.dateFilterAddMode;
+		this.syncDateFilterModeLabels();
 		for (const [id, btn] of this.dateFilterModeBtns) {
 			btn.toggleClass('is-active', id === mode);
 			btn.setAttr('aria-pressed', id === mode ? 'true' : 'false');
