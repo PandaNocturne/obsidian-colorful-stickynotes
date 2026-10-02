@@ -328,6 +328,8 @@ export interface ColorfulStickyNotesSettings {
 	dashboardComposerDraft: string;
 	/** 选中便笺卡片时，工作区树是否自动定位到所属工作区。 */
 	dashboardCardFocusWorkspace: boolean;
+	/** 仪表盘日历热力图所用时间字段：创建（ctime）或修改（mtime）。 */
+	dashboardCalendarHeatField: 'ctime' | 'mtime';
 	/** 仪表盘「区域管理」中要显示的模式（至少一项）。 */
 	dashboardVisibleAreaModes: DashAreaMode[];
 	/** 仪表盘工作区树中已折叠的分组 id。 */
@@ -410,6 +412,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	dashboardComposerHidden: false,
 	dashboardComposerDraft: '',
 	dashboardCardFocusWorkspace: true,
+	dashboardCalendarHeatField: 'ctime',
 	dashboardVisibleAreaModes: [...DEFAULT_DASH_VISIBLE_AREA_MODES],
 	dashboardCollapsedWorkspaceGroupIds: [],
 	dashboardCollapsedLeftPanelIds: [],

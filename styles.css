@@ -3297,8 +3297,8 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   margin-left: auto;
 }
 .csn-dash-cal-scope-btn,
+.csn-dash-cal-heat-toggle,
 .csn-dash-cal-today,
-.csn-dash-cal-clear,
 .csn-dash-cal-nav {
   appearance: none;
   -webkit-appearance: none;
@@ -3318,16 +3318,16 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 .csn-dash-cal-scope-btn:hover,
+.csn-dash-cal-heat-toggle:hover,
 .csn-dash-cal-today:hover,
-.csn-dash-cal-clear:hover,
 .csn-dash-cal-nav:hover,
 .csn-dash-cal-scope-btn:focus,
+.csn-dash-cal-heat-toggle:focus,
 .csn-dash-cal-today:focus,
-.csn-dash-cal-clear:focus,
 .csn-dash-cal-nav:focus,
 .csn-dash-cal-scope-btn:focus-visible,
+.csn-dash-cal-heat-toggle:focus-visible,
 .csn-dash-cal-today:focus-visible,
-.csn-dash-cal-clear:focus-visible,
 .csn-dash-cal-nav:focus-visible {
   color: var(--text-normal);
   background: var(--background-modifier-hover) !important;
@@ -3335,22 +3335,15 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   outline: none !important;
   border: none !important;
 }
-.csn-dash-cal-scope-btn.is-active {
+.csn-dash-cal-scope-btn.is-active,
+.csn-dash-cal-heat-toggle.is-mtime {
   color: var(--interactive-accent);
   background: color-mix(in srgb, var(--interactive-accent) 14%, transparent) !important;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 45%, transparent) !important;
 }
-.csn-dash-cal-clear.is-active {
-  color: var(--interactive-accent);
-}
-.csn-dash-cal-clear.is-disabled,
-.csn-dash-cal-clear:disabled {
-  opacity: 0.35;
-  pointer-events: none;
-}
 .csn-dash-cal-scope-btn svg,
+.csn-dash-cal-heat-toggle svg,
 .csn-dash-cal-today svg,
-.csn-dash-cal-clear svg,
 .csn-dash-cal-nav svg {
   width: 16px;
   height: 16px;

@@ -52,7 +52,7 @@ import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import {
 	buildPaginationEntries,
-	ctimeDateCountsForFiles,
+	dateCountsForFiles,
 	heatmapLevelFromCount,
 	filterStickyFilesByArchiveFilter,
 	filterStickyFilesByColors,
@@ -64,6 +64,7 @@ import {
 	stickyDateFilterKey,
 	stickyDateFiltersEqual,
 	listLocalDateKeysInclusive,
+	type StickyDateField,
 	type StickyDateFilter
 } from '../utils/query-sticky-list';
 import { SHEET_COLOR_ORDER } from '../sticky/sticky-color-order';
@@ -263,8 +264,6 @@ export class StickyNoteDashboardView extends ItemView {
 	private searchInput: HTMLInputElement | null = null;
 	private searchInnerEl: HTMLElement | null = null;
 	private searchClearBtn: HTMLButtonElement | null = null;
-	/** 筛选栏：清除日历日期筛选（日历区常驻）。 */
-	private dateFilterClearBtn: HTMLButtonElement | null = null;
 	private dateFilterChipsEl: HTMLElement | null = null;
 	private dateFilterWrapEl: HTMLElement | null = null;
 	private dateFilterAddBtn: HTMLButtonElement | null = null;
@@ -2927,6 +2926,18 @@ export class StickyNoteDashboardView extends ItemView {
 		return max;
 	}
 
+	private calendarHeatField(): StickyDateField {
+		return this.plugin.settings.dashboardCalendarHeatField === 'mtime' ? 'mtime' : 'ctime';
+	}
+
+	private async toggleCalendarHeatField(): Promise<void> {
+		const next: StickyDateField = this.calendarHeatField() === 'mtime' ? 'ctime' : 'mtime';
+		this.plugin.settings.dashboardCalendarHeatField = next;
+		await this.plugin.saveSettings();
+		this.renderCalendar();
+		void this.renderDash();
+	}
+
 	/** 某年创建便笺总数（日期键 YYYY-MM-DD）。 */
 	private noteCountForYear(year: number): number {
 		const prefix = `${year}-`;
@@ -3216,22 +3227,25 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		});
 		setIcon(monthFilterBtn, 'calendar');
+		const heatField = this.calendarHeatField();
+		const heatToggleBtn = actions.createEl('button', {
+			type: 'button',
+			cls: `clickable-icon csn-dash-cal-heat-toggle${heatField === 'mtime' ? ' is-mtime' : ' is-ctime'}`,
+			attr: {
+				'aria-label':
+					heatField === 'mtime'
+						? t('DASH_CALENDAR_HEAT_MTIME_ARIA')
+						: t('DASH_CALENDAR_HEAT_CTIME_ARIA'),
+				'aria-pressed': heatField === 'mtime' ? 'true' : 'false'
+			}
+		});
+		setIcon(heatToggleBtn, heatField === 'mtime' ? 'calendar-clock' : 'calendar-plus');
 		const todayBtn = actions.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-dash-cal-today',
 			attr: { 'aria-label': t('DASH_CALENDAR_TODAY_ARIA') }
 		});
 		setIcon(todayBtn, 'crosshair');
-		this.dateFilterClearBtn = actions.createEl('button', {
-			type: 'button',
-			cls: `clickable-icon csn-dash-cal-clear${this.selectedDateFilter ? '' : ' is-disabled'}`,
-			attr: {
-				'aria-label': t('DASH_CALENDAR_CLEAR'),
-				...(this.selectedDateFilter ? {} : { disabled: 'true' })
-			}
-		});
-		setIcon(this.dateFilterClearBtn, 'calendar-x');
-		this.registerDomEvent(this.dateFilterClearBtn, 'click', () => this.clearDateFilter());
 
 		this.registerDomEvent(prev, 'click', () => {
 			this.calPicker = null;
@@ -3256,6 +3270,9 @@ export class StickyNoteDashboardView extends ItemView {
 			this.afterCalViewChanged();
 		});
 		this.registerDomEvent(todayBtn, 'click', () => this.goToToday());
+		this.registerDomEvent(heatToggleBtn, 'click', () => {
+			void this.toggleCalendarHeatField();
+		});
 		this.registerDomEvent(yearBtn, 'click', evt => {
 			evt.stopPropagation();
 			this.openCalPicker('year');
@@ -3713,15 +3730,8 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private syncDateFilterBar(): void {
-		const clear = this.dateFilterClearBtn;
 		const chipsEl = this.dateFilterChipsEl;
 		const addBtn = this.dateFilterAddBtn;
-		const has = !!this.selectedDateFilter;
-		if (clear) {
-			clear.toggleClass('is-disabled', !has);
-			clear.disabled = !has;
-			clear.toggleClass('is-active', has);
-		}
 		if (addBtn) {
 			/* 仅面板打开时高亮；已选日期用 chips 表达，勿点亮 + */
 			addBtn.toggleClass('is-active', this.isDateFilterPanelOpen());
@@ -6122,11 +6132,15 @@ export class StickyNoteDashboardView extends ItemView {
 			);
 			files = this.applyAreaModeFilters(files);
 
-			this.noteDateCounts = ctimeDateCountsForFiles(files);
+			this.noteDateCounts = dateCountsForFiles(files, this.calendarHeatField());
 			this.noteDateKeys = new Set(this.noteDateCounts.keys());
 			this.updateCalendarMarks();
 
-			files = filterStickyFilesByDateFilter(files, this.selectedDateFilter);
+			files = filterStickyFilesByDateFilter(
+				files,
+				this.selectedDateFilter,
+				this.calendarHeatField()
+			);
 			const pinnedNorm = this.plugin.settings.noteListPinnedPaths.map(p => normalizePath(p));
 			const pinnedSet = new Set(pinnedNorm);
 			const prio = this.plugin.listPrioritizeStickyPath;
@@ -6303,7 +6317,6 @@ export class StickyNoteDashboardView extends ItemView {
 		this.selectedListNotePaths.clear();
 		this.lastSelectedListNotePath = null;
 		this.calendarEl = null;
-		this.dateFilterClearBtn = null;
 		this.dateFilterChipsEl = null;
 		this.dateFilterWrapEl = null;
 		this.dateFilterAddBtn = null;

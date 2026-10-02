@@ -215,30 +215,38 @@ export function stickyDateFiltersEqual(a: StickyDateFilter | null, b: StickyDate
 	return stickyDateFilterKey(a) === stickyDateFilterKey(b);
 }
 
+/** 日历热力图 / 日期筛选所用的时间字段。 */
+export type StickyDateField = 'ctime' | 'mtime';
+
+function fileDateMs(file: TFile, field: StickyDateField): number {
+	return field === 'mtime' ? file.stat.mtime : file.stat.ctime;
+}
+
 export function filterStickyFilesByDateFilter(
 	files: TFile[],
-	filter: StickyDateFilter | null
+	filter: StickyDateFilter | null,
+	field: StickyDateField = 'ctime'
 ): TFile[] {
 	if (!filter) return files;
 	switch (filter.kind) {
 		case 'year':
-			return files.filter(f => new Date(f.stat.ctime).getFullYear() === filter.year);
+			return files.filter(f => new Date(fileDateMs(f, field)).getFullYear() === filter.year);
 		case 'month':
 			return files.filter(f => {
-				const d = new Date(f.stat.ctime);
+				const d = new Date(fileDateMs(f, field));
 				return d.getFullYear() === filter.year && d.getMonth() === filter.month0;
 			});
 		case 'week':
 			return files.filter(f => {
-				const p = isoWeekPartsFromMs(f.stat.ctime);
+				const p = isoWeekPartsFromMs(fileDateMs(f, field));
 				return p.year === filter.year && p.week === filter.week;
 			});
 		case 'day':
-			return files.filter(f => localDateKeyFromMs(f.stat.ctime) === filter.dateKey);
+			return files.filter(f => localDateKeyFromMs(fileDateMs(f, field)) === filter.dateKey);
 		case 'days': {
 			const set = new Set(filter.dateKeys);
 			if (set.size === 0) return files;
-			return files.filter(f => set.has(localDateKeyFromMs(f.stat.ctime)));
+			return files.filter(f => set.has(localDateKeyFromMs(fileDateMs(f, field))));
 		}
 	}
 }
@@ -246,23 +254,43 @@ export function filterStickyFilesByDateFilter(
 /** @deprecated 使用 `filterStickyFilesByDateFilter`；保留兼容日级字符串筛选。 */
 export function filterStickyFilesByCtimeDate(files: TFile[], dateKey: string | null): TFile[] {
 	if (!dateKey) return files;
-	return filterStickyFilesByDateFilter(files, { kind: 'day', dateKey });
+	return filterStickyFilesByDateFilter(files, { kind: 'day', dateKey }, 'ctime');
 }
 
 export function ctimeDateKeysForFiles(files: readonly TFile[]): Set<string> {
+	return dateKeysForFiles(files, 'ctime');
+}
+
+/** 按指定时间字段统计便笺数量（热力图强度）。 */
+export function dateCountsForFiles(
+	files: readonly TFile[],
+	field: StickyDateField = 'ctime'
+): Map<string, number> {
+	const out = new Map<string, number>();
+	for (const f of files) {
+		const key = localDateKeyFromMs(fileDateMs(f, field));
+		out.set(key, (out.get(key) ?? 0) + 1);
+	}
+	return out;
+}
+
+export function dateKeysForFiles(
+	files: readonly TFile[],
+	field: StickyDateField = 'ctime'
+): Set<string> {
 	const out = new Set<string>();
-	for (const f of files) out.add(localDateKeyFromMs(f.stat.ctime));
+	for (const f of files) out.add(localDateKeyFromMs(fileDateMs(f, field)));
 	return out;
 }
 
 /** 按创建日统计便笺数量（热力图强度）。 */
 export function ctimeDateCountsForFiles(files: readonly TFile[]): Map<string, number> {
-	const out = new Map<string, number>();
-	for (const f of files) {
-		const key = localDateKeyFromMs(f.stat.ctime);
-		out.set(key, (out.get(key) ?? 0) + 1);
-	}
-	return out;
+	return dateCountsForFiles(files, 'ctime');
+}
+
+/** 按修改日统计便笺数量（热力图强度）。 */
+export function mtimeDateCountsForFiles(files: readonly TFile[]): Map<string, number> {
+	return dateCountsForFiles(files, 'mtime');
 }
 
 /** 将计数映射为 0–4 热力档位（近似 GitHub contribution）。 */

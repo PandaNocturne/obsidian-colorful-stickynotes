@@ -411,6 +411,12 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.dashboardCardFocusWorkspace !== 'boolean') {
 			this.settings.dashboardCardFocusWorkspace = true;
 		}
+		if (
+			this.settings.dashboardCalendarHeatField !== 'ctime' &&
+			this.settings.dashboardCalendarHeatField !== 'mtime'
+		) {
+			this.settings.dashboardCalendarHeatField = 'ctime';
+		}
 		this.settings.dashboardVisibleAreaModes = normalizeDashboardVisibleAreaModes(
 			this.settings.dashboardVisibleAreaModes
 		);
