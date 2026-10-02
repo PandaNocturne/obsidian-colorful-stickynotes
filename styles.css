@@ -3285,15 +3285,6 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 .csn-dash-area-vis-wrap {
   position: relative;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-.csn-dash-panel--area > .csn-dash-panel-head:hover .csn-dash-area-vis-wrap,
-.csn-dash-panel--area > .csn-dash-panel-head:focus-within .csn-dash-area-vis-wrap,
-.csn-dash-area-vis-wrap.is-open {
-  opacity: 1;
-  pointer-events: auto;
 }
 .csn-dash-area-vis-panel {
   position: absolute;

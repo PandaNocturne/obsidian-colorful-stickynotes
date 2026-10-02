@@ -2468,7 +2468,8 @@ export class StickyNoteDashboardView extends ItemView {
 		const clearBtn = this.tagClearBtn;
 		const hasFilters = this.activeTagFilterCount() > 0;
 		if (btn) {
-			btn.toggleClass('is-active', this.isTagFilterPanelOpen() || hasFilters);
+			/* 仅面板打开时高亮；已有筛选用 chips 表达，勿点亮 + */
+			btn.toggleClass('is-active', this.isTagFilterPanelOpen());
 			btn.setAttr('aria-expanded', this.isTagFilterPanelOpen() ? 'true' : 'false');
 		}
 		if (clearBtn) {
@@ -3374,7 +3375,8 @@ export class StickyNoteDashboardView extends ItemView {
 			clear.toggleClass('is-active', has);
 		}
 		if (addBtn) {
-			addBtn.toggleClass('is-active', this.isDateFilterPanelOpen() || has);
+			/* 仅面板打开时高亮；已选日期用 chips 表达，勿点亮 + */
+			addBtn.toggleClass('is-active', this.isDateFilterPanelOpen());
 			addBtn.setAttr('aria-expanded', this.isDateFilterPanelOpen() ? 'true' : 'false');
 		}
 		if (!chipsEl) return;
