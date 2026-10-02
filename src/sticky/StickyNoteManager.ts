@@ -810,7 +810,7 @@ export class StickyNoteManager {
 	}
 
 	/** 活动工作区列表中包含该文件的工作区 id。 */
-	private getWorkspaceIdsContainingFile(file: TFile): string[] {
+	getWorkspaceIdsContainingFile(file: TFile): string[] {
 		const ids: string[] = [];
 		for (const ws of this.workspaces.workspaces) {
 			if (this.findWorkspaceWindowIndex(ws, file) >= 0) ids.push(ws.id);

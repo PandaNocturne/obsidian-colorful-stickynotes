@@ -342,6 +342,8 @@ export class StickyNoteDashboardView extends ItemView {
 	private readonly selectedListNotePaths = new Set<string>();
 	/** Shift 范围选择的锚点（最后一次显式选择）。 */
 	private lastSelectedListNotePath: string | null = null;
+	/** 选中卡片所属工作区，用于树节点高亮（不改变筛选）。 */
+	private cardFocusWorkspaceIds: string[] = [];
 	/** 从拖拽手柄拖拽时，附着在 `document.body` 上的 Canvas 行为说明浮层。 */
 	private canvasDragCanvasHintEl: HTMLElement | null = null;
 
@@ -988,6 +990,126 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 	}
 
+	private collectWorkspaceIdsForSelectedCards(): string[] {
+		const ids: string[] = [];
+		const seen = new Set<string>();
+		const pushFile = (file: TFile): void => {
+			for (const id of this.plugin.stickies.getWorkspaceIdsContainingFile(file)) {
+				if (seen.has(id)) continue;
+				seen.add(id);
+				ids.push(id);
+			}
+		};
+		const prefer = this.lastSelectedListNotePath;
+		if (prefer) {
+			const abs = this.app.vault.getAbstractFileByPath(prefer);
+			if (abs instanceof TFile) pushFile(abs);
+		}
+		for (const p of this.selectedListNotePaths) {
+			if (p === prefer) continue;
+			const abs = this.app.vault.getAbstractFileByPath(p);
+			if (abs instanceof TFile) pushFile(abs);
+		}
+		return ids;
+	}
+
+	private applyCardFocusWorkspaceChrome(scroll: boolean): void {
+		const host = this.treeEl;
+		if (!host) return;
+		const focus = new Set(this.cardFocusWorkspaceIds);
+		let first: HTMLElement | null = null;
+		for (const el of Array.from(host.querySelectorAll<HTMLElement>('.csn-dash-tree-ws[data-csn-ws-id]'))) {
+			const id = el.dataset.csnWsId;
+			const on = !!id && focus.has(id);
+			el.toggleClass('is-card-focus', on);
+			if (on && !first) first = el;
+		}
+		if (scroll && first) {
+			first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+		}
+	}
+
+	/** 选中卡片后展开所属分组并滚动到对应工作区，不改筛选。 */
+	private revealCardFocusWorkspacesInTree(): void {
+		this.cardFocusWorkspaceIds = this.collectWorkspaceIdsForSelectedCards();
+		if (this.cardFocusWorkspaceIds.length === 0) {
+			this.applyCardFocusWorkspaceChrome(false);
+			return;
+		}
+		if (this.collapsedLeftPanels.has('workspace')) {
+			this.collapsedLeftPanels.delete('workspace');
+			this.persistCollapsedLeftPanels();
+			this.applyLeftPanelCollapsedClass('workspace');
+		}
+		let expanded = false;
+		if (!this.wsTreeShowArchived) {
+			const file = this.plugin.stickies.workspaces;
+			const tabGroups = file.tabGroups;
+			for (const wsId of this.cardFocusWorkspaceIds) {
+				const ws = file.workspaces.find(w => w.id === wsId);
+				if (!ws) continue;
+				const groupId = resolveWorkspaceTabGroupId(ws, tabGroups);
+				if (groupId === WS_TAB_GROUP_UNGROUPED_ID) continue;
+				if (this.collapsedGroupIds.has(groupId)) {
+					this.collapsedGroupIds.delete(groupId);
+					expanded = true;
+				}
+			}
+		}
+		if (expanded) {
+			this.persistCollapsedGroups();
+			this.renderWorkspaceTree();
+			this.applyCardFocusWorkspaceChrome(true);
+			return;
+		}
+		this.applyCardFocusWorkspaceChrome(true);
+	}
+
+	private isCardHeadDragExcluded(hit: Element): boolean {
+		return !!(
+			hit.closest('.csn-list-card-pin-btn') ||
+			hit.closest('.csn-list-card-menu-btn') ||
+			hit.closest('.csn-list-card-archive-wrap')
+		);
+	}
+
+	private beginStickyCardDrag(evt: DragEvent, card: HTMLElement): boolean {
+		const path = card.dataset.csnNotePath;
+		if (!path) return false;
+		const normPath = normalizePath(path);
+		const selected =
+			this.selectedListNotePaths.size > 0 && this.selectedListNotePaths.has(normPath)
+				? [...this.selectedListNotePaths]
+				: [normPath];
+
+		const items: Array<{ file: TFile; color: StickyColorId }> = [];
+		for (const p of selected) {
+			const abs = this.app.vault.getAbstractFileByPath(p);
+			if (!(abs instanceof TFile)) continue;
+			const el = this.gridEl?.querySelector(`.csn-list-card[data-csn-note-path="${CSS.escape(p)}"]`);
+			const rawColor =
+				el instanceof HTMLElement ? (el.dataset.csnListColor as StickyColorId | undefined) : undefined;
+			items.push({ file: abs, color: rawColor ?? 'default' });
+		}
+		if (items.length === 0) return false;
+		const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
+		const md = this.app.fileManager.generateMarkdownLink(items[0]!.file, sourcePath);
+		const dt = evt.dataTransfer;
+		if (!dt) return false;
+		dt.setData('text/plain', md);
+		setStickyPathsDragData(
+			dt,
+			items.map(it => normalizePath(it.file.path))
+		);
+		dt.effectAllowed = 'copyMove';
+		this.wsTreeDragKind = 'sticky';
+		if (this.plugin.settings.canvasLinkShowDragHint) {
+			this.showCanvasDragBehaviorHint(items.length, evt);
+		}
+		this.beginCanvasDropSessionForFiles(items);
+		return true;
+	}
+
 	private isListCardHeadMenuHitExcluded(hit: Element): boolean {
 		return !!(
 			hit.closest('.csn-list-card-pin-btn') ||
@@ -1041,6 +1163,7 @@ export class StickyNoteDashboardView extends ItemView {
 			this.selectedListNotePaths.add(norm);
 			this.lastSelectedListNotePath = norm;
 			this.syncListCardSelectionChrome();
+			this.revealCardFocusWorkspacesInTree();
 		}
 	}
 
@@ -1073,45 +1196,20 @@ export class StickyNoteDashboardView extends ItemView {
 		this.registerDomEvent(this.gridEl, 'dragstart', (evt: DragEvent) => {
 			const hit = evt.target;
 			if (!(hit instanceof Element)) return;
-			const dragHandleEl = hit.closest('.csn-list-card-drag-handle');
-			if (!dragHandleEl || !this.gridEl?.contains(dragHandleEl)) return;
-			const card = dragHandleEl.closest('.csn-list-card');
-			if (!card) return;
-			const path = (card as HTMLElement).dataset.csnNotePath;
-			if (!path) return;
-			const normPath = normalizePath(path);
-			const selected =
-				this.selectedListNotePaths.size > 0 && this.selectedListNotePaths.has(normPath)
-					? [...this.selectedListNotePaths]
-					: [normPath];
-
-			const items: Array<{ file: TFile; color: StickyColorId }> = [];
-			for (const p of selected) {
-				const abs = this.app.vault.getAbstractFileByPath(p);
-				if (!(abs instanceof TFile)) continue;
-				const el = this.gridEl?.querySelector(`.csn-list-card[data-csn-note-path="${CSS.escape(p)}"]`);
-				const rawColor =
-					el instanceof HTMLElement ? (el.dataset.csnListColor as StickyColorId | undefined) : undefined;
-				items.push({ file: abs, color: rawColor ?? 'default' });
+			if (this.isCardHeadDragExcluded(hit)) {
+				evt.preventDefault();
+				return;
 			}
-			if (items.length === 0) return;
-			const sourcePath = this.app.workspace.getActiveFile()?.path ?? '';
-			const md = this.app.fileManager.generateMarkdownLink(items[0]!.file, sourcePath);
-			const dt = evt.dataTransfer;
-			if (!dt) return;
-			dt.setData('text/plain', md);
-			setStickyPathsDragData(
-				dt,
-				items.map(it => normalizePath(it.file.path))
-			);
-			dt.effectAllowed = 'copyMove';
-			if (this.plugin.settings.canvasLinkShowDragHint) {
-				this.showCanvasDragBehaviorHint(items.length, evt);
-			}
-			this.beginCanvasDropSessionForFiles(items);
+			const origin = hit.closest('.csn-list-card-drag-handle, .csn-list-card-head');
+			if (!origin || !this.gridEl?.contains(origin)) return;
+			const card = origin.closest('.csn-list-card');
+			if (!(card instanceof HTMLElement)) return;
+			if (!this.beginStickyCardDrag(evt, card)) evt.preventDefault();
 		});
 
 		this.registerDomEvent(this.gridEl, 'dragend', () => {
+			this.wsTreeDragKind = 'none';
+			this.clearTreeDropTargets();
 			this.hideCanvasDragBehaviorHint();
 		});
 
@@ -1178,6 +1276,7 @@ export class StickyNoteDashboardView extends ItemView {
 					this.selectedListNotePaths.clear();
 					this.lastSelectedListNotePath = null;
 					this.syncListCardSelectionChrome();
+					this.revealCardFocusWorkspacesInTree();
 				}
 				return;
 			}
@@ -1210,6 +1309,7 @@ export class StickyNoteDashboardView extends ItemView {
 				this.lastSelectedListNotePath = path;
 			}
 			this.syncListCardSelectionChrome();
+			this.revealCardFocusWorkspacesInTree();
 		});
 
 		this.registerDomEvent(this.gridEl, 'change', (evt: Event) => {
@@ -3897,7 +3997,7 @@ export class StickyNoteDashboardView extends ItemView {
 		el: HTMLElement,
 		opts: {
 			acceptSticky?: boolean;
-			onStickyDrop?: (paths: string[]) => void | Promise<void>;
+			onStickyDrop?: (paths: string[], evt: DragEvent) => void | Promise<void>;
 			acceptWorkspace?: boolean;
 			onWorkspaceDrop?: (workspaceId: string) => void | Promise<void>;
 			acceptGroup?: boolean;
@@ -3917,7 +4017,13 @@ export class StickyNoteDashboardView extends ItemView {
 			if (!sticky && !ws && !group) return;
 			e.preventDefault();
 			e.stopPropagation();
-			if (e.dataTransfer) e.dataTransfer.dropEffect = sticky ? 'copy' : 'move';
+			if (e.dataTransfer) {
+				e.dataTransfer.dropEffect = sticky
+					? e.ctrlKey || e.metaKey
+						? 'copy'
+						: 'move'
+					: 'move';
+			}
 			el.addClass('csn-dash-tree-item--drop-target');
 		});
 		this.registerDomEvent(el, 'dragleave', (e: DragEvent) => {
@@ -3932,7 +4038,7 @@ export class StickyNoteDashboardView extends ItemView {
 			this.clearTreeDropTargets();
 			const paths = readStickyPathsDragData(e.dataTransfer);
 			if (opts.acceptSticky && paths.length > 0 && opts.onStickyDrop) {
-				void opts.onStickyDrop(paths);
+				void opts.onStickyDrop(paths, e);
 				return;
 			}
 			/* 分组优先于工作区：展开分组时拖到子项也应重排分组，不能被工作区处理器吞掉 */
@@ -3953,13 +4059,22 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private async addStickyPathsToWorkspace(wsId: string, paths: string[]): Promise<void> {
+		await this.dropStickyPathsOnWorkspace(wsId, paths, true);
+	}
+
+	private async dropStickyPathsOnWorkspace(
+		wsId: string,
+		paths: string[],
+		copy: boolean
+	): Promise<void> {
 		const files: TFile[] = [];
 		for (const p of paths) {
 			const abs = this.app.vault.getAbstractFileByPath(normalizePath(p));
 			if (abs instanceof TFile) files.push(abs);
 		}
 		if (files.length === 0) return;
-		await this.plugin.stickies.addFilesToWorkspace(wsId, files);
+		if (copy) await this.plugin.stickies.addFilesToWorkspace(wsId, files);
+		else await this.plugin.stickies.moveFilesToWorkspace(wsId, files);
 		this.renderWorkspaceTree();
 		void this.renderDash();
 	}
@@ -3979,6 +4094,7 @@ export class StickyNoteDashboardView extends ItemView {
 			this.syncWsTreeSortBtn();
 			this.syncWsTreeCollapseBtn([]);
 			this.syncWorkspaceFilterBar();
+			this.applyCardFocusWorkspaceChrome(false);
 			return;
 		}
 
@@ -4141,6 +4257,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncWsTreeCollapseBtn(groups.map(g => g.id));
 		this.syncWsTreeShowArchivedBtn();
 		this.syncWorkspaceFilterBar();
+		this.applyCardFocusWorkspaceChrome(false);
 	}
 
 	/** 仅显示已归档（trash）工作区。 */
@@ -4289,7 +4406,8 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 		this.bindWorkspaceTreeDrop(wsBtn, {
 			acceptSticky: true,
-			onStickyDrop: paths => this.addStickyPathsToWorkspace(ws.id, paths),
+			onStickyDrop: (paths, e) =>
+				this.dropStickyPathsOnWorkspace(ws.id, paths, e.ctrlKey || e.metaKey),
 			acceptWorkspace: true,
 			onWorkspaceDrop: async draggedId => {
 				if (draggedId === ws.id) return;
@@ -4775,7 +4893,10 @@ export class StickyNoteDashboardView extends ItemView {
 		card.remove();
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
-		const head = card.createDiv({ cls: 'csn-list-card-head' });
+		const head = card.createDiv({
+			cls: 'csn-list-card-head',
+			attr: { draggable: 'true' }
+		});
 		const headLeft = head.createDiv({ cls: 'csn-list-card-head-left' });
 		const archiveWrap = headLeft.createEl('label', {
 			cls: `csn-list-card-archive-wrap${archived ? ' is-archived' : ''}`,
@@ -4791,6 +4912,17 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		});
 		archiveCb.checked = archived;
+		headLeft.createDiv(
+			{
+				cls: 'csn-list-card-drag-handle',
+				attr: {
+					draggable: 'true',
+					'aria-label': t('LIST_CARD_TITLE_DRAG_ARIA'),
+					title: t('LIST_CARD_TITLE_DRAG_TITLE')
+				}
+			},
+			(el: HTMLDivElement) => setIcon(el, 'grip-vertical')
+		);
 		headLeft.createDiv({
 			cls: 'csn-list-card-title',
 			text: f.basename,
