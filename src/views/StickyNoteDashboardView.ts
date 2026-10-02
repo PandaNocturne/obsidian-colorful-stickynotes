@@ -1585,20 +1585,6 @@ export class StickyNoteDashboardView extends ItemView {
 					evt.stopPropagation();
 					void this.toggleWsTreeCardFocus();
 				});
-				this.wsTreeShowArchivedBtn = wsActions.createEl('button', {
-					type: 'button',
-					cls: 'clickable-icon csn-dash-ws-action-btn',
-					attr: {
-						'aria-label': t('DASH_WS_SHOW_ARCHIVED_ARIA'),
-						'aria-pressed': 'false'
-					}
-				});
-				setIcon(this.wsTreeShowArchivedBtn, 'archive');
-				this.registerDomEvent(this.wsTreeShowArchivedBtn, 'click', (evt: MouseEvent) => {
-					evt.preventDefault();
-					evt.stopPropagation();
-					this.toggleWsTreeShowArchived();
-				});
 				const newWsBtn = wsActions.createEl('button', {
 					type: 'button',
 					cls: 'clickable-icon csn-dash-ws-add-btn',
@@ -1619,7 +1605,8 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncWsTreeCardFocusBtn();
 		this.treeEl = left.createDiv({ cls: 'csn-dash-ws-tree' });
 		const wsFilter = left.createDiv({ cls: 'csn-dash-ws-filter' });
-		const wsFilterInner = wsFilter.createDiv({ cls: 'csn-dash-ws-filter-inner' });
+		const wsFilterRow = wsFilter.createDiv({ cls: 'csn-dash-ws-filter-row' });
+		const wsFilterInner = wsFilterRow.createDiv({ cls: 'csn-dash-ws-filter-inner' });
 		const wsFilterIcon = wsFilterInner.createSpan({
 			cls: 'csn-dash-ws-filter-icon',
 			attr: { 'aria-hidden': 'true' }
@@ -1635,6 +1622,20 @@ export class StickyNoteDashboardView extends ItemView {
 				'aria-label': t('DASH_WS_FILTER_PLACEHOLDER')
 			}
 		});
+		this.wsTreeShowArchivedBtn = wsFilterRow.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-dash-ws-action-btn csn-dash-ws-archived-toggle',
+			attr: {
+				'aria-label': t('DASH_WS_SHOW_ARCHIVED_ARIA'),
+				'aria-pressed': 'false'
+			}
+		});
+		setIcon(this.wsTreeShowArchivedBtn, 'archive');
+		this.registerDomEvent(this.wsTreeShowArchivedBtn, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleWsTreeShowArchived();
+		});
 		const debouncedWsFilter = debounce(
 			() => {
 				this.wsTreeFilterQuery = this.wsTreeFilterInput?.value ?? '';
@@ -1644,6 +1645,7 @@ export class StickyNoteDashboardView extends ItemView {
 			true
 		);
 		this.registerDomEvent(this.wsTreeFilterInput, 'input', () => debouncedWsFilter());
+		this.syncWsTreeShowArchivedBtn();
 
 		const splitV = root.createEl('div', {
 			cls: 'csn-dash-splitter csn-dash-splitter--v',
@@ -3972,8 +3974,9 @@ export class StickyNoteDashboardView extends ItemView {
 		btn.setAttr('aria-pressed', on ? 'true' : 'false');
 		btn.setAttr('aria-label', on ? t('DASH_WS_HIDE_ARCHIVED_ARIA') : t('DASH_WS_SHOW_ARCHIVED_ARIA'));
 		btn.title = on ? t('DASH_WS_HIDE_ARCHIVED_ARIA') : t('DASH_WS_SHOW_ARCHIVED_ARIA');
-		const actions = btn.parentElement;
-		actions?.querySelector('.csn-dash-ws-add-btn')?.toggleClass('csn-dash-ws-add-btn--hidden', on);
+		this.wsPanelEl
+			?.querySelector('.csn-dash-ws-add-btn')
+			?.toggleClass('csn-dash-ws-add-btn--hidden', on);
 		this.wsTreeCollapseBtn?.toggleClass('csn-dash-ws-action-btn--hidden', on);
 		const titleBtn = this.leftPanelTitleBtns.get('workspace');
 		const titleText = titleBtn?.querySelector('.csn-dash-panel-title-text');
