@@ -398,7 +398,7 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	getIcon(): string {
-		return 'layout-dashboard';
+		return 'layout-template';
 	}
 
 	/** 从设置写入根节点 CSS 变量（网格列最小宽度、卡片高度）及预览区 overflow。 */

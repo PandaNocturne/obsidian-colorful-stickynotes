@@ -169,7 +169,7 @@ export const en = {
 		'Hide bottom bar when pointer leaves (file name and sticky settings); stays visible while settings sheet is open.',
 
 	DISPLAY_STICKY_LIST: 'Sticky list',
-	DISPLAY_STICKY_DASHBOARD: 'Colorful StickyNotes',
+	DISPLAY_STICKY_DASHBOARD: 'StickyNote DashBoard',
 	DASH_COMPOSER_PLACEHOLDER: 'Enter content...',
 	DASH_COMPOSER_DONE: 'Done',
 	DASH_COMPOSER_COLOR_ARIA: 'Choose new sticky color',
