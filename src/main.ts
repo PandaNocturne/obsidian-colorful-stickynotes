@@ -6,6 +6,7 @@ import {
 	clampViewContentZoom,
 	normalizeNoteListDimensionCss,
 	normalizeDashboardFilterState,
+	normalizeDashboardVisibleAreaModes,
 	ColorfulStickyNotesSettingTab,
 	DEFAULT_SETTINGS,
 	type ColorfulStickyNotesSettings
@@ -410,6 +411,9 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		if (typeof this.settings.dashboardCardFocusWorkspace !== 'boolean') {
 			this.settings.dashboardCardFocusWorkspace = true;
 		}
+		this.settings.dashboardVisibleAreaModes = normalizeDashboardVisibleAreaModes(
+			this.settings.dashboardVisibleAreaModes
+		);
 		{
 			const rawIds = this.settings.dashboardCollapsedWorkspaceGroupIds;
 			this.settings.dashboardCollapsedWorkspaceGroupIds = Array.isArray(rawIds)

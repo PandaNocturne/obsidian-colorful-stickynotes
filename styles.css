@@ -3283,6 +3283,108 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   flex: 0 0 auto;
   margin-left: auto;
 }
+.csn-dash-area-vis-wrap {
+  position: relative;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.csn-dash-panel--area > .csn-dash-panel-head:hover .csn-dash-area-vis-wrap,
+.csn-dash-panel--area > .csn-dash-panel-head:focus-within .csn-dash-area-vis-wrap,
+.csn-dash-area-vis-wrap.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.csn-dash-area-vis-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 180px;
+  max-width: min(280px, 80vw);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-radius: 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--shadow-s);
+  overflow: auto;
+}
+.csn-dash-area-vis-panel--hidden {
+  display: none;
+}
+.csn-dash-area-vis-panel-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.csn-dash-area-vis-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+.csn-dash-area-vis-item {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.csn-dash-area-vis-item:hover,
+.csn-dash-area-vis-item:focus-visible {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.csn-dash-area-vis-item.is-active {
+  color: var(--text-normal);
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+.csn-dash-area-vis-item-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
+}
+.csn-dash-area-vis-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.csn-dash-area-vis-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-small);
+}
+.csn-dash-area-vis-item-check {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  color: var(--interactive-accent);
+}
+.csn-dash-area-vis-item.is-active .csn-dash-area-vis-item-check {
+  opacity: 1;
+}
+.csn-dash-area-vis-item-check svg {
+  width: 14px;
+  height: 14px;
+}
 .csn-dash-ws-action-btn,
 .csn-dash-ws-add-btn {
   flex: 0 0 auto;

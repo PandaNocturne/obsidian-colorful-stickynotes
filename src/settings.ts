@@ -26,6 +26,24 @@ const VALID_DASH_AREA_MODE: readonly DashAreaMode[] = [
 	'random',
 	'archived'
 ];
+
+/** 仪表盘「区域管理」默认可显示的全部模式。 */
+export const DEFAULT_DASH_VISIBLE_AREA_MODES: DashAreaMode[] = [...VALID_DASH_AREA_MODE];
+
+export function normalizeDashboardVisibleAreaModes(raw: unknown): DashAreaMode[] {
+	const list = Array.isArray(raw) ? raw : [];
+	const out: DashAreaMode[] = [];
+	const seen = new Set<DashAreaMode>();
+	for (const id of list) {
+		if (typeof id !== 'string') continue;
+		if (!VALID_DASH_AREA_MODE.includes(id as DashAreaMode)) continue;
+		const mode = id as DashAreaMode;
+		if (seen.has(mode)) continue;
+		seen.add(mode);
+		out.push(mode);
+	}
+	return out.length > 0 ? out : [...DEFAULT_DASH_VISIBLE_AREA_MODES];
+}
 const VALID_DASH_ARCHIVE_FILTER: readonly NoteListArchiveFilter[] = ['all', 'unarchived', 'archived'];
 const VALID_DASH_COLOR: readonly StickyColorId[] = [
 	'default',
@@ -305,6 +323,8 @@ export interface ColorfulStickyNotesSettings {
 	dashboardComposerDraft: string;
 	/** 选中便笺卡片时，工作区树是否自动定位到所属工作区。 */
 	dashboardCardFocusWorkspace: boolean;
+	/** 仪表盘「区域管理」中要显示的模式（至少一项）。 */
+	dashboardVisibleAreaModes: DashAreaMode[];
 	/** 仪表盘工作区树中已折叠的分组 id。 */
 	dashboardCollapsedWorkspaceGroupIds: string[];
 	/** 仪表盘左侧面板折叠：`area` | `workspace`。 */
@@ -385,6 +405,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	dashboardComposerHidden: false,
 	dashboardComposerDraft: '',
 	dashboardCardFocusWorkspace: true,
+	dashboardVisibleAreaModes: [...DEFAULT_DASH_VISIBLE_AREA_MODES],
 	dashboardCollapsedWorkspaceGroupIds: [],
 	dashboardCollapsedLeftPanelIds: [],
 	dashboardFilters: { ...DEFAULT_DASHBOARD_FILTERS, workspaceSel: { kind: 'all' } },

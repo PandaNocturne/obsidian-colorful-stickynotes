@@ -25,6 +25,7 @@ import {
 	DASH_LEFT_PANE_WIDTH_DEFAULT,
 	dashboardFilterStateKey,
 	normalizeDashboardFilterState,
+	normalizeDashboardVisibleAreaModes,
 	type DashboardFilterState
 } from '../settings';
 import {
@@ -238,6 +239,9 @@ export class StickyNoteDashboardView extends ItemView {
 	private treeEl: HTMLElement | null = null;
 	private areaNavEl: HTMLElement | null = null;
 	private areaPanelEl: HTMLElement | null = null;
+	private areaVisibilityBtn: HTMLButtonElement | null = null;
+	private areaVisibilityPanelEl: HTMLElement | null = null;
+	private areaVisibilityItemBtns = new Map<DashAreaMode, HTMLButtonElement>();
 	private wsPanelEl: HTMLElement | null = null;
 	private leftPanelTitleBtns = new Map<DashLeftPanelId, HTMLButtonElement>();
 	private collapsedLeftPanels = new Set<DashLeftPanelId>();
@@ -1498,12 +1502,33 @@ export class StickyNoteDashboardView extends ItemView {
 
 		this.calendarEl = colLeft.createDiv({ cls: 'csn-dash-calendar' });
 
-		const areaMount = this.mountLeftPanel(colLeft, 'area', t('DASH_AREA_LABEL'));
+		const areaMount = this.mountLeftPanel(colLeft, 'area', t('DASH_AREA_LABEL'), {
+			headExtra: head => {
+				const actions = head.createDiv({ cls: 'csn-dash-ws-actions csn-dash-area-vis-wrap' });
+				this.areaVisibilityBtn = actions.createEl('button', {
+					type: 'button',
+					cls: 'clickable-icon csn-dash-ws-action-btn',
+					attr: {
+						'aria-label': t('DASH_AREA_VISIBILITY_ARIA'),
+						'aria-haspopup': 'true',
+						'aria-expanded': 'false'
+					}
+				});
+				setIcon(this.areaVisibilityBtn, 'eye');
+				this.registerDomEvent(this.areaVisibilityBtn, 'click', (evt: MouseEvent) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					this.toggleAreaVisibilityPanel();
+				});
+				this.buildAreaVisibilityPanel(actions);
+			}
+		});
 		this.areaPanelEl = areaMount.panel;
 		this.areaNavEl = areaMount.body;
 		this.areaNavEl.addClass('csn-dash-area-nav');
 		this.areaNavEl.setAttr('role', 'navigation');
 		this.areaNavEl.setAttr('aria-label', t('DASH_AREA_LABEL'));
+		this.ensureVisibleAreaMode();
 
 		const wsMount = this.mountLeftPanel(colLeft, 'workspace', t('DASH_WS_TREE_TITLE'), {
 			grow: true,
@@ -1960,6 +1985,16 @@ export class StickyNoteDashboardView extends ItemView {
 		this.registerDomEvent(document, 'pointerdown', (evt: PointerEvent) => {
 			const tEl = evt.target;
 			if (!(tEl instanceof Node)) return;
+			if (this.isAreaVisibilityPanelOpen()) {
+				if (
+					!(
+						this.areaVisibilityPanelEl?.contains(tEl) ||
+						this.areaVisibilityBtn?.contains(tEl)
+					)
+				) {
+					this.closeAreaVisibilityPanel();
+				}
+			}
 			if (this.isTagFilterPanelOpen()) {
 				/* 仅点击面板或触发控件内不关闭；勿用整块 tag-wrap（会占满筛选行空白） */
 				if (
@@ -1998,6 +2033,11 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 		this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
 			if (evt.key !== 'Escape') return;
+			if (this.isAreaVisibilityPanelOpen()) {
+				evt.preventDefault();
+				this.closeAreaVisibilityPanel();
+				return;
+			}
 			if (this.isWorkspaceFilterPanelOpen()) {
 				evt.preventDefault();
 				this.closeWorkspaceFilterPanel();
@@ -2202,12 +2242,150 @@ export class StickyNoteDashboardView extends ItemView {
 		return this.areaMode === mode;
 	}
 
+	private isAreaModeVisible(mode: DashAreaMode): boolean {
+		const visible = normalizeDashboardVisibleAreaModes(this.plugin.settings.dashboardVisibleAreaModes);
+		return visible.includes(mode);
+	}
+
+	private getVisibleAreaModeSpecs(): typeof DASH_AREA_MODE_SPECS {
+		return DASH_AREA_MODE_SPECS.filter(spec => this.isAreaModeVisible(spec.mode));
+	}
+
+	/** 当前区域模式被隐藏时，回退到第一个可见项。 */
+	private ensureVisibleAreaMode(): boolean {
+		if (this.isAreaModeVisible(this.areaMode)) return false;
+		const first = this.getVisibleAreaModeSpecs()[0]?.mode ?? 'all';
+		this.areaMode = first;
+		this.archiveFilter = first === 'archived' ? 'archived' : this.archiveFilter === 'archived' ? 'all' : this.archiveFilter;
+		return true;
+	}
+
+	private isAreaVisibilityPanelOpen(): boolean {
+		return !!this.areaVisibilityPanelEl && !this.areaVisibilityPanelEl.hasClass('csn-dash-area-vis-panel--hidden');
+	}
+
+	private buildAreaVisibilityPanel(host: HTMLElement): void {
+		this.areaVisibilityPanelEl = host.createDiv({
+			cls: 'csn-dash-area-vis-panel csn-dash-area-vis-panel--hidden',
+			attr: { role: 'group', 'aria-label': t('DASH_AREA_VISIBILITY_ARIA') }
+		});
+		this.areaVisibilityPanelEl.createDiv({
+			cls: 'csn-dash-area-vis-panel-hint',
+			text: t('DASH_AREA_VISIBILITY_HINT')
+		});
+		const list = this.areaVisibilityPanelEl.createDiv({ cls: 'csn-dash-area-vis-panel-list' });
+		this.areaVisibilityItemBtns.clear();
+		for (const spec of DASH_AREA_MODE_SPECS) {
+			const btn = list.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-area-vis-item',
+				attr: { 'data-csn-area-mode': spec.mode }
+			});
+			setIcon(btn.createSpan({ cls: 'csn-dash-area-vis-item-icon' }), spec.icon);
+			btn.createSpan({ cls: 'csn-dash-area-vis-item-label', text: t(spec.titleKey) });
+			const check = btn.createSpan({ cls: 'csn-dash-area-vis-item-check', attr: { 'aria-hidden': 'true' } });
+			setIcon(check, 'check');
+			this.areaVisibilityItemBtns.set(spec.mode, btn);
+			this.registerDomEvent(btn, 'click', (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.toggleAreaModeVisibility(spec.mode);
+			});
+		}
+		this.syncAreaVisibilityPanelChrome();
+	}
+
+	private toggleAreaVisibilityPanel(): void {
+		if (this.isAreaVisibilityPanelOpen()) this.closeAreaVisibilityPanel();
+		else this.openAreaVisibilityPanel();
+	}
+
+	private openAreaVisibilityPanel(): void {
+		const panel = this.areaVisibilityPanelEl;
+		const btn = this.areaVisibilityBtn;
+		if (!panel || !btn) return;
+		this.syncAreaVisibilityPanelChrome();
+		/* 挂到 body，避免被左侧栏 / panel 的 overflow:hidden 裁切 */
+		document.body.appendChild(panel);
+		panel.removeClass('csn-dash-area-vis-panel--hidden');
+		this.positionAreaVisibilityPanel();
+		this.areaVisibilityBtn?.setAttr('aria-expanded', 'true');
+		this.areaVisibilityBtn?.addClass('is-active');
+		this.areaVisibilityBtn?.closest('.csn-dash-area-vis-wrap')?.addClass('is-open');
+	}
+
+	private positionAreaVisibilityPanel(): void {
+		const panel = this.areaVisibilityPanelEl;
+		const btn = this.areaVisibilityBtn;
+		if (!panel || !btn) return;
+		const r = btn.getBoundingClientRect();
+		const pad = 8;
+		const gap = 6;
+		panel.style.position = 'fixed';
+		panel.style.zIndex = '1000';
+		panel.style.left = 'auto';
+		panel.style.right = `${Math.max(pad, Math.round(window.innerWidth - r.right))}px`;
+		panel.style.top = `${Math.round(r.bottom + gap)}px`;
+		panel.style.maxHeight = `${Math.max(120, Math.round(window.innerHeight - r.bottom - gap - pad))}px`;
+	}
+
+	private closeAreaVisibilityPanel(): void {
+		const panel = this.areaVisibilityPanelEl;
+		const wrap = this.areaVisibilityBtn?.closest('.csn-dash-area-vis-wrap');
+		if (panel) {
+			panel.addClass('csn-dash-area-vis-panel--hidden');
+			panel.style.position = '';
+			panel.style.zIndex = '';
+			panel.style.left = '';
+			panel.style.right = '';
+			panel.style.top = '';
+			panel.style.maxHeight = '';
+			if (wrap instanceof HTMLElement && panel.parentElement !== wrap) {
+				wrap.appendChild(panel);
+			}
+		}
+		wrap?.removeClass('is-open');
+		this.areaVisibilityBtn?.setAttr('aria-expanded', 'false');
+		this.areaVisibilityBtn?.removeClass('is-active');
+	}
+
+	private syncAreaVisibilityPanelChrome(): void {
+		const visible = new Set(
+			normalizeDashboardVisibleAreaModes(this.plugin.settings.dashboardVisibleAreaModes)
+		);
+		for (const [mode, btn] of this.areaVisibilityItemBtns) {
+			const on = visible.has(mode);
+			btn.toggleClass('is-active', on);
+			btn.setAttr('aria-checked', on ? 'true' : 'false');
+		}
+	}
+
+	private async toggleAreaModeVisibility(mode: DashAreaMode): Promise<void> {
+		const cur = normalizeDashboardVisibleAreaModes(this.plugin.settings.dashboardVisibleAreaModes);
+		const next = cur.includes(mode) ? cur.filter(m => m !== mode) : [...cur, mode];
+		if (next.length === 0) {
+			new Notice(t('DASH_AREA_VISIBILITY_KEEP_ONE'));
+			return;
+		}
+		/* 保持 DASH_AREA_MODE_SPECS 顺序 */
+		const ordered = DASH_AREA_MODE_SPECS.map(s => s.mode).filter(m => next.includes(m));
+		this.plugin.settings.dashboardVisibleAreaModes = ordered;
+		await this.plugin.saveSettings();
+		this.syncAreaVisibilityPanelChrome();
+		const modeChanged = this.ensureVisibleAreaMode();
+		this.renderAreaNav();
+		if (modeChanged) {
+			this.syncWorkspaceFilterBar();
+			void this.renderDash();
+		}
+	}
+
 	private renderAreaNav(): void {
 		const host = this.areaNavEl;
 		if (!host) return;
 		host.empty();
 		this.areaBtns.clear();
-		for (const spec of DASH_AREA_MODE_SPECS) {
+		for (const spec of this.getVisibleAreaModeSpecs()) {
 			const btn = host.createEl('button', {
 				type: 'button',
 				cls: `csn-dash-area-item${this.isAreaNavActive(spec.mode) ? ' is-active' : ''}`
@@ -3599,8 +3777,10 @@ export class StickyNoteDashboardView extends ItemView {
 		this.selectedDateFilter = saved.dateFilter;
 		this.applySavedDateFilterToCalendar(saved.dateFilter);
 		this.workspaceSel = this.pruneWorkspaceSel(saved.workspaceSel);
+		this.ensureVisibleAreaMode();
 		this.plugin.settings.dashboardFilters = {
 			...saved,
+			areaMode: this.areaMode,
 			workspaceSel: this.workspaceSel,
 			archiveFilter: this.archiveFilter
 		};
@@ -5547,6 +5727,7 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closeAreaVisibilityPanel();
 		this.flushComposerDraftToSettings();
 		this.debouncedPersistComposerDraft = null;
 		this.persistDashboardFilters();
@@ -5590,6 +5771,9 @@ export class StickyNoteDashboardView extends ItemView {
 		this.treeEl = null;
 		this.areaNavEl = null;
 		this.areaPanelEl = null;
+		this.areaVisibilityBtn = null;
+		this.areaVisibilityPanelEl = null;
+		this.areaVisibilityItemBtns.clear();
 		this.wsPanelEl = null;
 		this.leftPanelTitleBtns.clear();
 		this.wsTreeFilterInput = null;
