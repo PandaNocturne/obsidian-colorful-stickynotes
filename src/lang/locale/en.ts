@@ -237,7 +237,7 @@ export const en = {
 	DASH_CALENDAR_HEAT_CTIME_ARIA: 'Heatmap by created date (click to switch to modified)',
 	DASH_CALENDAR_HEAT_MTIME_ARIA: 'Heatmap by modified date (click to switch to created)',
 	DASH_WS_TREE_TITLE: 'Workspaces',
-	DASH_WS_NEW_ARIA: 'New workspace',
+	DASH_WS_NEW_ARIA: 'New group',
 	DASH_WS_NEW_ARCHIVED_GROUP_ARIA: 'New archived group',
 	DASH_WS_NEW_IN_GROUP: 'New workspace in group',
 	DASH_WS_MENU_RENAME: 'Rename',

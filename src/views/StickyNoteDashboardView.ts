@@ -1598,7 +1598,7 @@ export class StickyNoteDashboardView extends ItemView {
 					evt.preventDefault();
 					evt.stopPropagation();
 					if (this.wsTreeShowArchived) void this.openNewArchivedGroupModal();
-					else void this.openNewWorkspaceModal();
+					else void this.openNewGroupModal();
 				});
 			}
 		});
@@ -4626,6 +4626,18 @@ export class StickyNoteDashboardView extends ItemView {
 			});
 			this.renderWorkspaceTree();
 			void this.renderDash();
+		}).open();
+	}
+
+	/** 工作区列表「+」：新建顶部分组（非工作区）。 */
+	private async openNewGroupModal(): Promise<void> {
+		const mgr = this.plugin.stickies;
+		const nextN = mgr.workspaces.tabGroups.length + 1;
+		const autoPreview = t('WS_TAB_GROUP_AUTO_NAME', { n: nextN });
+		new NewWorkspaceTabGroupModal(this.app, autoPreview, async name => {
+			await mgr.createWorkspaceTabGroup(name.trim() ? name : undefined);
+			this.renderWorkspaceTree();
+			this.syncWorkspaceFilterBar();
 		}).open();
 	}
 

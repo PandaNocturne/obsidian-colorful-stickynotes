@@ -223,7 +223,7 @@ export const zhCn: Record<MessageKey, string> = {
 	DASH_CALENDAR_HEAT_CTIME_ARIA: '热力图：创建日期（点击切换为修改日期）',
 	DASH_CALENDAR_HEAT_MTIME_ARIA: '热力图：修改日期（点击切换为创建日期）',
 	DASH_WS_TREE_TITLE: '工作区列表',
-	DASH_WS_NEW_ARIA: '新建工作区',
+	DASH_WS_NEW_ARIA: '新建分组',
 	DASH_WS_NEW_ARCHIVED_GROUP_ARIA: '新建归档分组',
 	DASH_WS_NEW_IN_GROUP: '在此分组新建工作区',
 	DASH_WS_MENU_RENAME: '重命名',
