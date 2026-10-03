@@ -662,7 +662,7 @@
 	display: flex;
 	flex-wrap: nowrap;
 	align-items: center;
-	justify-content: flex-start;
+	justify-content: center;
 	gap: 8px;
 	margin-bottom: 2px;
 	min-width: 0;
@@ -671,6 +671,8 @@
 
 .csn-ws-panel-item--active .csn-ws-panel-item-title-row {
 	padding-right: 34px; /* 避开右上角活动徽章 */
+	padding-left: 34px; /* 对称留白，标题仍居中 */
+	box-sizing: border-box;
 }
 
 .csn-ws-panel-item-name {
@@ -682,7 +684,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	text-align: left;
+	text-align: center;
 	flex: 1 1 auto;
 	width: 100%;
 	max-width: 100%;
