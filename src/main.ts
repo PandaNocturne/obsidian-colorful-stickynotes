@@ -304,6 +304,21 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		delete st.defaultPositionX;
 		delete st.defaultPositionY;
 
+		/* 旧版单一 stickyTagToolbarEnabled：迁移到列表/仪表盘独立开关 */
+		if (typeof this.settings.stickyTagToolbarEnabled !== 'boolean') {
+			this.settings.stickyTagToolbarEnabled = DEFAULT_SETTINGS.stickyTagToolbarEnabled;
+		}
+		if (!('noteListStickyTagToolbarEnabled' in raw)) {
+			this.settings.noteListStickyTagToolbarEnabled = this.settings.stickyTagToolbarEnabled;
+		} else if (typeof this.settings.noteListStickyTagToolbarEnabled !== 'boolean') {
+			this.settings.noteListStickyTagToolbarEnabled = DEFAULT_SETTINGS.noteListStickyTagToolbarEnabled;
+		}
+		if (!('dashboardStickyTagToolbarEnabled' in raw)) {
+			this.settings.dashboardStickyTagToolbarEnabled = this.settings.stickyTagToolbarEnabled;
+		} else if (typeof this.settings.dashboardStickyTagToolbarEnabled !== 'boolean') {
+			this.settings.dashboardStickyTagToolbarEnabled = DEFAULT_SETTINGS.dashboardStickyTagToolbarEnabled;
+		}
+
 		const legacyZoom = raw.viewContentZoom;
 		if (typeof legacyZoom === 'number' && Number.isFinite(legacyZoom)) {
 			const c = clampViewContentZoom(legacyZoom);
@@ -742,17 +757,32 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.stickies.updateLeafPinnedFromSettings();
 	}
 
-	/** 将「便笺标签工具栏」开关同步到悬浮便笺与已打开的列表/仪表盘。 */
-	syncStickyTagToolbarToOpenViews(): void {
+	/** 将「悬浮便笺标签工具栏」开关同步到已打开的浮动便笺。 */
+	syncFloatingStickyTagToolbarToOpenViews(): void {
 		this.stickies.updateTagToolbarFromSettings();
+	}
+
+	/** 将「列表卡片标签工具栏」开关同步到已打开的便笺列表。 */
+	syncListStickyTagToolbarToOpenViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteListView) v.syncStickyTagToolbarFromSettings();
 		}
+	}
+
+	/** 将「仪表盘卡片标签工具栏」开关同步到已打开的仪表盘。 */
+	syncDashboardStickyTagToolbarToOpenViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
 			const v = leaf.view;
 			if (v instanceof StickyNoteDashboardView) v.syncStickyTagToolbarFromSettings();
 		}
+	}
+
+	/** @deprecated 请改用分场景同步；保留给旧调用兜底。 */
+	syncStickyTagToolbarToOpenViews(): void {
+		this.syncFloatingStickyTagToolbarToOpenViews();
+		this.syncListStickyTagToolbarToOpenViews();
+		this.syncDashboardStickyTagToolbarToOpenViews();
 	}
 
 	/** 将列表预览缩放同步到已打开的便笺列表与标签页仪表盘（不重渲 Markdown）。 */

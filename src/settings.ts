@@ -368,8 +368,12 @@ export interface ColorfulStickyNotesSettings {
 	stickyHeaderDoubleClickStretch: boolean;
 	/** 阅读（预览）模式下，双击便笺主体区域（.csn-sticky-main）切换到编辑模式。 */
 	stickyMainDoubleClickToEdit: boolean;
-	/** 便笺卡片与悬浮便笺底部显示 YAML 标签工具栏。 */
+	/** 悬浮便笺底部显示 YAML 标签工具栏（仅浮动窗口；列表/仪表盘各自独立开关）。 */
 	stickyTagToolbarEnabled: boolean;
+	/** 便笺列表卡片底部显示 YAML 标签工具栏。 */
+	noteListStickyTagToolbarEnabled: boolean;
+	/** 仪表盘卡片底部显示 YAML 标签工具栏。 */
+	dashboardStickyTagToolbarEnabled: boolean;
 	/** 辅助对齐吸附的触发方式：`none` 关闭；`auto` 拖动即吸附；`ctrl` 未绑定时按住 Ctrl 吸附，已在绑定组时按住 Ctrl 解绑。 */
 	stickyAssistAlignSnapMode: StickyAssistAlignSnapMode;
 	/** 吸附阈值（px）。 */
@@ -476,6 +480,8 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	stickyHeaderDoubleClickStretch: false,
 	stickyMainDoubleClickToEdit: true,
 	stickyTagToolbarEnabled: true,
+	noteListStickyTagToolbarEnabled: true,
+	dashboardStickyTagToolbarEnabled: true,
 	stickyAssistAlignSnapMode: 'ctrl',
 	stickyAssistAlignSnapThresholdPx: 10,
 	stickyAssistAlignSnapUnbindRangeMultiplier: 2,
@@ -775,6 +781,17 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					});
 			});
 
+		new Setting(containerEl)
+			.setName(t('SETTINGS_STICKY_TAG_TOOLBAR_NAME'))
+			.setDesc(t('SETTINGS_STICKY_TAG_TOOLBAR_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.stickyTagToolbarEnabled).onChange(async v => {
+					this.plugin.settings.stickyTagToolbarEnabled = v;
+					await this.plugin.saveSettings();
+					this.plugin.syncFloatingStickyTagToolbarToOpenViews();
+				})
+			);
+
 		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_LIST'));
 		new Setting(containerEl)
 			.setName(t('SETTINGS_LIST_OPEN_LOCATION_NAME'))
@@ -908,17 +925,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				toggle.setValue(this.plugin.settings.stickyMainDoubleClickToEdit).onChange(async v => {
 					this.plugin.settings.stickyMainDoubleClickToEdit = v;
 					await this.plugin.saveSettings();
-				})
-			);
-
-		new Setting(containerEl)
-			.setName(t('SETTINGS_STICKY_TAG_TOOLBAR_NAME'))
-			.setDesc(t('SETTINGS_STICKY_TAG_TOOLBAR_DESC'))
-			.addToggle(toggle =>
-				toggle.setValue(this.plugin.settings.stickyTagToolbarEnabled).onChange(async v => {
-					this.plugin.settings.stickyTagToolbarEnabled = v;
-					await this.plugin.saveSettings();
-					this.plugin.syncStickyTagToolbarToOpenViews();
 				})
 			);
 

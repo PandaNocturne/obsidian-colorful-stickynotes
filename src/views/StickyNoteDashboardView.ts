@@ -617,10 +617,10 @@ export class StickyNoteDashboardView extends ItemView {
 		this.applyComposerContentZoom(zoom);
 	}
 
-	/** 同步「便笺标签工具栏」开关到当前页卡片。 */
+	/** 同步「仪表盘卡片标签工具栏」开关到当前页卡片。 */
 	syncStickyTagToolbarFromSettings(): void {
 		this.syncStickyTagToolbarToggleBtn();
-		const enabled = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		const enabled = this.plugin.settings.dashboardStickyTagToolbarEnabled !== false;
 		this.gridEl?.querySelectorAll('.csn-list-card').forEach(node => {
 			if (!(node instanceof HTMLElement)) return;
 			if (enabled) {
@@ -634,14 +634,14 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private syncStickyTagToolbarToggleBtn(): void {
 		if (!this.stickyTagToolbarToggleBtn) return;
-		const on = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		const on = this.plugin.settings.dashboardStickyTagToolbarEnabled !== false;
 		this.stickyTagToolbarToggleBtn.toggleClass('is-active', on);
 		this.stickyTagToolbarToggleBtn.setAttr('aria-pressed', on ? 'true' : 'false');
 	}
 
 	private attachCardTagToolbar(card: HTMLElement): void {
 		this.detachCardTagToolbar(card);
-		if (!this.plugin.settings.stickyTagToolbarEnabled) return;
+		if (!this.plugin.settings.dashboardStickyTagToolbarEnabled) return;
 		const handle = mountStickyTagToolbar(card, {
 			app: this.app,
 			getFile: () => {
@@ -665,7 +665,7 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private ensureCardTagToolbar(card: HTMLElement): void {
-		if (!this.plugin.settings.stickyTagToolbarEnabled) {
+		if (!this.plugin.settings.dashboardStickyTagToolbarEnabled) {
 			this.detachCardTagToolbar(card);
 			return;
 		}
@@ -2393,22 +2393,22 @@ export class StickyNoteDashboardView extends ItemView {
 			this.plugin.syncNoteListGridMetricsToOpenViews();
 		});
 
-		const tagToolbarOn = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		const tagToolbarOn = this.plugin.settings.dashboardStickyTagToolbarEnabled !== false;
 		this.stickyTagToolbarToggleBtn = toolbar.createEl('button', {
 			type: 'button',
 			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-sticky-tag-toolbar-toggle-btn',
 			attr: {
-				'aria-label': t('LIST_TAG_TOOLBAR_TOGGLE_ARIA'),
+				'aria-label': t('DASH_TAG_TOOLBAR_TOGGLE_ARIA'),
 				'aria-pressed': tagToolbarOn ? 'true' : 'false'
 			}
 		});
 		setIcon(this.stickyTagToolbarToggleBtn, 'tags');
 		this.stickyTagToolbarToggleBtn.toggleClass('is-active', tagToolbarOn);
 		this.registerDomEvent(this.stickyTagToolbarToggleBtn, 'click', async () => {
-			this.plugin.settings.stickyTagToolbarEnabled =
-				!(this.plugin.settings.stickyTagToolbarEnabled !== false);
+			this.plugin.settings.dashboardStickyTagToolbarEnabled =
+				!(this.plugin.settings.dashboardStickyTagToolbarEnabled !== false);
 			await this.plugin.saveSettings();
-			this.plugin.syncStickyTagToolbarToOpenViews();
+			this.plugin.syncDashboardStickyTagToolbarToOpenViews();
 		});
 
 		const gridPane = main.createDiv({ cls: 'csn-dash-grid-pane' });

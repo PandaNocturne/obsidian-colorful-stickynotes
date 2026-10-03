@@ -68,8 +68,9 @@ export const zhCn: Record<MessageKey, string> = {
 
 	SETTINGS_STICKY_TAG_TOOLBAR_NAME: '便笺标签工具栏',
 	SETTINGS_STICKY_TAG_TOOLBAR_DESC:
-		'在悬浮便笺与列表/仪表盘卡片底部显示 YAML 标签，并提供 + 按钮添加标签。',
-	LIST_TAG_TOOLBAR_TOGGLE_ARIA: '在卡片上显示便笺标签工具栏',
+		'在悬浮便笺窗口底部显示 YAML 标签，并提供 + 按钮添加标签。列表与仪表盘卡片请在各自工具栏单独开关。',
+	LIST_TAG_TOOLBAR_TOGGLE_ARIA: '在列表卡片上显示标签工具栏',
+	DASH_TAG_TOOLBAR_TOGGLE_ARIA: '在仪表盘卡片上显示标签工具栏',
 	STICKY_TAG_TOOLBAR_ARIA: '便笺标签',
 	STICKY_TAG_ADD_ARIA: '添加标签',
 	STICKY_TAG_CHIP_REMOVE_ARIA: '移除标签 {tag}',
