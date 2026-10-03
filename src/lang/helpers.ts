@@ -1,10 +1,25 @@
 import { en, type MessageKey } from './locale/en';
 import { zhCn } from './locale/zh-cn';
 
+/** 插件界面语言：跟随 Obsidian，或手动指定。 */
+export type PluginUiLanguage = 'auto' | 'en' | 'zh-cn';
+
+export const VALID_PLUGIN_UI_LANGUAGE: readonly PluginUiLanguage[] = ['auto', 'en', 'zh-cn'];
+
 const localePacks: Record<string, Partial<Record<MessageKey, string>>> = {
 	en,
 	'zh-cn': zhCn
 };
+
+let uiLanguagePref: PluginUiLanguage = 'auto';
+
+export function setPluginUiLanguage(pref: PluginUiLanguage): void {
+	uiLanguagePref = VALID_PLUGIN_UI_LANGUAGE.includes(pref) ? pref : 'auto';
+}
+
+export function getPluginUiLanguage(): PluginUiLanguage {
+	return uiLanguagePref;
+}
 
 /** 与 Obsidian 一致：使用全局 `moment.locale()` 判断界面语言。 */
 function getMomentLocaleCode(): string {
@@ -34,7 +49,8 @@ function resolveLocaleId(raw: string): keyof typeof localePacks {
 }
 
 function activePack(): Partial<Record<MessageKey, string>> {
-	return localePacks[resolveLocaleId(getMomentLocaleCode())] ?? en;
+	const id = uiLanguagePref === 'auto' ? resolveLocaleId(getMomentLocaleCode()) : uiLanguagePref;
+	return localePacks[id] ?? en;
 }
 
 function applyVars(template: string, vars?: Record<string, string | number>): string {

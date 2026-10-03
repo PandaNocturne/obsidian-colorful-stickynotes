@@ -36,6 +36,12 @@ export const zhCn: Record<MessageKey, string> = {
 	NOTICE_CANNOT_AUTO_DELETE_BLANK_STICKY: '无法自动删除空白便笺',
 
 	SETTINGS_HEADING_BASIC: '基本设置',
+	SETTINGS_LANGUAGE_NAME: '语言',
+	SETTINGS_LANGUAGE_DESC:
+		'跟随 Obsidian 界面语言，也可手动指定。功能区与命令名称需重载插件后更新。',
+	SETTINGS_LANGUAGE_AUTO: '自动（跟随 Obsidian）',
+	SETTINGS_LANGUAGE_ZH_CN: '简体中文',
+	SETTINGS_LANGUAGE_EN: 'English',
 	SETTINGS_STICKY_FOLDER_NAME: '便笺文件夹',
 	SETTINGS_STICKY_FOLDER_DESC: '新便笺将创建于此路径下。',
 	SETTINGS_CHOOSE_FOLDER: '选择…',

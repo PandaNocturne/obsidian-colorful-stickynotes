@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import { formatStickyNoteRelativePath } from './filename-template';
-import { t } from './lang/helpers';
+import { setPluginUiLanguage, t, type PluginUiLanguage } from './lang/helpers';
 import type { MessageKey } from './lang/locale/en';
 import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
@@ -372,6 +372,8 @@ export function normalizeNoteListDimensionCss(
 }
 
 export interface ColorfulStickyNotesSettings {
+	/** 插件界面语言：`auto` 跟随 Obsidian，或手动 `zh-cn` / `en`。 */
+	pluginLanguage: PluginUiLanguage;
 	stickyFolder: string;
 	filenameTemplate: string;
 	defaultTemplatePath: string;
@@ -492,6 +494,7 @@ export interface ColorfulStickyNotesSettings {
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
+	pluginLanguage: 'auto',
 	stickyFolder: 'StickyNotes',
 	filenameTemplate: 'YYYY/YYYY-MM-DD',
 	defaultTemplatePath: '',
@@ -605,6 +608,24 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 		const el = containerEl.createDiv({ cls: 'csn-settings-pane' });
 
 		if (this.settingsTab === 'basic') {
+		new Setting(el)
+			.setName(t('SETTINGS_LANGUAGE_NAME'))
+			.setDesc(t('SETTINGS_LANGUAGE_DESC'))
+			.addDropdown(dd =>
+				dd
+					.addOption('auto', t('SETTINGS_LANGUAGE_AUTO'))
+					.addOption('zh-cn', t('SETTINGS_LANGUAGE_ZH_CN'))
+					.addOption('en', t('SETTINGS_LANGUAGE_EN'))
+					.setValue(this.plugin.settings.pluginLanguage)
+					.onChange(async v => {
+						const next = (v === 'en' || v === 'zh-cn' ? v : 'auto') as PluginUiLanguage;
+						this.plugin.settings.pluginLanguage = next;
+						setPluginUiLanguage(next);
+						await this.plugin.saveSettings();
+						this.plugin.refreshStickyListIfOpen({ tree: 'full' });
+						this.display();
+					})
+			);
 		new Setting(el)
 			.setName(t('SETTINGS_STICKY_FOLDER_NAME'))
 			.setDesc(t('SETTINGS_STICKY_FOLDER_DESC'))

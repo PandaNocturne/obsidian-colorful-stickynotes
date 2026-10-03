@@ -37,6 +37,12 @@ export const en = {
 	NOTICE_CANNOT_AUTO_DELETE_BLANK_STICKY: 'Could not auto-delete empty sticky',
 
 	SETTINGS_HEADING_BASIC: 'Basic settings',
+	SETTINGS_LANGUAGE_NAME: 'Language',
+	SETTINGS_LANGUAGE_DESC:
+		'Follow Obsidian’s interface language, or pick one. Ribbon and command names update after reloading the plugin.',
+	SETTINGS_LANGUAGE_AUTO: 'Auto (Obsidian)',
+	SETTINGS_LANGUAGE_ZH_CN: '简体中文',
+	SETTINGS_LANGUAGE_EN: 'English',
 	SETTINGS_STICKY_FOLDER_NAME: 'Sticky notes folder',
 	SETTINGS_STICKY_FOLDER_DESC: 'New stickies are created under this path.',
 	SETTINGS_CHOOSE_FOLDER: 'Choose…',
