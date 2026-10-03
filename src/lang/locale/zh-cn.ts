@@ -498,6 +498,7 @@ export const zhCn: Record<MessageKey, string> = {
 	YAML_SHOW: '显示 YAML 属性',
 	HEADER_ARCHIVE_CURRENT_STICKY: '归档当前便笺',
 	HEADER_UNARCHIVE_CURRENT_STICKY: '取消归档当前便笺',
+	HEADER_OPEN_CURRENT_IN_NEW_TAB: '打开当前便笺',
 	HEADER_DELETE_CURRENT_STICKY: '删除当前便笺',
 	HEADER_NEW_STICKY: '新建便笺',
 	MODE_READ_CLICK_EDIT: '阅读模式，点击进入编辑',

@@ -459,6 +459,14 @@ export class StickyNotePopover {
 		if (file instanceof TFile && file.extension === 'md') {
 			canArchiveOrDelete = true;
 			archived = await resolveStickyArchivedForFile(this.plugin.app, file);
+			menu.addItem(item => {
+				item
+					.setTitle(t('HEADER_OPEN_CURRENT_IN_NEW_TAB'))
+					.setIcon('file-text')
+					.onClick(() => {
+						void this.openCurrentStickyInNewTab();
+					});
+			});
 			const addGroups = this.options.getWorkspacesForAddMenu();
 			if (addGroups.some(g => g.workspaces.length > 0)) {
 				menu.addItem(item => {
@@ -511,6 +519,15 @@ export class StickyNotePopover {
 		});
 
 		menu.showAtMouseEvent(evt);
+	}
+
+	/** 在主工作区新标签页打开当前便笺对应的笔记。 */
+	private async openCurrentStickyInNewTab(): Promise<void> {
+		const view = this.leaf?.view;
+		const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
+		if (!(file instanceof TFile)) return;
+		const leaf = this.plugin.app.workspace.getLeaf('tab');
+		await leaf.openFile(file, { active: true });
 	}
 
 	/** 与 HoverNoteLeafPopover#setPreviewScale 相同思路：根节点 CSS 变量 + `.view-content` 的 zoom。 */
