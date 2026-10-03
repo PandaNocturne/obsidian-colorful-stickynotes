@@ -80,6 +80,7 @@ import {
 	collectVaultTagCatalog,
 	displayStickyTag,
 	filterStickyFilesByTags,
+	getStickyTagsForFile,
 	normalizeStickyTag,
 	writeStickyTagsToFile,
 	type StickyTagCount,
@@ -113,6 +114,7 @@ const DASH_AREA_MODE_SPECS: Array<{
 	{ mode: 'all', titleKey: 'DASH_AREA_ALL', icon: 'inbox', showCount: true },
 	{ mode: 'ungrouped', titleKey: 'DASH_AREA_UNGROUPED', icon: 'folder-x', showCount: true },
 	{ mode: 'uncategorized', titleKey: 'DASH_AREA_UNCATEGORIZED', icon: 'layers', showCount: true },
+	{ mode: 'untagged', titleKey: 'DASH_AREA_UNTAGGED', icon: 'tag', showCount: true },
 	{ mode: 'recent', titleKey: 'DASH_AREA_RECENT', icon: 'clock', showCount: false },
 	{ mode: 'random', titleKey: 'DASH_AREA_RANDOM', icon: 'shuffle', showCount: false },
 	{ mode: 'archived', titleKey: 'DASH_AREA_ARCHIVED', icon: 'archive', showCount: true }
@@ -2485,11 +2487,15 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private setAreaMode(mode: DashAreaMode): void {
 		const same = this.areaMode === mode && this.workspaceSel.kind === 'all';
-		if (same && mode !== 'random') return;
+		if (same) {
+			/* 「全部」已是默认态；其它项二次点击取消选中 */
+			if (mode === 'all') return;
+			mode = 'all';
+		}
 		this.areaMode = mode;
 		this.archiveFilter = mode === 'archived' ? 'archived' : 'unarchived';
 		this.workspaceSel = { kind: 'all' };
-		/* 进入/再次点击随机模式时重新洗牌 */
+		/* 进入随机模式时重新洗牌（取消选中不保留旧顺序） */
 		this.randomOrderPaths = null;
 		this.listPageIndex = 0;
 		this.renderAreaNav();
@@ -2697,6 +2703,7 @@ export class StickyNoteDashboardView extends ItemView {
 		let all = 0;
 		let ungrouped = 0;
 		let uncategorized = 0;
+		let untagged = 0;
 		let archived = 0;
 		for (const f of allFiles) {
 			const isArchived = await resolveStickyArchivedForFile(this.app, f);
@@ -2708,8 +2715,9 @@ export class StickyNoteDashboardView extends ItemView {
 			const path = normalizePath(f.path);
 			if (!assigned.has(path)) uncategorized++;
 			else if (ungroupedPaths.has(path)) ungrouped++;
+			if (getStickyTagsForFile(this.app, f).length === 0) untagged++;
 		}
-		this.areaCounts = { all, ungrouped, uncategorized, archived };
+		this.areaCounts = { all, ungrouped, uncategorized, untagged, archived };
 		this.syncAreaCountLabels();
 	}
 
@@ -6912,7 +6920,7 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 	}
 
-	/** 区域管理：未分组 / 未分类等（归档已由 archiveFilter 处理）。 */
+	/** 快速访问：未分组 / 未分类 / 未标签等（归档已由 archiveFilter 处理）。 */
 	private applyAreaModeFilters(files: TFile[]): TFile[] {
 		if (this.areaMode === 'ungrouped') {
 			const mgr = this.plugin.stickies;
@@ -6929,6 +6937,9 @@ export class StickyNoteDashboardView extends ItemView {
 		if (this.areaMode === 'uncategorized') {
 			const assigned = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
 			return files.filter(f => !assigned.has(normalizePath(f.path)));
+		}
+		if (this.areaMode === 'untagged') {
+			return files.filter(f => getStickyTagsForFile(this.app, f).length === 0);
 		}
 		return files;
 	}

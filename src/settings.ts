@@ -22,12 +22,13 @@ const VALID_DASH_AREA_MODE: readonly DashAreaMode[] = [
 	'all',
 	'ungrouped',
 	'uncategorized',
+	'untagged',
 	'recent',
 	'random',
 	'archived'
 ];
 
-/** 仪表盘「区域管理」默认可显示的全部模式。 */
+/** 仪表盘「快速访问」默认可显示的全部模式。 */
 export const DEFAULT_DASH_VISIBLE_AREA_MODES: DashAreaMode[] = [...VALID_DASH_AREA_MODE];
 
 export function normalizeDashboardVisibleAreaModes(raw: unknown): DashAreaMode[] {
@@ -42,7 +43,14 @@ export function normalizeDashboardVisibleAreaModes(raw: unknown): DashAreaMode[]
 		seen.add(mode);
 		out.push(mode);
 	}
-	return out.length > 0 ? out : [...DEFAULT_DASH_VISIBLE_AREA_MODES];
+	if (out.length === 0) return [...DEFAULT_DASH_VISIBLE_AREA_MODES];
+	/* 旧配置无「未标签」时默认插入到「未分类」之后并可见 */
+	if (!seen.has('untagged')) {
+		const idx = out.indexOf('uncategorized');
+		if (idx >= 0) out.splice(idx + 1, 0, 'untagged');
+		else out.push('untagged');
+	}
+	return out;
 }
 const VALID_DASH_ARCHIVE_FILTER: readonly NoteListArchiveFilter[] = ['all', 'unarchived', 'archived'];
 const VALID_DASH_COLOR: readonly StickyColorId[] = [
