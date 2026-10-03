@@ -346,6 +346,11 @@ export class StickyNoteDashboardView extends ItemView {
 	/** 筛选上下文指纹（不含 paths/pinned）；不变时新建/删除走卡片增量，避免整表闪烁。 */
 	private lastDashFilterKey = '';
 	private lastRenderedPageIndex: number | null = null;
+	/** 上次完整筛选后的文件列表；纯翻页时复用，跳过扫库/筛选/热力。 */
+	private cachedDashFiles: TFile[] | null = null;
+	private cachedDashPinnedKey = '';
+	private cachedDashPageSize = 0;
+	private debouncedPersistDashChrome: Debouncer<[], void> | null = null;
 	private listPageIndex = 0;
 	private areaMode: DashAreaMode = 'all';
 	/** 随机模式锁定的路径顺序（进入模式或刷新时重建）。 */
@@ -2358,6 +2363,7 @@ export class StickyNoteDashboardView extends ItemView {
 			void this.renderDash();
 		});
 		this.registerDomEvent(this.paginationNextBtn, 'click', () => {
+			if (this.listPageIndex >= this.dashTotalPages - 1) return;
 			this.listPageIndex += 1;
 			void this.renderDash();
 		});
@@ -4342,6 +4348,25 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 		this.plugin.settings.dashboardChrome = next;
 		void this.plugin.saveSettings();
+	}
+
+	/** 翻页频繁时合并写入，避免每次点页都 saveSettings */
+	private schedulePersistDashboardChrome(): void {
+		if (!this.debouncedPersistDashChrome) {
+			this.debouncedPersistDashChrome = debounce(
+				() => {
+					this.persistDashboardChrome();
+				},
+				400,
+				true
+			);
+		}
+		this.debouncedPersistDashChrome();
+	}
+
+	private flushPersistDashboardChrome(): void {
+		this.debouncedPersistDashChrome?.cancel();
+		this.persistDashboardChrome();
 	}
 
 	private restoreDashboardChromeFromSettings(): void {
@@ -6641,22 +6666,55 @@ export class StickyNoteDashboardView extends ItemView {
 				existing.set(p, el);
 			}
 		}
-		for (let i = 0; i < pageFiles.length; i++) {
-			const f = pageFiles[i]!;
+		/* 本页卡片并行准备（限流），缩短串行 await 瀑布 */
+		const cards = await this.mapPool(pageFiles, 6, async f => {
+			const prev = existing.get(f.path);
+			if (prev) {
+				const colorRaw = prev.dataset.csnListColor;
+				const color =
+					colorRaw && colorRaw.length > 0
+						? (colorRaw as StickyColorId)
+						: await resolveStickyBgColorForFile(this.app, f);
+				const archivedAttr = prev.dataset.csnArchived;
+				const archived =
+					archivedAttr === 'true'
+						? true
+						: archivedAttr === 'false'
+							? false
+							: await resolveStickyArchivedForFile(this.app, f);
+				this.updateCardChrome(prev, f, color, pinnedSet, archived);
+				await this.maybeRefreshCardPreview(prev, f);
+				return prev;
+			}
 			const color = await resolveStickyBgColorForFile(this.app, f);
 			const archived = await resolveStickyArchivedForFile(this.app, f);
-			let card = existing.get(f.path);
-			if (!card) {
-				card = await this.createCard(f, color, pinnedSet, archived);
-			} else {
-				this.updateCardChrome(card, f, color, pinnedSet, archived);
-				await this.maybeRefreshCardPreview(card, f);
-			}
+			return this.createCard(f, color, pinnedSet, archived);
+		});
+		for (let i = 0; i < cards.length; i++) {
+			const card = cards[i]!;
 			const at = container.children[i] ?? null;
-			if (card !== at) {
-				container.insertBefore(card, at);
-			}
+			if (card !== at) container.insertBefore(card, at);
 		}
+	}
+
+	/** 有限并发执行，保持结果顺序与输入一致 */
+	private async mapPool<T, R>(
+		items: readonly T[],
+		concurrency: number,
+		fn: (item: T, index: number) => Promise<R>
+	): Promise<R[]> {
+		if (items.length === 0) return [];
+		const results = new Array<R>(items.length);
+		let cursor = 0;
+		const worker = async (): Promise<void> => {
+			while (cursor < items.length) {
+				const i = cursor++;
+				results[i] = await fn(items[i]!, i);
+			}
+		};
+		const n = Math.max(1, Math.min(concurrency, items.length));
+		await Promise.all(Array.from({ length: n }, () => worker()));
+		return results;
 	}
 
 	private async syncPageContentOnly(
@@ -6854,13 +6912,116 @@ export class StickyNoteDashboardView extends ItemView {
 		if (this.paginationLastBtn) this.paginationLastBtn.disabled = atLast;
 	}
 
+	private clearDashResultCache(): void {
+		this.cachedDashFiles = null;
+		this.cachedDashPinnedKey = '';
+		this.cachedDashPageSize = 0;
+	}
+
+	/**
+	 * 纯翻页快路径：筛选/排序结果未变时复用缓存列表，跳过扫库、区域计数与日历热力。
+	 * @returns true 表示已完成渲染
+	 */
+	private async tryRenderDashPaginationOnly(
+		container: HTMLElement,
+		query: string,
+		pageSize: number,
+		sortMode: NoteListSort,
+		pinnedNorm: string[],
+		prio: string | null
+	): Promise<boolean> {
+		const cached = this.cachedDashFiles;
+		if (
+			!cached ||
+			cached.length === 0 ||
+			this.lastRenderedPageIndex === null ||
+			this.lastRenderedPageIndex === this.listPageIndex ||
+			this.cachedDashPageSize !== pageSize ||
+			this.cachedDashPinnedKey !== pinnedNorm.join('\0') ||
+			!this.lastDashFilterKey ||
+			!this.lastDashStructureKey
+		) {
+			return false;
+		}
+
+		const filterKey = this.buildDashFilterKey(
+			this.workspaceSel,
+			this.workspaceFilterLogic,
+			this.selectedDateFilter,
+			query,
+			this.colorFilters,
+			this.areaMode,
+			this.archiveFilter,
+			this.tagIncludeFilters,
+			this.tagExcludeFilters,
+			this.tagFilterLogic,
+			sortMode,
+			pageSize
+		);
+		if (filterKey !== this.lastDashFilterKey) return false;
+
+		const structureKey = this.buildDashStructureKey(
+			this.workspaceSel,
+			this.workspaceFilterLogic,
+			this.selectedDateFilter,
+			query,
+			this.colorFilters,
+			this.areaMode,
+			this.archiveFilter,
+			this.tagIncludeFilters,
+			this.tagExcludeFilters,
+			this.tagFilterLogic,
+			sortMode,
+			pageSize,
+			prio,
+			cached,
+			pinnedNorm
+		);
+		if (structureKey !== this.lastDashStructureKey) return false;
+
+		const totalPages = Math.max(1, Math.ceil(cached.length / pageSize));
+		if (this.listPageIndex >= totalPages) this.listPageIndex = totalPages - 1;
+		if (this.listPageIndex < 0) this.listPageIndex = 0;
+		if (this.lastRenderedPageIndex === this.listPageIndex) return false;
+
+		const start = this.listPageIndex * pageSize;
+		const pageFiles = cached.slice(start, start + pageSize);
+		const pinnedSet = new Set(pinnedNorm);
+		await this.syncPageIncremental(container, pageFiles, pinnedSet);
+		this.syncListCardSelectionChrome();
+		this.lastRenderedPageIndex = this.listPageIndex;
+		const from = pageFiles.length > 0 ? start + 1 : 0;
+		const to = pageFiles.length > 0 ? start + pageFiles.length : 0;
+		this.syncDashPaginationFooter(from, to, cached.length, totalPages);
+		container.scrollTop = 0;
+		return true;
+	}
+
 	private async renderDashImpl(): Promise<void> {
 		const container = this.gridEl;
 		if (!container || !this.paginationEl || !this.paginationMetaEl) return;
 
 		const query = (this.searchInput?.value ?? '').trim();
+		const pageSize = Math.max(4, Math.min(48, Math.round(this.plugin.settings.noteListPageSize)));
+		const pinnedNorm = this.plugin.settings.noteListPinnedPaths.map(p => normalizePath(p));
+		const prio = this.plugin.listPrioritizeStickyPath;
+		const sortMode =
+			this.areaMode === 'recent' ? 'mtime-desc' : this.plugin.settings.noteListSort;
 
 		try {
+			if (
+				await this.tryRenderDashPaginationOnly(
+					container,
+					query,
+					pageSize,
+					sortMode,
+					pinnedNorm,
+					prio
+				)
+			) {
+				return;
+			}
+
 			const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 			const folderAbs = this.app.vault.getAbstractFileByPath(folder);
 			if (!folderAbs || !(folderAbs instanceof TFolder)) {
@@ -6868,6 +7029,7 @@ export class StickyNoteDashboardView extends ItemView {
 				this.lastDashStructureKey = '';
 				this.lastDashFilterKey = '';
 				this.lastRenderedPageIndex = null;
+				this.clearDashResultCache();
 				container.empty();
 				container.createDiv({
 					text: t('DASH_FOLDER_MISSING', { folder }),
@@ -6910,11 +7072,7 @@ export class StickyNoteDashboardView extends ItemView {
 				this.selectedDateFilter,
 				this.calendarHeatField()
 			);
-			const pinnedNorm = this.plugin.settings.noteListPinnedPaths.map(p => normalizePath(p));
 			const pinnedSet = new Set(pinnedNorm);
-			const prio = this.plugin.listPrioritizeStickyPath;
-			const sortMode =
-				this.areaMode === 'recent' ? 'mtime-desc' : this.plugin.settings.noteListSort;
 			if (this.areaMode === 'random') {
 				files = this.applyRandomOrder(files);
 			} else {
@@ -6925,6 +7083,7 @@ export class StickyNoteDashboardView extends ItemView {
 				this.lastDashStructureKey = '';
 				this.lastDashFilterKey = '';
 				this.lastRenderedPageIndex = null;
+				this.clearDashResultCache();
 				const emptyEl = document.createElement('div');
 				emptyEl.addClass('csn-list-empty');
 				emptyEl.setText(t('DASH_EMPTY'));
@@ -6939,7 +7098,6 @@ export class StickyNoteDashboardView extends ItemView {
 				return;
 			}
 
-			const pageSize = Math.max(4, Math.min(48, Math.round(this.plugin.settings.noteListPageSize)));
 			const totalPages = Math.max(1, Math.ceil(files.length / pageSize));
 			if (this.listPageIndex >= totalPages) this.listPageIndex = totalPages - 1;
 			if (this.listPageIndex < 0) this.listPageIndex = 0;
@@ -6992,6 +7150,9 @@ export class StickyNoteDashboardView extends ItemView {
 
 			this.lastDashFilterKey = filterKey;
 			this.lastDashStructureKey = structureKey;
+			this.cachedDashFiles = files;
+			this.cachedDashPinnedKey = pinnedNorm.join('\0');
+			this.cachedDashPageSize = pageSize;
 
 			if (filterChanged) {
 				/* 先保留旧卡片再一次性换页，避免清空后只露出输入区 */
@@ -7019,7 +7180,7 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		} finally {
 			this.persistDashboardFilters();
-			this.persistDashboardChrome();
+			this.schedulePersistDashboardChrome();
 			if (this.plugin.listPrioritizeStickyPath) {
 				this.plugin.listPrioritizeStickyPath = null;
 			}
@@ -7032,7 +7193,8 @@ export class StickyNoteDashboardView extends ItemView {
 		this.flushComposerDraftToSettings();
 		this.debouncedPersistComposerDraft = null;
 		this.persistDashboardFilters();
-		this.persistDashboardChrome();
+		this.flushPersistDashboardChrome();
+		this.debouncedPersistDashChrome = null;
 		this.detachCalPickerDocClose();
 		this.calPicker = null;
 		this.leftPaneAutoCollapsedForWidth = false;
@@ -7046,6 +7208,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.lastDashStructureKey = '';
 		this.lastDashFilterKey = '';
 		this.lastRenderedPageIndex = null;
+		this.clearDashResultCache();
 		this.selectedListNotePaths.clear();
 		this.lastSelectedListNotePath = null;
 		this.calendarEl = null;
