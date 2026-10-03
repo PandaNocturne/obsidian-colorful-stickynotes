@@ -236,7 +236,7 @@ export class PermanentlyDeleteStickyWorkspaceConfirmModal extends Modal {
 	constructor(
 		app: App,
 		private readonly workspaceName: string,
-		private readonly onConfirm: () => void | Promise<void>
+		private readonly onConfirm: (deleteNotes: boolean) => void | Promise<void>
 	) {
 		super(app);
 	}
@@ -248,17 +248,32 @@ export class PermanentlyDeleteStickyWorkspaceConfirmModal extends Modal {
 		contentEl.createEl('p', {
 			text: t('WS_PERMANENT_DELETE_BODY', { name: this.workspaceName })
 		});
+		contentEl.createEl('p', {
+			cls: 'mod-warning',
+			text: t('WS_PERMANENT_DELETE_NOTES_HINT')
+		});
 		new Setting(contentEl)
 			.setName('')
 			.addButton(btn => btn.setButtonText(t('MODAL_CANCEL')).onClick(() => this.close()))
 			.addButton(btn =>
+				btn.setButtonText(t('WS_PERMANENT_DELETE_WS_ONLY')).onClick(async () => {
+					btn.setDisabled(true);
+					try {
+						await Promise.resolve(this.onConfirm(false));
+						this.close();
+					} finally {
+						btn.setDisabled(false);
+					}
+				})
+			)
+			.addButton(btn =>
 				btn
-					.setButtonText(t('MODAL_DELETE'))
+					.setButtonText(t('WS_PERMANENT_DELETE_WS_AND_NOTES'))
 					.setWarning()
 					.onClick(async () => {
 						btn.setDisabled(true);
 						try {
-							await Promise.resolve(this.onConfirm());
+							await Promise.resolve(this.onConfirm(true));
 							this.close();
 						} finally {
 							btn.setDisabled(false);
@@ -1281,8 +1296,8 @@ export class WorkspacePanelModal extends Modal {
 		setIcon(btnForever, 'trash');
 		btnForever.addEventListener('click', e => {
 			e.stopPropagation();
-			new PermanentlyDeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
-				await mgr.permanentlyDeleteStickyWorkspaceFromTrash(ws.id);
+			new PermanentlyDeleteStickyWorkspaceConfirmModal(this.app, ws.name, async deleteNotes => {
+				await mgr.permanentlyDeleteStickyWorkspaceFromTrash(ws.id, { deleteNotes });
 				refresh();
 			}).open();
 		});

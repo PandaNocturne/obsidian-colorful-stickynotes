@@ -430,10 +430,16 @@ export const en = {
 	WS_PERMANENT_DELETE_TITLE: 'Permanently delete workspace',
 	WS_PERMANENT_DELETE_BODY:
 		'Permanently delete “{name}” from trash? The saved window layout cannot be recovered.',
+	WS_PERMANENT_DELETE_NOTES_HINT:
+		'Sticky notes that belong only to this workspace can also be moved to the system trash. Notes shared with other workspaces are kept.',
+	WS_PERMANENT_DELETE_WS_ONLY: 'Workspace only',
+	WS_PERMANENT_DELETE_WS_AND_NOTES: 'Workspace and notes',
 	NOTICE_WORKSPACE_MOVED_TO_TRASH: 'Workspace moved to trash',
 	NOTICE_BLANK_WORKSPACE_DELETED: 'Blank workspace removed',
 	NOTICE_WORKSPACE_RESTORED: 'Workspace restored',
 	NOTICE_WORKSPACE_PERMANENTLY_DELETED: 'Workspace permanently deleted',
+	NOTICE_WORKSPACE_AND_NOTES_PERMANENTLY_DELETED:
+		'Workspace permanently deleted; exclusive sticky notes moved to trash',
 	WS_SWITCH_ARIA: 'Switch to this workspace',
 	WS_REORDER_DRAG_ARIA: 'Drag to reorder workspaces',
 	WS_TAB_FILTER_ALL: 'All',

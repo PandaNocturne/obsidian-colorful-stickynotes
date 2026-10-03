@@ -1370,25 +1370,62 @@ export class StickyNoteManager {
 		this.plugin.refreshStickyListIfOpen();
 	}
 
-	/** 从回收站永久删除快照。 */
-	async permanentlyDeleteStickyWorkspaceFromTrash(wsId: string): Promise<void> {
+	/** 从回收站永久删除快照；可选一并删除仅属于该工作区的便笺文件。 */
+	async permanentlyDeleteStickyWorkspaceFromTrash(
+		wsId: string,
+		opts?: { deleteNotes?: boolean }
+	): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
 		const trashed = this.workspaces.trash.find(x => x.id === wsId);
-		const memberFiles = trashed ? this.workspaceMemberFiles(trashed) : [];
-		const groupId = trashed?.tabGroupId;
+		if (!trashed) return;
+		const memberFiles = this.workspaceMemberFiles(trashed);
+		const deleteNotes = opts?.deleteNotes === true;
+		const filesToTrash: TFile[] = [];
+		const filesToSync: TFile[] = [];
+		if (deleteNotes) {
+			for (const f of memberFiles) {
+				if (this.isStickyExclusiveToWorkspace(f, wsId)) filesToTrash.push(f);
+				else filesToSync.push(f);
+			}
+		} else {
+			filesToSync.push(...memberFiles);
+		}
+		const groupId = trashed.tabGroupId;
 		const before = this.workspaces.trash.length;
 		this.workspaces.trash = this.workspaces.trash.filter(x => x.id !== wsId);
 		if (this.workspaces.trash.length === before) return;
 		this.dropWorkspaceMemberPathCache(wsId);
 		if (groupId) this.pruneTrashTabGroupIfUnused(groupId);
 		await this.flushWorkspacesToDisk();
-		await this.syncStickyWorkspaceYamlForFiles(memberFiles);
+		if (filesToSync.length > 0) {
+			await this.syncStickyWorkspaceYamlForFiles(filesToSync);
+		}
+		for (const f of filesToTrash) {
+			await this.trashStickyNoteFile(f, { skipListRefresh: true });
+		}
 		if (this.plugin.settings.noteListWorkspaceFilterId === wsId) {
 			this.plugin.settings.noteListWorkspaceFilterId = null;
 			void this.plugin.saveSettings();
 		}
-		new Notice(t('NOTICE_WORKSPACE_PERMANENTLY_DELETED'));
+		new Notice(
+			deleteNotes && filesToTrash.length > 0
+				? t('NOTICE_WORKSPACE_AND_NOTES_PERMANENTLY_DELETED')
+				: t('NOTICE_WORKSPACE_PERMANENTLY_DELETED')
+		);
 		this.plugin.refreshStickyListIfOpen();
+	}
+
+	/** 便笺是否仅隶属于指定工作区（活动区 + 回收站内其它快照均不含）。 */
+	private isStickyExclusiveToWorkspace(file: TFile, wsId: string): boolean {
+		for (const ws of this.workspaces.workspaces) {
+			if (ws.id === wsId) continue;
+			if (this.findWorkspaceWindowIndex(ws, file) >= 0) return false;
+		}
+		for (const ws of this.workspaces.trash) {
+			if (ws.id === wsId) continue;
+			if (this.findWorkspaceWindowIndex(ws, file) >= 0) return false;
+		}
+		return true;
 	}
 
 	/** 将工作区拖到另一张卡片前时：插入到 `beforeId` 之前。 */

@@ -5540,8 +5540,8 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 		menu.addItem(item => {
 			item.setTitle(t('DASH_WS_MENU_PERMANENT_DELETE')).setIcon('trash').onClick(() => {
-				new PermanentlyDeleteStickyWorkspaceConfirmModal(this.app, ws.name, async () => {
-					await mgr.permanentlyDeleteStickyWorkspaceFromTrash(ws.id);
+				new PermanentlyDeleteStickyWorkspaceConfirmModal(this.app, ws.name, async deleteNotes => {
+					await mgr.permanentlyDeleteStickyWorkspaceFromTrash(ws.id, { deleteNotes });
 					if (this.workspaceSel.kind === 'selection') {
 						const workspaceIds = this.workspaceSel.workspaceIds.filter(id => id !== ws.id);
 						this.workspaceSel =
