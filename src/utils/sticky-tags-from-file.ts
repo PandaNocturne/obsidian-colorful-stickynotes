@@ -99,27 +99,32 @@ export function collectStickyTagCatalog(app: App, files: readonly TFile[]): Stic
 
 /**
  * 按标签筛选。
- * - `include` 为空：不施加「包含」条件
+ * - `noTags`：仅无标签便笺（优先于 include）
+ * - `include` 为空：不施加「包含/不包含」条件
  * - `exclude` 命中任一则排除
- * - `logic`：`or` 命中任一包含标签；`and` 须全部包含
+ * - `logic`：`or` 命中任一；`and` 须全部包含；`not` 所选标签均不出现
  */
 export function filterStickyFilesByTags(
 	app: App,
 	files: TFile[],
 	include: readonly string[],
 	exclude: readonly string[],
-	logic: 'and' | 'or'
+	logic: 'and' | 'or' | 'not',
+	opts?: { noTags?: boolean }
 ): TFile[] {
+	const noTags = opts?.noTags === true;
 	const inc = include.map(normalizeStickyTag).filter(Boolean);
 	const exc = new Set(exclude.map(normalizeStickyTag).filter(Boolean));
-	if (inc.length === 0 && exc.size === 0) return files;
+	if (!noTags && inc.length === 0 && exc.size === 0) return files;
 	return files.filter(file => {
 		const tags = new Set(getStickyTagsForFile(app, file));
+		if (noTags) return tags.size === 0;
 		for (const e of exc) {
 			if (tags.has(e)) return false;
 		}
 		if (inc.length === 0) return true;
 		if (logic === 'and') return inc.every(t => tags.has(t));
+		if (logic === 'not') return inc.every(t => !tags.has(t));
 		return inc.some(t => tags.has(t));
 	});
 }

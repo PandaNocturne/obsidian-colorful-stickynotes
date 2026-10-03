@@ -70,8 +70,12 @@ export interface DashboardFilterState {
 	workspaceSel: DashWorkspaceSel;
 	tagIncludeFilters: string[];
 	tagExcludeFilters: string[];
-	tagFilterLogic: 'and' | 'or';
-	workspaceFilterLogic: 'and' | 'or';
+	tagFilterLogic: 'and' | 'or' | 'not';
+	/** 仅筛选无标签便笺。 */
+	tagFilterNoTags: boolean;
+	workspaceFilterLogic: 'and' | 'or' | 'not';
+	/** 仅筛选未加入任何工作区的便笺。 */
+	workspaceFilterUncategorized: boolean;
 	dateFilter: StickyDateFilter | null;
 	searchQuery: string;
 }
@@ -212,10 +216,17 @@ export const DEFAULT_DASHBOARD_FILTERS: DashboardFilterState = {
 	tagIncludeFilters: [],
 	tagExcludeFilters: [],
 	tagFilterLogic: 'or',
+	tagFilterNoTags: false,
 	workspaceFilterLogic: 'or',
+	workspaceFilterUncategorized: false,
 	dateFilter: null,
 	searchQuery: ''
 };
+
+function normalizeDashFilterLogic(raw: unknown): 'and' | 'or' | 'not' {
+	if (raw === 'and' || raw === 'not') return raw;
+	return 'or';
+}
 
 export function normalizeDashboardFilterState(raw: unknown): DashboardFilterState {
 	const obj = raw && typeof raw === 'object' ? (raw as Partial<DashboardFilterState>) : {};
@@ -232,18 +243,27 @@ export function normalizeDashboardFilterState(raw: unknown): DashboardFilterStat
 				typeof c === 'string' && VALID_DASH_COLOR.includes(c as StickyColorId)
 			)
 		: [];
-	const tagFilterLogic = obj.tagFilterLogic === 'and' ? 'and' : 'or';
-	const workspaceFilterLogic = obj.workspaceFilterLogic === 'and' ? 'and' : 'or';
+	const tagFilterLogic = normalizeDashFilterLogic(obj.tagFilterLogic);
+	const workspaceFilterLogic = normalizeDashFilterLogic(obj.workspaceFilterLogic);
+	const tagFilterNoTags = obj.tagFilterNoTags === true;
+	const workspaceFilterUncategorized = obj.workspaceFilterUncategorized === true;
 	const searchQuery = typeof obj.searchQuery === 'string' ? obj.searchQuery : '';
+	const tagIncludeFilters = tagFilterNoTags ? [] : normalizeDashStringList(obj.tagIncludeFilters);
+	const tagExcludeFilters = tagFilterNoTags ? [] : normalizeDashStringList(obj.tagExcludeFilters);
+	const workspaceSel = workspaceFilterUncategorized
+		? ({ kind: 'all' } as const)
+		: normalizeDashWorkspaceSel(obj.workspaceSel);
 	return {
 		areaMode,
 		archiveFilter: areaMode === 'archived' ? 'archived' : archiveFilter,
 		colorFilters,
-		workspaceSel: normalizeDashWorkspaceSel(obj.workspaceSel),
-		tagIncludeFilters: normalizeDashStringList(obj.tagIncludeFilters),
-		tagExcludeFilters: normalizeDashStringList(obj.tagExcludeFilters),
+		workspaceSel,
+		tagIncludeFilters,
+		tagExcludeFilters,
 		tagFilterLogic,
+		tagFilterNoTags,
 		workspaceFilterLogic,
+		workspaceFilterUncategorized,
 		dateFilter: normalizeDashDateFilter(obj.dateFilter),
 		searchQuery
 	};
@@ -258,7 +278,9 @@ export function dashboardFilterStateKey(state: DashboardFilterState): string {
 		tagIncludeFilters: [...state.tagIncludeFilters].sort(),
 		tagExcludeFilters: [...state.tagExcludeFilters].sort(),
 		tagFilterLogic: state.tagFilterLogic,
+		tagFilterNoTags: state.tagFilterNoTags,
 		workspaceFilterLogic: state.workspaceFilterLogic,
+		workspaceFilterUncategorized: state.workspaceFilterUncategorized,
 		dateFilter: state.dateFilter,
 		searchQuery: state.searchQuery
 	});

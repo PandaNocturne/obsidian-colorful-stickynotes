@@ -373,7 +373,9 @@ export class StickyNoteDashboardView extends ItemView {
 	private tagIncludeFilters: string[] = [];
 	/** 排除筛选的标签。 */
 	private tagExcludeFilters: string[] = [];
-	private tagFilterLogic: 'and' | 'or' = 'or';
+	private tagFilterLogic: 'and' | 'or' | 'not' = 'or';
+	/** 仅筛选无标签便笺（与具体标签筛选互斥）。 */
+	private tagFilterNoTags = false;
 	private tagPanelGroup: 'all' | 'selected' = 'all';
 	private tagPanelSearch = '';
 	private tagCatalog: StickyTagCount[] = [];
@@ -386,10 +388,14 @@ export class StickyNoteDashboardView extends ItemView {
 	private tagPanelListEl: HTMLElement | null = null;
 	private tagLogicOrBtn: HTMLButtonElement | null = null;
 	private tagLogicAndBtn: HTMLButtonElement | null = null;
+	private tagLogicNotBtn: HTMLButtonElement | null = null;
 	private workspaceSel: DashWorkspaceSel = { kind: 'all' };
-	private workspaceFilterLogic: 'and' | 'or' = 'or';
+	private workspaceFilterLogic: 'and' | 'or' | 'not' = 'or';
+	/** 仅筛选未加入任何工作区的便笺（与具体工作区筛选互斥）。 */
+	private workspaceFilterUncategorized = false;
 	private wsLogicOrBtn: HTMLButtonElement | null = null;
 	private wsLogicAndBtn: HTMLButtonElement | null = null;
+	private wsLogicNotBtn: HTMLButtonElement | null = null;
 	private collapsedGroupIds = new Set<string>();
 	private calYear: number;
 	private calMonth0: number;
@@ -2110,6 +2116,10 @@ export class StickyNoteDashboardView extends ItemView {
 				const kind = el.dataset.csnWsChipKind;
 				const id = el.dataset.csnWsChipRemove;
 				if (!kind || !id) return;
+				if (kind === 'uncategorized') {
+					this.toggleWorkspaceFilterUncategorized();
+					return;
+				}
 				if (kind === 'group' || kind === 'workspace') {
 					this.removeWorkspaceFilterChip(kind, id);
 				}
@@ -2756,6 +2766,7 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private activeTagFilterCount(): number {
+		if (this.tagFilterNoTags) return 1;
 		return this.tagIncludeFilters.length + this.tagExcludeFilters.length;
 	}
 
@@ -2830,6 +2841,30 @@ export class StickyNoteDashboardView extends ItemView {
 			);
 			return;
 		}
+		if (this.tagFilterNoTags) {
+			const chip = chipsEl.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-tag-chip csn-dash-tag-chip--exclude',
+				attr: {
+					'data-csn-tag-chip': '@no-tags',
+					title: t('DASH_TAG_NO_TAGS'),
+					'aria-label': t('DASH_TAG_NO_TAGS')
+				}
+			});
+			chip.createSpan({ cls: 'csn-dash-tag-chip-text', text: t('DASH_TAG_NO_TAGS') });
+			const remove = chip.createEl('span', {
+				cls: 'csn-dash-tag-chip-remove',
+				attr: {
+					role: 'button',
+					tabindex: '0',
+					'data-csn-tag-chip-remove': '@no-tags',
+					'aria-label': t('DASH_TAG_NO_TAGS_CHIP_ARIA')
+				}
+			});
+			setIcon(remove, 'x');
+			return;
+		}
+		const includeMode = this.tagFilterLogic === 'not' ? 'exclude' : 'include';
 		const addChip = (tag: string, mode: 'include' | 'exclude') => {
 			const chip = chipsEl.createEl('button', {
 				type: 'button',
@@ -2852,14 +2887,21 @@ export class StickyNoteDashboardView extends ItemView {
 			});
 			setIcon(remove, 'x');
 		};
-		for (const tag of this.tagIncludeFilters) addChip(tag, 'include');
+		for (const tag of this.tagIncludeFilters) addChip(tag, includeMode);
 		for (const tag of this.tagExcludeFilters) addChip(tag, 'exclude');
 	}
 
 	private clearAllTagFilters(): void {
-		if (this.tagIncludeFilters.length === 0 && this.tagExcludeFilters.length === 0) return;
+		if (
+			this.tagIncludeFilters.length === 0 &&
+			this.tagExcludeFilters.length === 0 &&
+			!this.tagFilterNoTags
+		) {
+			return;
+		}
 		this.tagIncludeFilters = [];
 		this.tagExcludeFilters = [];
+		this.tagFilterNoTags = false;
 		this.listPageIndex = 0;
 		this.syncTagFilterButton();
 		if (this.isTagFilterPanelOpen()) this.renderTagPanelBody();
@@ -2867,6 +2909,15 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private removeTagFilter(tagRaw: string): void {
+		if (tagRaw === '@no-tags') {
+			if (!this.tagFilterNoTags) return;
+			this.tagFilterNoTags = false;
+			this.listPageIndex = 0;
+			this.syncTagFilterButton();
+			if (this.isTagFilterPanelOpen()) this.renderTagPanelBody();
+			void this.renderDash();
+			return;
+		}
 		const tag = normalizeStickyTag(tagRaw);
 		if (!tag) return;
 		this.tagIncludeFilters = this.tagIncludeFilters.filter(x => x !== tag);
@@ -2927,6 +2978,12 @@ export class StickyNoteDashboardView extends ItemView {
 			text: t('DASH_TAG_LOGIC_AND'),
 			attr: { 'aria-pressed': 'false' }
 		});
+		this.tagLogicNotBtn = logic.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-logic-btn',
+			text: t('DASH_TAG_LOGIC_NOT'),
+			attr: { 'aria-pressed': 'false' }
+		});
 		this.registerDomEvent(this.tagLogicOrBtn, 'click', () => {
 			this.tagFilterLogic = 'or';
 			this.syncTagLogicButtons();
@@ -2937,6 +2994,13 @@ export class StickyNoteDashboardView extends ItemView {
 			this.tagFilterLogic = 'and';
 			this.syncTagLogicButtons();
 			this.listPageIndex = 0;
+			void this.renderDash();
+		});
+		this.registerDomEvent(this.tagLogicNotBtn, 'click', () => {
+			this.tagFilterLogic = 'not';
+			this.syncTagLogicButtons();
+			this.listPageIndex = 0;
+			this.syncTagFilterButton();
 			void this.renderDash();
 		});
 
@@ -2994,8 +3058,10 @@ export class StickyNoteDashboardView extends ItemView {
 	private syncTagLogicButtons(): void {
 		this.tagLogicOrBtn?.toggleClass('is-active', this.tagFilterLogic === 'or');
 		this.tagLogicAndBtn?.toggleClass('is-active', this.tagFilterLogic === 'and');
+		this.tagLogicNotBtn?.toggleClass('is-active', this.tagFilterLogic === 'not');
 		this.tagLogicOrBtn?.setAttr('aria-pressed', this.tagFilterLogic === 'or' ? 'true' : 'false');
 		this.tagLogicAndBtn?.setAttr('aria-pressed', this.tagFilterLogic === 'and' ? 'true' : 'false');
+		this.tagLogicNotBtn?.setAttr('aria-pressed', this.tagFilterLogic === 'not' ? 'true' : 'false');
 	}
 
 	private toggleTagFilterPanel(): void {
@@ -3029,8 +3095,7 @@ export class StickyNoteDashboardView extends ItemView {
 			return;
 		}
 		let files = collectMarkdownUnderFolder(folderAbs);
-		const wsPaths = this.resolveWorkspacePathFilter();
-		if (wsPaths) files = files.filter(f => wsPaths.has(normalizePath(f.path)));
+		files = this.applyWorkspacePathFilters(files);
 		this.tagCatalog = collectStickyTagCatalog(this.app, files);
 	}
 
@@ -3040,7 +3105,7 @@ export class StickyNoteDashboardView extends ItemView {
 		if (!groupsEl || !listEl) return;
 
 		const selectedSet = new Set([...this.tagIncludeFilters, ...this.tagExcludeFilters]);
-		const selectedCount = selectedSet.size;
+		const selectedCount = selectedSet.size + (this.tagFilterNoTags ? 1 : 0);
 		const allCount = this.tagCatalog.length;
 
 		for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-tag-group-btn'))) {
@@ -3052,22 +3117,35 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 
 		const q = this.tagPanelSearch.trim().toLowerCase().replace(/^#/, '');
+		const noTagsLabel = t('DASH_TAG_NO_TAGS').toLowerCase();
+		const showNoTagsOption =
+			!q || noTagsLabel.includes(q) || '无标签'.includes(q) || 'untagged'.includes(q) || 'no tags'.includes(q);
+
 		let rows = this.tagCatalog;
 		if (this.tagPanelGroup === 'selected') {
-			rows = rows.filter(r => selectedSet.has(r.tag));
+			rows = this.tagFilterNoTags ? [] : rows.filter(r => selectedSet.has(r.tag));
 		}
 		if (q) {
 			rows = rows.filter(r => displayStickyTag(r.tag).toLowerCase().includes(q) || r.tag.includes(q));
 		}
 
 		listEl.empty();
-		if (rows.length === 0) {
+		if (this.tagPanelGroup === 'selected' && this.tagFilterNoTags && showNoTagsOption) {
+			this.appendTagNoTagsOption(listEl);
+			return;
+		}
+		if (rows.length === 0 && !(this.tagPanelGroup === 'all' && showNoTagsOption)) {
 			listEl.createDiv({ cls: 'csn-dash-tag-empty', text: t('DASH_TAG_EMPTY') });
 			return;
 		}
 
+		if (this.tagPanelGroup === 'all' && showNoTagsOption) {
+			this.appendTagNoTagsOption(listEl);
+		}
+
 		const include = new Set(this.tagIncludeFilters);
 		const exclude = new Set(this.tagExcludeFilters);
+		const includeLooksExcluded = this.tagFilterLogic === 'not';
 		for (const row of rows) {
 			const item = listEl.createEl('button', {
 				type: 'button',
@@ -3076,8 +3154,8 @@ export class StickyNoteDashboardView extends ItemView {
 			});
 			const check = item.createSpan({ cls: 'csn-dash-tag-check', attr: { 'aria-hidden': 'true' } });
 			if (include.has(row.tag)) {
-				item.addClass('is-included');
-				setIcon(check, 'check-square');
+				item.addClass(includeLooksExcluded ? 'is-excluded' : 'is-included');
+				setIcon(check, includeLooksExcluded ? 'x-square' : 'check-square');
 			} else if (exclude.has(row.tag)) {
 				item.addClass('is-excluded');
 				setIcon(check, 'x-square');
@@ -3091,9 +3169,41 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 	}
 
+	private appendTagNoTagsOption(listEl: HTMLElement): void {
+		const item = listEl.createEl('button', {
+			type: 'button',
+			cls: `csn-dash-tag-item csn-dash-tag-item--special${this.tagFilterNoTags ? ' is-excluded' : ''}`,
+			attr: { 'data-csn-tag': '@no-tags', 'aria-pressed': this.tagFilterNoTags ? 'true' : 'false' }
+		});
+		const check = item.createSpan({ cls: 'csn-dash-tag-check', attr: { 'aria-hidden': 'true' } });
+		setIcon(check, this.tagFilterNoTags ? 'x-square' : 'square');
+		const icon = item.createSpan({ cls: 'csn-dash-tag-icon', attr: { 'aria-hidden': 'true' } });
+		setIcon(icon, 'tag');
+		item.createSpan({ cls: 'csn-dash-tag-name', text: t('DASH_TAG_NO_TAGS') });
+	}
+
+	private toggleTagNoTags(): void {
+		if (this.tagFilterNoTags) {
+			this.tagFilterNoTags = false;
+		} else {
+			this.tagFilterNoTags = true;
+			this.tagIncludeFilters = [];
+			this.tagExcludeFilters = [];
+		}
+		this.listPageIndex = 0;
+		this.syncTagFilterButton();
+		this.renderTagPanelBody();
+		void this.renderDash();
+	}
+
 	private toggleTagInclude(tagRaw: string): void {
+		if (tagRaw === '@no-tags') {
+			this.toggleTagNoTags();
+			return;
+		}
 		const tag = normalizeStickyTag(tagRaw);
 		if (!tag) return;
+		this.tagFilterNoTags = false;
 		this.tagExcludeFilters = this.tagExcludeFilters.filter(x => x !== tag);
 		const i = this.tagIncludeFilters.indexOf(tag);
 		if (i >= 0) this.tagIncludeFilters.splice(i, 1);
@@ -3105,8 +3215,13 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private toggleTagExclude(tagRaw: string): void {
+		if (tagRaw === '@no-tags') {
+			this.toggleTagNoTags();
+			return;
+		}
 		const tag = normalizeStickyTag(tagRaw);
 		if (!tag) return;
+		this.tagFilterNoTags = false;
 		this.tagIncludeFilters = this.tagIncludeFilters.filter(x => x !== tag);
 		const i = this.tagExcludeFilters.indexOf(tag);
 		if (i >= 0) this.tagExcludeFilters.splice(i, 1);
@@ -4410,7 +4525,9 @@ export class StickyNoteDashboardView extends ItemView {
 			tagIncludeFilters: [...this.tagIncludeFilters],
 			tagExcludeFilters: [...this.tagExcludeFilters],
 			tagFilterLogic: this.tagFilterLogic,
+			tagFilterNoTags: this.tagFilterNoTags,
 			workspaceFilterLogic: this.workspaceFilterLogic,
+			workspaceFilterUncategorized: this.workspaceFilterUncategorized,
 			dateFilter: this.selectedDateFilter,
 			searchQuery: this.searchInput?.value ?? this.plugin.settings.dashboardFilters.searchQuery
 		});
@@ -4485,7 +4602,9 @@ export class StickyNoteDashboardView extends ItemView {
 		this.tagIncludeFilters = [...saved.tagIncludeFilters];
 		this.tagExcludeFilters = [...saved.tagExcludeFilters];
 		this.tagFilterLogic = saved.tagFilterLogic;
+		this.tagFilterNoTags = saved.tagFilterNoTags;
 		this.workspaceFilterLogic = saved.workspaceFilterLogic;
+		this.workspaceFilterUncategorized = saved.workspaceFilterUncategorized;
 		this.selectedDateFilter = saved.dateFilter;
 		if (saved.dateFilter?.kind === 'day') {
 			this.lastCalDateClickKey = saved.dateFilter.dateKey;
@@ -4544,8 +4663,11 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private setWorkspaceSel(next: DashWorkspaceSel): void {
-		if (this.workspaceSelEquals(next)) return;
+		if (this.workspaceSelEquals(next) && !(next.kind === 'selection' && this.workspaceFilterUncategorized)) {
+			return;
+		}
 		this.workspaceSel = next;
+		if (next.kind === 'selection') this.workspaceFilterUncategorized = false;
 		/* 点工作区树时退出智能区域；归档筛选保持用户当前选择 */
 		if (next.kind !== 'all') {
 			this.areaMode = 'all';
@@ -4643,6 +4765,12 @@ export class StickyNoteDashboardView extends ItemView {
 			text: t('DASH_TAG_LOGIC_AND'),
 			attr: { 'aria-pressed': 'false' }
 		});
+		this.wsLogicNotBtn = logic.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-tag-logic-btn',
+			text: t('DASH_TAG_LOGIC_NOT'),
+			attr: { 'aria-pressed': 'false' }
+		});
 		this.registerDomEvent(this.wsLogicOrBtn, 'click', () => {
 			this.workspaceFilterLogic = 'or';
 			this.syncWorkspaceLogicButtons();
@@ -4651,6 +4779,12 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 		this.registerDomEvent(this.wsLogicAndBtn, 'click', () => {
 			this.workspaceFilterLogic = 'and';
+			this.syncWorkspaceLogicButtons();
+			this.listPageIndex = 0;
+			void this.renderDash();
+		});
+		this.registerDomEvent(this.wsLogicNotBtn, 'click', () => {
+			this.workspaceFilterLogic = 'not';
 			this.syncWorkspaceLogicButtons();
 			this.listPageIndex = 0;
 			void this.renderDash();
@@ -4689,14 +4823,45 @@ export class StickyNoteDashboardView extends ItemView {
 	private syncWorkspaceLogicButtons(): void {
 		this.wsLogicOrBtn?.toggleClass('is-active', this.workspaceFilterLogic === 'or');
 		this.wsLogicAndBtn?.toggleClass('is-active', this.workspaceFilterLogic === 'and');
+		this.wsLogicNotBtn?.toggleClass('is-active', this.workspaceFilterLogic === 'not');
 		this.wsLogicOrBtn?.setAttr('aria-pressed', this.workspaceFilterLogic === 'or' ? 'true' : 'false');
 		this.wsLogicAndBtn?.setAttr('aria-pressed', this.workspaceFilterLogic === 'and' ? 'true' : 'false');
+		this.wsLogicNotBtn?.setAttr('aria-pressed', this.workspaceFilterLogic === 'not' ? 'true' : 'false');
 	}
 
 	private clearWorkspaceFilters(): void {
-		if (this.workspaceSel.kind !== 'selection') return;
-		this.setWorkspaceSel({ kind: 'all' });
+		const hadSel = this.workspaceSel.kind === 'selection';
+		const hadUncat = this.workspaceFilterUncategorized;
+		if (!hadSel && !hadUncat) return;
+		this.workspaceFilterUncategorized = false;
+		if (hadSel) this.setWorkspaceSel({ kind: 'all' });
+		else {
+			this.listPageIndex = 0;
+			this.syncWorkspaceFilterBar();
+			if (this.isWorkspaceFilterPanelOpen()) this.renderWorkspaceFilterPanelList();
+			void this.renderDash();
+		}
 		if (this.isWorkspaceFilterPanelOpen()) this.renderWorkspaceFilterPanelList();
+	}
+
+	private toggleWorkspaceFilterUncategorized(): void {
+		if (this.workspaceFilterUncategorized) {
+			this.workspaceFilterUncategorized = false;
+			this.listPageIndex = 0;
+			this.syncWorkspaceFilterBar();
+			if (this.isWorkspaceFilterPanelOpen()) this.renderWorkspaceFilterPanelList();
+			void this.renderDash();
+			return;
+		}
+		this.workspaceFilterUncategorized = true;
+		if (this.workspaceSel.kind === 'selection') {
+			this.setWorkspaceSel({ kind: 'all' });
+			return;
+		}
+		this.listPageIndex = 0;
+		this.syncWorkspaceFilterBar();
+		if (this.isWorkspaceFilterPanelOpen()) this.renderWorkspaceFilterPanelList();
+		void this.renderDash();
 	}
 
 	private openWorkspaceFilterPanel(opts?: { group?: 'selected' | 'all' }): void {
@@ -4765,9 +4930,10 @@ export class StickyNoteDashboardView extends ItemView {
 		list.empty();
 
 		const allRows = this.collectWorkspaceFilterPanelRows();
-		const selectedCount = allRows.filter(r =>
-			r.kind === 'group' ? this.isGroupSelActive(r.id) : this.isWorkspaceSelActive(r.id)
-		).length;
+		const selectedCount =
+			allRows.filter(r =>
+				r.kind === 'group' ? this.isGroupSelActive(r.id) : this.isWorkspaceSelActive(r.id)
+			).length + (this.workspaceFilterUncategorized ? 1 : 0);
 
 		if (groupsEl) {
 			for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-filter-panel-group-btn'))) {
@@ -4782,15 +4948,33 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 
 		const q = this.wsFilterPanelSearch.trim().toLowerCase();
+		const uncatLabel = t('DASH_WS_FILTER_UNCATEGORIZED').toLowerCase();
+		const showUncat =
+			!q ||
+			uncatLabel.includes(q) ||
+			'未分类'.includes(q) ||
+			'uncategorized'.includes(q);
+
 		let rows = allRows;
 		if (this.wsFilterPanelGroup === 'selected') {
-			rows = rows.filter(r =>
-				r.kind === 'group' ? this.isGroupSelActive(r.id) : this.isWorkspaceSelActive(r.id)
-			);
+			rows = this.workspaceFilterUncategorized
+				? []
+				: rows.filter(r =>
+						r.kind === 'group' ? this.isGroupSelActive(r.id) : this.isWorkspaceSelActive(r.id)
+					);
 		}
 		if (q) rows = rows.filter(r => r.label.toLowerCase().includes(q));
 
-		if (rows.length === 0) {
+		if (
+			this.wsFilterPanelGroup === 'selected' &&
+			this.workspaceFilterUncategorized &&
+			showUncat
+		) {
+			this.appendWorkspaceUncategorizedOption(list);
+			return;
+		}
+
+		if (rows.length === 0 && !(this.wsFilterPanelGroup === 'all' && showUncat)) {
 			list.createDiv({
 				cls: 'csn-dash-filter-panel-empty',
 				text: t('DASH_WS_FILTER_EMPTY')
@@ -4798,13 +4982,18 @@ export class StickyNoteDashboardView extends ItemView {
 			return;
 		}
 
+		if (this.wsFilterPanelGroup === 'all' && showUncat) {
+			this.appendWorkspaceUncategorizedOption(list);
+		}
+
+		const looksExcluded = this.workspaceFilterLogic === 'not';
 		for (const row of rows) {
 			const active =
 				row.kind === 'group' ? this.isGroupSelActive(row.id) : this.isWorkspaceSelActive(row.id);
 			const item = list.createEl('button', {
 				type: 'button',
 				cls: `csn-dash-filter-panel-item${row.indent ? ' is-indent' : ''}${
-					active ? ' is-selected' : ''
+					active ? (looksExcluded ? ' is-excluded' : ' is-selected') : ''
 				}`,
 				attr: { 'aria-pressed': active ? 'true' : 'false' }
 			});
@@ -4812,7 +5001,7 @@ export class StickyNoteDashboardView extends ItemView {
 				cls: 'csn-dash-filter-panel-item-check',
 				attr: { 'aria-hidden': 'true' }
 			});
-			setIcon(check, active ? 'check-square' : 'square');
+			setIcon(check, active ? (looksExcluded ? 'x-square' : 'check-square') : 'square');
 			const icon = item.createSpan({
 				cls: 'csn-dash-filter-panel-item-icon',
 				attr: { 'aria-hidden': 'true' }
@@ -4833,6 +5022,37 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 	}
 
+	private appendWorkspaceUncategorizedOption(list: HTMLElement): void {
+		const active = this.workspaceFilterUncategorized;
+		const item = list.createEl('button', {
+			type: 'button',
+			cls: `csn-dash-filter-panel-item csn-dash-filter-panel-item--special${
+				active ? ' is-excluded' : ''
+			}`,
+			attr: { 'aria-pressed': active ? 'true' : 'false' }
+		});
+		const check = item.createSpan({
+			cls: 'csn-dash-filter-panel-item-check',
+			attr: { 'aria-hidden': 'true' }
+		});
+		setIcon(check, active ? 'x-square' : 'square');
+		const icon = item.createSpan({
+			cls: 'csn-dash-filter-panel-item-icon',
+			attr: { 'aria-hidden': 'true' }
+		});
+		setIcon(icon, 'inbox');
+		item.createSpan({
+			cls: 'csn-dash-filter-panel-item-label',
+			text: t('DASH_WS_FILTER_UNCATEGORIZED')
+		});
+		this.registerDomEvent(item, 'click', (evt: MouseEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleWorkspaceFilterUncategorized();
+			this.renderWorkspaceFilterPanelList();
+		});
+	}
+
 	private syncWorkspaceFilterBar(): void {
 		const chipsEl = this.wsFilterChipsEl;
 		const addBtn = this.wsFilterAddBtn;
@@ -4840,23 +5060,53 @@ export class StickyNoteDashboardView extends ItemView {
 		chipsEl.empty();
 		const sel = this.workspaceSel;
 		const has = sel.kind === 'selection';
+		const hasUncat = this.workspaceFilterUncategorized;
 		if (addBtn) {
 			/* 仅面板打开时高亮；左侧树选中不应点亮 + 按钮 */
 			addBtn.toggleClass('is-active', this.isWorkspaceFilterPanelOpen());
 			addBtn.setAttr('aria-expanded', this.isWorkspaceFilterPanelOpen() ? 'true' : 'false');
 		}
-		if (!has) return;
+		if (!has && !hasUncat) return;
 
-		const count = sel.groupIds.length + sel.workspaceIds.length;
-		if (count > 1) {
+		const count =
+			sel.kind === 'selection' ? sel.groupIds.length + sel.workspaceIds.length : 0;
+		const total = count + (hasUncat ? 1 : 0);
+		if (total > 1) {
 			this.appendFilterMoreChip(
 				chipsEl,
 				'csn-dash-ws-filter-chip',
-				count,
+				total,
 				() => this.openWorkspaceFilterPanel({ group: 'selected' }),
 				() => this.clearWorkspaceFilters(),
 				t('DASH_WS_FILTER_CLEAR_ARIA')
 			);
+			return;
+		}
+
+		if (hasUncat) {
+			const label = t('DASH_WS_FILTER_UNCATEGORIZED');
+			const chip = chipsEl.createEl('button', {
+				type: 'button',
+				cls: 'csn-dash-ws-filter-chip csn-dash-ws-filter-chip--uncategorized',
+				attr: { title: label, 'aria-label': label }
+			});
+			const icon = chip.createSpan({
+				cls: 'csn-dash-ws-filter-chip-icon',
+				attr: { 'aria-hidden': 'true' }
+			});
+			setIcon(icon, 'inbox');
+			chip.createSpan({ cls: 'csn-dash-ws-filter-chip-text', text: label });
+			const remove = chip.createEl('span', {
+				cls: 'csn-dash-ws-filter-chip-remove',
+				attr: {
+					role: 'button',
+					tabindex: '0',
+					'data-csn-ws-chip-kind': 'uncategorized',
+					'data-csn-ws-chip-remove': '@uncategorized',
+					'aria-label': t('DASH_WS_FILTER_UNCATEGORIZED_CHIP_ARIA')
+				}
+			});
+			setIcon(remove, 'x');
 			return;
 		}
 
@@ -4868,10 +5118,11 @@ export class StickyNoteDashboardView extends ItemView {
 			file.trash.find(w => w.id === id)?.name ??
 			id;
 
+		const chipMode = this.workspaceFilterLogic === 'not' ? 'exclude' : 'include';
 		const addChip = (kind: 'group' | 'workspace', id: string, label: string) => {
 			const chip = chipsEl.createEl('button', {
 				type: 'button',
-				cls: `csn-dash-ws-filter-chip csn-dash-ws-filter-chip--${kind}`,
+				cls: `csn-dash-ws-filter-chip csn-dash-ws-filter-chip--${kind} csn-dash-ws-filter-chip--${chipMode}`,
 				attr: {
 					title: label,
 					'aria-label': label
@@ -4896,8 +5147,9 @@ export class StickyNoteDashboardView extends ItemView {
 			setIcon(remove, 'x');
 		};
 
-		for (const id of sel.groupIds) addChip('group', id, groupName(id));
-		for (const id of sel.workspaceIds) addChip('workspace', id, wsName(id));
+		for (const id of sel.kind === 'selection' ? sel.groupIds : []) addChip('group', id, groupName(id));
+		for (const id of sel.kind === 'selection' ? sel.workspaceIds : [])
+			addChip('workspace', id, wsName(id));
 	}
 
 	private clearTreeDropTargets(): void {
@@ -5795,24 +6047,39 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 		if (criteria.length === 0) return new Set();
 
-		if (this.workspaceFilterLogic !== 'and') {
-			const union = new Set<string>();
-			for (const set of criteria) {
-				for (const p of set) union.add(p);
+		/* and：交集；or / not：并集（not 在 apply 时取反） */
+		if (this.workspaceFilterLogic === 'and') {
+			let inter = new Set(criteria[0]!);
+			for (let i = 1; i < criteria.length; i++) {
+				const next = criteria[i]!;
+				const kept = new Set<string>();
+				for (const p of inter) {
+					if (next.has(p)) kept.add(p);
+				}
+				inter = kept;
 			}
-			return union;
+			return inter;
 		}
 
-		let inter = new Set(criteria[0]!);
-		for (let i = 1; i < criteria.length; i++) {
-			const next = criteria[i]!;
-			const kept = new Set<string>();
-			for (const p of inter) {
-				if (next.has(p)) kept.add(p);
-			}
-			inter = kept;
+		const union = new Set<string>();
+		for (const set of criteria) {
+			for (const p of set) union.add(p);
 		}
-		return inter;
+		return union;
+	}
+
+	/** 应用工作区筛选（含「不包含」与「未分类」）。 */
+	private applyWorkspacePathFilters(files: TFile[]): TFile[] {
+		if (this.workspaceFilterUncategorized) {
+			const assigned = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
+			return files.filter(f => !assigned.has(normalizePath(f.path)));
+		}
+		const wsPaths = this.resolveWorkspacePathFilter();
+		if (!wsPaths) return files;
+		if (this.workspaceFilterLogic === 'not') {
+			return files.filter(f => !wsPaths.has(normalizePath(f.path)));
+		}
+		return files.filter(f => wsPaths.has(normalizePath(f.path)));
 	}
 
 	private selectedCreateColor(): StickyColorId {
@@ -5984,9 +6251,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private refreshComposerTagCatalogs(): void {
 		const allSticky = this.listStickyFolderFiles();
 		this.composerTagCatalogSticky = collectStickyTagCatalog(this.app, allSticky);
-		const wsPaths = this.resolveWorkspacePathFilter();
-		const currentFiles =
-			wsPaths == null ? allSticky : allSticky.filter(f => wsPaths.has(normalizePath(f.path)));
+		const currentFiles = this.applyWorkspacePathFilters(allSticky);
 		this.composerTagCatalogCurrent = collectStickyTagCatalog(this.app, currentFiles);
 		this.composerTagCatalogVault = collectVaultTagCatalog(this.app);
 	}
@@ -6881,7 +7146,8 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private buildDashFilterKey(
 		workspaceSel: DashWorkspaceSel,
-		workspaceLogic: 'and' | 'or',
+		workspaceLogic: 'and' | 'or' | 'not',
+		workspaceUncategorized: boolean,
 		dateFilter: StickyDateFilter | null,
 		query: string,
 		colorFilters: readonly StickyColorId[],
@@ -6889,13 +7155,15 @@ export class StickyNoteDashboardView extends ItemView {
 		archiveFilter: NoteListArchiveFilter,
 		tagInclude: readonly string[],
 		tagExclude: readonly string[],
-		tagLogic: 'and' | 'or',
+		tagLogic: 'and' | 'or' | 'not',
+		tagNoTags: boolean,
 		sortMode: NoteListSort,
 		pageSize: number
 	): string {
 		return JSON.stringify({
 			workspaceSel,
 			workspaceLogic,
+			workspaceUncategorized,
 			dateFilter: stickyDateFilterKey(dateFilter),
 			search: query,
 			colors: [...colorFilters].sort(),
@@ -6904,6 +7172,7 @@ export class StickyNoteDashboardView extends ItemView {
 			tagInclude: [...tagInclude].sort(),
 			tagExclude: [...tagExclude].sort(),
 			tagLogic,
+			tagNoTags,
 			sort: sortMode,
 			pageSize
 		});
@@ -6911,7 +7180,8 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private buildDashStructureKey(
 		workspaceSel: DashWorkspaceSel,
-		workspaceLogic: 'and' | 'or',
+		workspaceLogic: 'and' | 'or' | 'not',
+		workspaceUncategorized: boolean,
 		dateFilter: StickyDateFilter | null,
 		query: string,
 		colorFilters: readonly StickyColorId[],
@@ -6919,7 +7189,8 @@ export class StickyNoteDashboardView extends ItemView {
 		archiveFilter: NoteListArchiveFilter,
 		tagInclude: readonly string[],
 		tagExclude: readonly string[],
-		tagLogic: 'and' | 'or',
+		tagLogic: 'and' | 'or' | 'not',
+		tagNoTags: boolean,
 		sortMode: NoteListSort,
 		pageSize: number,
 		prioPath: string | null,
@@ -6930,6 +7201,7 @@ export class StickyNoteDashboardView extends ItemView {
 			filter: this.buildDashFilterKey(
 				workspaceSel,
 				workspaceLogic,
+				workspaceUncategorized,
 				dateFilter,
 				query,
 				colorFilters,
@@ -6938,6 +7210,7 @@ export class StickyNoteDashboardView extends ItemView {
 				tagInclude,
 				tagExclude,
 				tagLogic,
+				tagNoTags,
 				sortMode,
 				pageSize
 			),
@@ -7084,6 +7357,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const filterKey = this.buildDashFilterKey(
 			this.workspaceSel,
 			this.workspaceFilterLogic,
+			this.workspaceFilterUncategorized,
 			this.selectedDateFilter,
 			query,
 			this.colorFilters,
@@ -7092,6 +7366,7 @@ export class StickyNoteDashboardView extends ItemView {
 			this.tagIncludeFilters,
 			this.tagExcludeFilters,
 			this.tagFilterLogic,
+			this.tagFilterNoTags,
 			sortMode,
 			pageSize
 		);
@@ -7100,6 +7375,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const structureKey = this.buildDashStructureKey(
 			this.workspaceSel,
 			this.workspaceFilterLogic,
+			this.workspaceFilterUncategorized,
 			this.selectedDateFilter,
 			query,
 			this.colorFilters,
@@ -7108,6 +7384,7 @@ export class StickyNoteDashboardView extends ItemView {
 			this.tagIncludeFilters,
 			this.tagExcludeFilters,
 			this.tagFilterLogic,
+			this.tagFilterNoTags,
 			sortMode,
 			pageSize,
 			prio,
@@ -7178,8 +7455,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 			let files = collectMarkdownUnderFolder(folderAbs);
 			await this.refreshAreaCounts(files);
-			const wsPaths = this.resolveWorkspacePathFilter();
-			if (wsPaths) files = files.filter(f => wsPaths.has(normalizePath(f.path)));
+			files = this.applyWorkspacePathFilters(files);
 
 			const keywords = query
 				.split(/\s+/)
@@ -7196,7 +7472,8 @@ export class StickyNoteDashboardView extends ItemView {
 				files,
 				this.tagIncludeFilters,
 				this.tagExcludeFilters,
-				this.tagFilterLogic
+				this.tagFilterLogic,
+				{ noTags: this.tagFilterNoTags }
 			);
 			files = this.applyAreaModeFilters(files);
 
@@ -7244,6 +7521,7 @@ export class StickyNoteDashboardView extends ItemView {
 			const filterKey = this.buildDashFilterKey(
 				this.workspaceSel,
 				this.workspaceFilterLogic,
+				this.workspaceFilterUncategorized,
 				this.selectedDateFilter,
 				query,
 				this.colorFilters,
@@ -7252,12 +7530,14 @@ export class StickyNoteDashboardView extends ItemView {
 				this.tagIncludeFilters,
 				this.tagExcludeFilters,
 				this.tagFilterLogic,
+				this.tagFilterNoTags,
 				sortMode,
 				pageSize
 			);
 			const structureKey = this.buildDashStructureKey(
 				this.workspaceSel,
 				this.workspaceFilterLogic,
+				this.workspaceFilterUncategorized,
 				this.selectedDateFilter,
 				query,
 				this.colorFilters,
@@ -7266,6 +7546,7 @@ export class StickyNoteDashboardView extends ItemView {
 				this.tagIncludeFilters,
 				this.tagExcludeFilters,
 				this.tagFilterLogic,
+				this.tagFilterNoTags,
 				sortMode,
 				pageSize,
 				prio,

@@ -2378,6 +2378,12 @@ a.tag.csn-sticky-tag-item {
   outline: none !important;
   box-shadow: none !important;
 }
+.csn-dash-ws-filter-chip--exclude,
+.csn-dash-ws-filter-chip--uncategorized {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  opacity: 0.9;
+}
 .csn-dash-ws-filter-chip-icon {
   display: inline-flex;
   align-items: center;
@@ -2917,6 +2923,9 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-filter-panel-item.is-selected {
   background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
 }
+.csn-dash-filter-panel-item.is-excluded {
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
 .csn-dash-filter-panel-item-check,
 .csn-dash-filter-panel-item-icon {
   display: inline-flex;
@@ -2931,6 +2940,13 @@ a.tag.csn-sticky-tag-item {
 }
 .csn-dash-filter-panel-item.is-selected .csn-dash-filter-panel-item-check {
   color: var(--interactive-accent);
+}
+.csn-dash-filter-panel-item.is-excluded .csn-dash-filter-panel-item-check {
+  color: var(--text-muted);
+}
+.csn-dash-filter-panel-item.is-excluded .csn-dash-filter-panel-item-label {
+  text-decoration: line-through;
+  color: var(--text-muted);
 }
 .csn-dash-filter-panel-item-label {
   min-width: 0;
