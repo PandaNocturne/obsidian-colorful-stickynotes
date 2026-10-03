@@ -66,6 +66,17 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_MAIN_DBLCLICK_TO_SOURCE_DESC:
 		'阅读（预览）模式下，双击便笺主体区域（.csn-sticky-main）进入编辑模式。不作用于设置抽屉、底栏与预览内链接。',
 
+	SETTINGS_STICKY_TAG_TOOLBAR_NAME: '便笺标签工具栏',
+	SETTINGS_STICKY_TAG_TOOLBAR_DESC:
+		'在悬浮便笺与列表/仪表盘卡片底部显示 YAML 标签，并提供 + 按钮添加标签。',
+	STICKY_TAG_TOOLBAR_ARIA: '便笺标签',
+	STICKY_TAG_ADD_ARIA: '添加标签',
+	STICKY_TAG_CHIP_REMOVE_ARIA: '移除标签 {tag}',
+	STICKY_TAG_NEW_MENU: '新建标签…',
+	STICKY_TAG_NEW_TITLE: '添加标签',
+	STICKY_TAG_NEW_NAME: '标签',
+	STICKY_TAG_NEW_PLACEHOLDER: '名称或 层级/路径',
+
 	SETTINGS_HEADING_ASSIST_FEATURES: '辅助功能',
 	SETTINGS_AUTO_DELETE_BLANK_NAME: '自动删除空白便笺',
 	SETTINGS_AUTO_DELETE_BLANK_DESC:
@@ -266,14 +277,15 @@ export const zhCn: Record<MessageKey, string> = {
 	DASH_LEFT_PANE_TOGGLE_ARIA: '显示或隐藏左侧栏',
 	DASH_WS_FILTER_ALL: '全部',
 	DASH_ATTR_LABEL: '状态：',
-	DASH_AREA_LABEL: '智能区域',
-	DASH_AREA_VISIBILITY_ARIA: '设置要显示的智能区域',
+	DASH_AREA_LABEL: '快速访问',
+	DASH_AREA_VISIBILITY_ARIA: '设置要显示的快速访问项',
 	DASH_AREA_VISIBILITY_HINT: '可连续勾选多项，点外部关闭',
-	DASH_AREA_VISIBILITY_KEEP_ONE: '请至少保留一个智能区域',
+	DASH_AREA_VISIBILITY_KEEP_ONE: '请至少保留一个快速访问项',
 	DASH_LEFT_PANEL_TOGGLE_ARIA: '折叠或展开{title}',
 	DASH_AREA_ALL: '全部',
 	DASH_AREA_UNGROUPED: '未分组',
 	DASH_AREA_UNCATEGORIZED: '未分类',
+	DASH_AREA_UNTAGGED: '未标签',
 	DASH_AREA_RECENT: '最近使用',
 	DASH_AREA_RANDOM: '随机模式',
 	DASH_AREA_ARCHIVED: '已归档',

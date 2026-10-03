@@ -1,0 +1,192 @@
+/* 便笺 YAML 标签工具栏：悬浮窗底栏 / 列表与仪表盘卡片底栏 */
+
+.csn-sticky-tag-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 28px;
+	padding: 4px 8px;
+	box-sizing: border-box;
+	border-top: 1px solid var(--background-modifier-border);
+	background: color-mix(in srgb, var(--background-primary) 88%, transparent);
+}
+
+.csn-sticky-tag-toolbar.is-hidden {
+	display: none !important;
+}
+
+.csn-sticky-tag-toolbar-chips {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.csn-sticky-tag-item.tag,
+a.tag.csn-sticky-tag-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	max-width: 100%;
+	line-height: 1.2;
+	vertical-align: middle;
+	text-decoration: none;
+	cursor: pointer;
+	box-sizing: border-box;
+}
+
+.csn-sticky-tag-label {
+	display: inline-block;
+	max-width: 12em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.csn-sticky-tag-chip-x {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 14px;
+	height: 14px;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: inherit;
+	opacity: 0.75;
+	cursor: pointer;
+}
+
+.csn-sticky-tag-chip-x:hover {
+	opacity: 1;
+	background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.csn-sticky-tag-chip-x svg {
+	width: 11px;
+	height: 11px;
+}
+
+.csn-sticky-tag-toolbar-add {
+	flex: 0 0 auto;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+}
+
+.csn-sticky-tag-toolbar-add.is-active {
+	color: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+}
+
+.csn-sticky-tag-toolbar-add:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.csn-sticky-tag-toolbar-add.svg,
+.csn-sticky-tag-toolbar-add svg {
+	width: 14px;
+	height: 14px;
+}
+
+.csn-sticky-tag-toolbar-add-wrap {
+	position: relative;
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+}
+
+/* 挂到 body 后由 TS 写 fixed 坐标；层级须高于悬浮便笺 */
+.csn-sticky-tag-picker-panel.csn-sticky-tag-picker--portaled {
+	position: fixed;
+	z-index: calc(var(--layer-slides, 9999) + 20);
+}
+
+/* 全屏透明遮罩：点便笺 / 其它区域即可关闭选择器 */
+.csn-sticky-tag-picker-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: calc(var(--layer-slides, 9999) + 19);
+	background: transparent;
+}
+
+/* 未 portal 时的向上弹出兜底（关闭态仍在 host 内） */
+.csn-sticky-tag-picker--above:not(.csn-sticky-tag-picker--portaled),
+.csn-sticky-tag-toolbar .csn-dash-composer-tag-panel.csn-sticky-tag-picker--above:not(
+		.csn-sticky-tag-picker--portaled
+	) {
+	top: auto;
+	bottom: calc(100% + 6px);
+	left: auto;
+	right: 0;
+}
+
+/* 悬浮便笺：贴 main 底部，正文预留高度 */
+.csn-sticky-tag-toolbar--floating {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 28;
+	background: var(--csn-b, var(--background-primary));
+	border-top-color: var(--csn-border, var(--background-modifier-border));
+}
+
+.csn-sticky.csn-has-sticky-tag-toolbar .csn-sticky-body {
+	padding-bottom: 34px;
+}
+
+.csn-sticky--collapsed .csn-sticky-tag-toolbar--floating {
+	display: none !important;
+}
+
+/* 卡片：参与纵向 flex，压缩正文区；背景与正文预览区同色 */
+.csn-sticky-tag-toolbar--card {
+	flex: 0 0 auto;
+	flex-shrink: 0;
+	position: relative;
+	z-index: 2;
+	width: 100%;
+	padding: 3px 6px 4px;
+	min-height: 26px;
+	/* 与 `.csn-list-card-body--rendered` 一致：半透明预览底叠在卡片色上 */
+	background: var(--csn-list-preview-bg, var(--csn-list-card-bg, var(--background-primary)));
+	border-top-color: var(--csn-list-preview-border, var(--csn-list-card-head-border, var(--background-modifier-border)));
+}
+
+/* 有标签栏时：正文让出底部空间，禁止预览溢出盖住工具栏 */
+.csn-list-card.csn-has-sticky-tag-toolbar {
+	display: flex;
+	flex-direction: column;
+}
+
+.csn-list-card.csn-has-sticky-tag-toolbar .csn-list-card-main {
+	height: auto;
+	flex: 1 1 0;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.csn-list-card.csn-has-sticky-tag-toolbar .csn-list-card-body,
+.csn-list-card.csn-has-sticky-tag-toolbar .csn-list-card-body--rendered {
+	max-height: 100%;
+	/* 即便全局开启「预览溢出可见」，也不应盖住底栏标签 */
+	overflow: auto;
+}
+
+/* 打开标签选择器时允许面板溢出卡片 */
+.csn-list-card:has(.csn-dash-composer-tag-panel:not(.csn-dash-composer-tag-panel--hidden)) {
+	overflow: visible;
+	z-index: 40;
+}

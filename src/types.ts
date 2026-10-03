@@ -127,11 +127,12 @@ export type DashWorkspaceSel =
 	| { kind: 'all' }
 	| { kind: 'selection'; groupIds: string[]; workspaceIds: string[] };
 
-/** 仪表盘「区域管理」互斥模式。 */
+/** 仪表盘「快速访问」互斥模式。 */
 export type DashAreaMode =
 	| 'all'
 	| 'ungrouped'
 	| 'uncategorized'
+	| 'untagged'
 	| 'recent'
 	| 'random'
 	| 'archived';

@@ -22,12 +22,13 @@ const VALID_DASH_AREA_MODE: readonly DashAreaMode[] = [
 	'all',
 	'ungrouped',
 	'uncategorized',
+	'untagged',
 	'recent',
 	'random',
 	'archived'
 ];
 
-/** 仪表盘「区域管理」默认可显示的全部模式。 */
+/** 仪表盘「快速访问」默认可显示的全部模式。 */
 export const DEFAULT_DASH_VISIBLE_AREA_MODES: DashAreaMode[] = [...VALID_DASH_AREA_MODE];
 
 export function normalizeDashboardVisibleAreaModes(raw: unknown): DashAreaMode[] {
@@ -42,7 +43,14 @@ export function normalizeDashboardVisibleAreaModes(raw: unknown): DashAreaMode[]
 		seen.add(mode);
 		out.push(mode);
 	}
-	return out.length > 0 ? out : [...DEFAULT_DASH_VISIBLE_AREA_MODES];
+	if (out.length === 0) return [...DEFAULT_DASH_VISIBLE_AREA_MODES];
+	/* 旧配置无「未标签」时默认插入到「未分类」之后并可见 */
+	if (!seen.has('untagged')) {
+		const idx = out.indexOf('uncategorized');
+		if (idx >= 0) out.splice(idx + 1, 0, 'untagged');
+		else out.push('untagged');
+	}
+	return out;
 }
 const VALID_DASH_ARCHIVE_FILTER: readonly NoteListArchiveFilter[] = ['all', 'unarchived', 'archived'];
 const VALID_DASH_COLOR: readonly StickyColorId[] = [
@@ -360,6 +368,8 @@ export interface ColorfulStickyNotesSettings {
 	stickyHeaderDoubleClickStretch: boolean;
 	/** 阅读（预览）模式下，双击便笺主体区域（.csn-sticky-main）切换到编辑模式。 */
 	stickyMainDoubleClickToEdit: boolean;
+	/** 便笺卡片与悬浮便笺底部显示 YAML 标签工具栏。 */
+	stickyTagToolbarEnabled: boolean;
 	/** 辅助对齐吸附的触发方式：`none` 关闭；`auto` 拖动即吸附；`ctrl` 未绑定时按住 Ctrl 吸附，已在绑定组时按住 Ctrl 解绑。 */
 	stickyAssistAlignSnapMode: StickyAssistAlignSnapMode;
 	/** 吸附阈值（px）。 */
@@ -465,6 +475,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	stickyEdgeAutoStretchHeight: false,
 	stickyHeaderDoubleClickStretch: false,
 	stickyMainDoubleClickToEdit: true,
+	stickyTagToolbarEnabled: true,
 	stickyAssistAlignSnapMode: 'ctrl',
 	stickyAssistAlignSnapThresholdPx: 10,
 	stickyAssistAlignSnapUnbindRangeMultiplier: 2,
@@ -897,6 +908,17 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				toggle.setValue(this.plugin.settings.stickyMainDoubleClickToEdit).onChange(async v => {
 					this.plugin.settings.stickyMainDoubleClickToEdit = v;
 					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName(t('SETTINGS_STICKY_TAG_TOOLBAR_NAME'))
+			.setDesc(t('SETTINGS_STICKY_TAG_TOOLBAR_DESC'))
+			.addToggle(toggle =>
+				toggle.setValue(this.plugin.settings.stickyTagToolbarEnabled).onChange(async v => {
+					this.plugin.settings.stickyTagToolbarEnabled = v;
+					await this.plugin.saveSettings();
+					this.plugin.syncStickyTagToolbarToOpenViews();
 				})
 			);
 

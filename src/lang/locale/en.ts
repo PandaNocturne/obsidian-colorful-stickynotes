@@ -71,6 +71,17 @@ export const en = {
 	SETTINGS_MAIN_DBLCLICK_TO_SOURCE_DESC:
 		'In Read (preview) mode, double-click the sticky body area (.csn-sticky-main) to switch to edit mode. Ignores the settings sheet, bottom bar, and links in preview.',
 
+	SETTINGS_STICKY_TAG_TOOLBAR_NAME: 'Sticky tag toolbar',
+	SETTINGS_STICKY_TAG_TOOLBAR_DESC:
+		'Show YAML tags at the bottom of floating stickies and list/dashboard cards, with a + button to add tags.',
+	STICKY_TAG_TOOLBAR_ARIA: 'Sticky note tags',
+	STICKY_TAG_ADD_ARIA: 'Add tag',
+	STICKY_TAG_CHIP_REMOVE_ARIA: 'Remove tag {tag}',
+	STICKY_TAG_NEW_MENU: 'New tag…',
+	STICKY_TAG_NEW_TITLE: 'Add tag',
+	STICKY_TAG_NEW_NAME: 'Tag',
+	STICKY_TAG_NEW_PLACEHOLDER: 'name or nested/path',
+
 	SETTINGS_HEADING_ASSIST_FEATURES: 'Assistive features',
 	SETTINGS_AUTO_DELETE_BLANK_NAME: 'Auto-delete empty stickies',
 	SETTINGS_AUTO_DELETE_BLANK_DESC:
@@ -280,14 +291,15 @@ export const en = {
 	DASH_LEFT_PANE_TOGGLE_ARIA: 'Show or hide left sidebar',
 	DASH_WS_FILTER_ALL: 'All',
 	DASH_ATTR_LABEL: 'Status:',
-	DASH_AREA_LABEL: 'Smart areas',
-	DASH_AREA_VISIBILITY_ARIA: 'Configure which smart areas to show',
+	DASH_AREA_LABEL: 'Quick access',
+	DASH_AREA_VISIBILITY_ARIA: 'Configure which quick access items to show',
 	DASH_AREA_VISIBILITY_HINT: 'Toggle multiple items; click outside to close',
-	DASH_AREA_VISIBILITY_KEEP_ONE: 'Keep at least one smart area visible',
+	DASH_AREA_VISIBILITY_KEEP_ONE: 'Keep at least one quick access item visible',
 	DASH_LEFT_PANEL_TOGGLE_ARIA: 'Collapse or expand {title}',
 	DASH_AREA_ALL: 'All',
 	DASH_AREA_UNGROUPED: 'Ungrouped',
 	DASH_AREA_UNCATEGORIZED: 'Uncategorized',
+	DASH_AREA_UNTAGGED: 'Untagged',
 	DASH_AREA_RECENT: 'Recent',
 	DASH_AREA_RANDOM: 'Random',
 	DASH_AREA_ARCHIVED: 'Archived',

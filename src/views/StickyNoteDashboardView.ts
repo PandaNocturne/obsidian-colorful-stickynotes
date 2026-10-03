@@ -80,11 +80,16 @@ import {
 	collectVaultTagCatalog,
 	displayStickyTag,
 	filterStickyFilesByTags,
+	getStickyTagsForFile,
 	normalizeStickyTag,
 	writeStickyTagsToFile,
 	type StickyTagCount,
 	type StickyTagTreeNode
 } from '../utils/sticky-tags-from-file';
+import {
+	mountStickyTagToolbar,
+	type StickyTagToolbarHandle
+} from '../utils/sticky-tag-toolbar';
 import {
 	dragEventHasMime,
 	readStickyPathsDragData,
@@ -109,6 +114,7 @@ const DASH_AREA_MODE_SPECS: Array<{
 	{ mode: 'all', titleKey: 'DASH_AREA_ALL', icon: 'inbox', showCount: true },
 	{ mode: 'ungrouped', titleKey: 'DASH_AREA_UNGROUPED', icon: 'folder-x', showCount: true },
 	{ mode: 'uncategorized', titleKey: 'DASH_AREA_UNCATEGORIZED', icon: 'layers', showCount: true },
+	{ mode: 'untagged', titleKey: 'DASH_AREA_UNTAGGED', icon: 'tag', showCount: true },
 	{ mode: 'recent', titleKey: 'DASH_AREA_RECENT', icon: 'clock', showCount: false },
 	{ mode: 'random', titleKey: 'DASH_AREA_RANDOM', icon: 'shuffle', showCount: false },
 	{ mode: 'archived', titleKey: 'DASH_AREA_ARCHIVED', icon: 'archive', showCount: true }
@@ -344,6 +350,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	/** 每张列表卡片嵌入预览各自一个 Component，便于翻页时按路径卸载/复用。 */
 	private readonly listCardMarkdownHosts = new Map<string, Component>();
+	private readonly cardTagToolbars = new WeakMap<HTMLElement, StickyTagToolbarHandle>();
 	private gridDelegatedEvents = false;
 	/** 上次渲染的仪表盘结构指纹；一致时翻页可走 DOM 增量。 */
 	private lastDashStructureKey = '';
@@ -607,6 +614,54 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		});
 		this.applyComposerContentZoom(zoom);
+	}
+
+	/** 同步「便笺标签工具栏」开关到当前页卡片。 */
+	syncStickyTagToolbarFromSettings(): void {
+		const enabled = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		this.gridEl?.querySelectorAll('.csn-list-card').forEach(node => {
+			if (!(node instanceof HTMLElement)) return;
+			if (enabled) {
+				if (!this.cardTagToolbars.has(node)) this.attachCardTagToolbar(node);
+				else this.cardTagToolbars.get(node)?.setEnabled(true);
+			} else {
+				this.detachCardTagToolbar(node);
+			}
+		});
+	}
+
+	private attachCardTagToolbar(card: HTMLElement): void {
+		this.detachCardTagToolbar(card);
+		if (!this.plugin.settings.stickyTagToolbarEnabled) return;
+		const handle = mountStickyTagToolbar(card, {
+			app: this.app,
+			getFile: () => {
+				const path = card.dataset.csnNotePath;
+				if (!path) return null;
+				const abs = this.app.vault.getAbstractFileByPath(normalizePath(path));
+				return abs instanceof TFile ? abs : null;
+			},
+			enabled: true,
+			variant: 'card',
+			stickyFolder: this.plugin.settings.stickyFolder
+		});
+		this.cardTagToolbars.set(card, handle);
+	}
+
+	private detachCardTagToolbar(card: HTMLElement): void {
+		const h = this.cardTagToolbars.get(card);
+		if (!h) return;
+		h.destroy();
+		this.cardTagToolbars.delete(card);
+	}
+
+	private ensureCardTagToolbar(card: HTMLElement): void {
+		if (!this.plugin.settings.stickyTagToolbarEnabled) {
+			this.detachCardTagToolbar(card);
+			return;
+		}
+		if (!this.cardTagToolbars.has(card)) this.attachCardTagToolbar(card);
+		else this.cardTagToolbars.get(card)?.refresh();
 	}
 
 	private applyComposerContentZoom(zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom)): void {
@@ -1462,7 +1517,8 @@ export class StickyNoteDashboardView extends ItemView {
 			if (
 				hit.closest('.csn-list-card-pin-btn') ||
 				hit.closest('.csn-list-card-menu-btn') ||
-				hit.closest('.csn-list-card-archive-wrap')
+				hit.closest('.csn-list-card-archive-wrap') ||
+				hit.closest('.csn-sticky-tag-toolbar')
 			) {
 				return;
 			}
@@ -2431,11 +2487,15 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private setAreaMode(mode: DashAreaMode): void {
 		const same = this.areaMode === mode && this.workspaceSel.kind === 'all';
-		if (same && mode !== 'random') return;
+		if (same) {
+			/* 「全部」已是默认态；其它项二次点击取消选中 */
+			if (mode === 'all') return;
+			mode = 'all';
+		}
 		this.areaMode = mode;
 		this.archiveFilter = mode === 'archived' ? 'archived' : 'unarchived';
 		this.workspaceSel = { kind: 'all' };
-		/* 进入/再次点击随机模式时重新洗牌 */
+		/* 进入随机模式时重新洗牌（取消选中不保留旧顺序） */
 		this.randomOrderPaths = null;
 		this.listPageIndex = 0;
 		this.renderAreaNav();
@@ -2643,6 +2703,7 @@ export class StickyNoteDashboardView extends ItemView {
 		let all = 0;
 		let ungrouped = 0;
 		let uncategorized = 0;
+		let untagged = 0;
 		let archived = 0;
 		for (const f of allFiles) {
 			const isArchived = await resolveStickyArchivedForFile(this.app, f);
@@ -2654,8 +2715,9 @@ export class StickyNoteDashboardView extends ItemView {
 			const path = normalizePath(f.path);
 			if (!assigned.has(path)) uncategorized++;
 			else if (ungroupedPaths.has(path)) ungrouped++;
+			if (getStickyTagsForFile(this.app, f).length === 0) untagged++;
 		}
-		this.areaCounts = { all, ungrouped, uncategorized, archived };
+		this.areaCounts = { all, ungrouped, uncategorized, untagged, archived };
 		this.syncAreaCountLabels();
 	}
 
@@ -6635,17 +6697,21 @@ export class StickyNoteDashboardView extends ItemView {
 		await this.renderCardPreview(previewEl, f);
 		card.dataset.csnEmbedMtime = String(f.stat.mtime);
 		this.syncPinButton(card, f.path, pinnedSet);
+		this.ensureCardTagToolbar(card);
 		return card;
 	}
 
 	private async maybeRefreshCardPreview(card: HTMLElement, f: TFile): Promise<void> {
 		const cur = card.dataset.csnEmbedMtime ?? '';
 		const next = String(f.stat.mtime);
-		if (cur === next) return;
-		const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
-		if (!(previewEl instanceof HTMLElement)) return;
-		await this.renderCardPreview(previewEl, f);
-		card.dataset.csnEmbedMtime = next;
+		if (cur !== next) {
+			const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
+			if (previewEl instanceof HTMLElement) {
+				await this.renderCardPreview(previewEl, f);
+				card.dataset.csnEmbedMtime = next;
+			}
+		}
+		this.ensureCardTagToolbar(card);
 	}
 
 	private async renderCardsFull(
@@ -6854,7 +6920,7 @@ export class StickyNoteDashboardView extends ItemView {
 		});
 	}
 
-	/** 区域管理：未分组 / 未分类等（归档已由 archiveFilter 处理）。 */
+	/** 快速访问：未分组 / 未分类 / 未标签等（归档已由 archiveFilter 处理）。 */
 	private applyAreaModeFilters(files: TFile[]): TFile[] {
 		if (this.areaMode === 'ungrouped') {
 			const mgr = this.plugin.stickies;
@@ -6871,6 +6937,9 @@ export class StickyNoteDashboardView extends ItemView {
 		if (this.areaMode === 'uncategorized') {
 			const assigned = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
 			return files.filter(f => !assigned.has(normalizePath(f.path)));
+		}
+		if (this.areaMode === 'untagged') {
+			return files.filter(f => getStickyTagsForFile(this.app, f).length === 0);
 		}
 		return files;
 	}

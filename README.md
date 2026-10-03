@@ -2,6 +2,7 @@
 
 **Colorful Sticky Notes** is an [Obsidian](https://obsidian.md) plugin that opens **draggable, stackable sticker-style windows** over your vault. Each sticky is backed by a normal Markdown note (default folder `StickyNotes`, configurable).
 
+
 ![Screenshot demo](assets/PixPin_2026-05-16_09-32-36.jpg)
 
 ### Features
