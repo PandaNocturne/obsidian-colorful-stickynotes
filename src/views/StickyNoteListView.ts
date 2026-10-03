@@ -225,6 +225,7 @@ export class StickyNoteListView extends ItemView {
 	private listBulkEditBtn: HTMLButtonElement | null = null;
 	/** 列表预览区是否在固定高度内裁剪/滚动（与 `settings.noteListCardOverflowHidden` 一致）。 */
 	private listCardOverflowClipBtn: HTMLButtonElement | null = null;
+	private stickyTagToolbarToggleBtn: HTMLButtonElement | null = null;
 	/** 颜色条 `aria-controls` / `id`，避免多开列表视图时 DOM id 冲突 */
 	private readonly colorFilterStripDomId = `csn-list-cf-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now())}`;
 	/** 从拖拽手柄拖拽时，附着在 `document.body` 上的 Canvas 行为说明浮层（拖拽结束或关闭视图时移除）。 */
@@ -334,6 +335,7 @@ export class StickyNoteListView extends ItemView {
 
 	/** 同步「便笺标签工具栏」开关到当前页卡片。 */
 	syncStickyTagToolbarFromSettings(): void {
+		this.syncStickyTagToolbarToggleBtn();
 		const enabled = this.plugin.settings.stickyTagToolbarEnabled !== false;
 		this.listItemsEl?.querySelectorAll('.csn-list-card').forEach(node => {
 			if (!(node instanceof HTMLElement)) return;
@@ -344,6 +346,13 @@ export class StickyNoteListView extends ItemView {
 				this.detachCardTagToolbar(node);
 			}
 		});
+	}
+
+	private syncStickyTagToolbarToggleBtn(): void {
+		if (!this.stickyTagToolbarToggleBtn) return;
+		const on = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		this.stickyTagToolbarToggleBtn.toggleClass('is-active', on);
+		this.stickyTagToolbarToggleBtn.setAttr('aria-pressed', on ? 'true' : 'false');
 	}
 
 	private attachCardTagToolbar(card: HTMLElement): void {
@@ -1512,6 +1521,24 @@ export class StickyNoteListView extends ItemView {
 			this.plugin.syncNoteListGridMetricsToOpenViews();
 		});
 
+		const tagToolbarOn = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		this.stickyTagToolbarToggleBtn = toolbarActions.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-sticky-tag-toolbar-toggle-btn',
+			attr: {
+				'aria-label': t('LIST_TAG_TOOLBAR_TOGGLE_ARIA'),
+				'aria-pressed': tagToolbarOn ? 'true' : 'false'
+			}
+		});
+		setIcon(this.stickyTagToolbarToggleBtn, 'tags');
+		this.stickyTagToolbarToggleBtn.toggleClass('is-active', tagToolbarOn);
+		this.registerDomEvent(this.stickyTagToolbarToggleBtn, 'click', async () => {
+			this.plugin.settings.stickyTagToolbarEnabled =
+				!(this.plugin.settings.stickyTagToolbarEnabled !== false);
+			await this.plugin.saveSettings();
+			this.plugin.syncStickyTagToolbarToOpenViews();
+		});
+
 		this.listItemsEl = root.createDiv({ cls: 'csn-list-items' });
 		this.registerListItemsDelegatedEvents();
 		this.syncListGridMetricsFromSettings();
@@ -2399,6 +2426,7 @@ export class StickyNoteListView extends ItemView {
 		this.colorFilterPaletteBtn = null;
 		this.listBulkEditBtn = null;
 		this.listCardOverflowClipBtn = null;
+		this.stickyTagToolbarToggleBtn = null;
 		this.cancelListRefreshDebouncers();
 		this.debouncedListStructureRefresh = null;
 		this.debouncedListContentRefresh = null;

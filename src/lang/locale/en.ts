@@ -74,6 +74,7 @@ export const en = {
 	SETTINGS_STICKY_TAG_TOOLBAR_NAME: 'Sticky tag toolbar',
 	SETTINGS_STICKY_TAG_TOOLBAR_DESC:
 		'Show YAML tags at the bottom of floating stickies and list/dashboard cards, with a + button to add tags.',
+	LIST_TAG_TOOLBAR_TOGGLE_ARIA: 'Show sticky tag toolbar on cards',
 	STICKY_TAG_TOOLBAR_ARIA: 'Sticky note tags',
 	STICKY_TAG_ADD_ARIA: 'Add tag',
 	STICKY_TAG_CHIP_REMOVE_ARIA: 'Remove tag {tag}',

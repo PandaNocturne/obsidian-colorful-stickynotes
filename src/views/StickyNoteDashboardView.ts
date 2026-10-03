@@ -339,6 +339,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private sortDropdownBtn: HTMLButtonElement | null = null;
 	private listBulkEditBtn: HTMLButtonElement | null = null;
 	private listCardOverflowClipBtn: HTMLButtonElement | null = null;
+	private stickyTagToolbarToggleBtn: HTMLButtonElement | null = null;
 	private composerToggleBtn: HTMLButtonElement | null = null;
 	private leftPaneToggleBtn: HTMLButtonElement | null = null;
 	/** 因视口过窄而临时收起左侧栏（不写入用户设置）。 */
@@ -618,6 +619,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	/** 同步「便笺标签工具栏」开关到当前页卡片。 */
 	syncStickyTagToolbarFromSettings(): void {
+		this.syncStickyTagToolbarToggleBtn();
 		const enabled = this.plugin.settings.stickyTagToolbarEnabled !== false;
 		this.gridEl?.querySelectorAll('.csn-list-card').forEach(node => {
 			if (!(node instanceof HTMLElement)) return;
@@ -628,6 +630,13 @@ export class StickyNoteDashboardView extends ItemView {
 				this.detachCardTagToolbar(node);
 			}
 		});
+	}
+
+	private syncStickyTagToolbarToggleBtn(): void {
+		if (!this.stickyTagToolbarToggleBtn) return;
+		const on = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		this.stickyTagToolbarToggleBtn.toggleClass('is-active', on);
+		this.stickyTagToolbarToggleBtn.setAttr('aria-pressed', on ? 'true' : 'false');
 	}
 
 	private attachCardTagToolbar(card: HTMLElement): void {
@@ -2382,6 +2391,24 @@ export class StickyNoteDashboardView extends ItemView {
 			this.plugin.settings.noteListCardOverflowHidden = !this.plugin.settings.noteListCardOverflowHidden;
 			await this.plugin.saveSettings();
 			this.plugin.syncNoteListGridMetricsToOpenViews();
+		});
+
+		const tagToolbarOn = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		this.stickyTagToolbarToggleBtn = toolbar.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-toolbar-icon-btn csn-sticky-tag-toolbar-toggle-btn',
+			attr: {
+				'aria-label': t('LIST_TAG_TOOLBAR_TOGGLE_ARIA'),
+				'aria-pressed': tagToolbarOn ? 'true' : 'false'
+			}
+		});
+		setIcon(this.stickyTagToolbarToggleBtn, 'tags');
+		this.stickyTagToolbarToggleBtn.toggleClass('is-active', tagToolbarOn);
+		this.registerDomEvent(this.stickyTagToolbarToggleBtn, 'click', async () => {
+			this.plugin.settings.stickyTagToolbarEnabled =
+				!(this.plugin.settings.stickyTagToolbarEnabled !== false);
+			await this.plugin.saveSettings();
+			this.plugin.syncStickyTagToolbarToOpenViews();
 		});
 
 		const gridPane = main.createDiv({ cls: 'csn-dash-grid-pane' });
@@ -7379,6 +7406,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.sortDropdownBtn = null;
 		this.listBulkEditBtn = null;
 		this.listCardOverflowClipBtn = null;
+		this.stickyTagToolbarToggleBtn = null;
 		this.composerToggleBtn = null;
 		this.leftPaneToggleBtn = null;
 		this.gridEl = null;
