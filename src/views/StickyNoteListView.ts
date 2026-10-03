@@ -44,6 +44,8 @@ import {
 	appendGroupedWorkspacePicker,
 	buildWorkspaceMenuGroups
 } from '../utils/workspace-transfer-menu';
+import { hashPathList } from '../utils/hash-path-list';
+import { mapPool } from '../utils/map-pool';
 
 /** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
 function listPreviewEmbedMarkdown(file: TFile): string {
@@ -174,6 +176,8 @@ export class StickyNoteListView extends ItemView {
 	/** 每张列表卡片嵌入预览各自一个 Component，便于翻页时按路径卸载/复用。 */
 	private readonly listCardMarkdownHosts = new Map<string, Component>();
 	private listItemsDelegatedEvents = false;
+	/** 上次渲染的筛选指纹（不含路径集）；与结构 key 配合区分「仅成员变更」与筛选切换。 */
+	private lastListFilterKey = '';
 	/** 上次渲染的列表结构指纹（排序、筛选、便笺集等）；一致时翻页可走 DOM 增量。 */
 	private lastListStructureKey = '';
 	private lastRenderedPageIndex: number | null = null;
@@ -408,6 +412,29 @@ export class StickyNoteListView extends ItemView {
 		}
 	}
 
+	private buildListFilterKey(
+		sortMode: NoteListSort,
+		query: string,
+		colorFilters: readonly StickyColorId[],
+		floatOpen: NoteListFloatOpenFilter,
+		archiveFilter: NoteListArchiveFilter,
+		workspaceFilterId: string | null,
+		activeWorkspaceId: string | null,
+		pageSize: number
+	): string {
+		return JSON.stringify({
+			sort: sortMode,
+			query,
+			colors: [...colorFilters].sort(),
+			floatOpen,
+			archive: archiveFilter,
+			workspaceFilter: workspaceFilterId ?? '',
+			activeWorkspace:
+				workspaceFilterId === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID ? (activeWorkspaceId ?? '') : '',
+			pageSize
+		});
+	}
+
 	private buildListStructureKey(
 		sortMode: NoteListSort,
 		query: string,
@@ -422,18 +449,19 @@ export class StickyNoteListView extends ItemView {
 		pinnedPaths: readonly string[]
 	): string {
 		return JSON.stringify({
-			sort: sortMode,
-			query,
-			colors: [...colorFilters].sort(),
-			floatOpen,
-			archive: archiveFilter,
-			workspaceFilter: workspaceFilterId ?? '',
-			activeWorkspace:
-				workspaceFilterId === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID ? (activeWorkspaceId ?? '') : '',
-			pageSize,
+			filter: this.buildListFilterKey(
+				sortMode,
+				query,
+				colorFilters,
+				floatOpen,
+				archiveFilter,
+				workspaceFilterId,
+				activeWorkspaceId,
+				pageSize
+			),
 			prio: prioPath ?? '',
-			paths: filtered.map(f => f.path),
-			pinned: [...pinnedPaths]
+			paths: hashPathList(filtered.map(f => f.path)),
+			pinned: hashPathList(pinnedPaths)
 		});
 	}
 
@@ -1877,63 +1905,103 @@ export class StickyNoteListView extends ItemView {
 		card.dataset.csnEmbedMtime = next;
 	}
 
-	private async renderListCardsFull(
+	/**
+	 * 筛选切换：旧卡片保持可见，新页准备好后一次性替换，避免清空后闪烁。
+	 */
+	private async syncListPageSwapReady(
 		container: HTMLElement,
 		pageFiles: TFile[],
-		sortMode: NoteListSort,
 		pinnedSet: ReadonlySet<string>
 	): Promise<void> {
-		for (const f of pageFiles) {
+		const wantedSet = new Set(pageFiles.map(x => x.path));
+		const existing = new Map<string, HTMLElement>();
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			const p = el.dataset.csnNotePath;
+			if (p) existing.set(p, el);
+		}
+
+		const nextCards = await mapPool(pageFiles, 6, async f => {
+			const prev = existing.get(f.path);
+			if (prev) {
+				const color = await resolveStickyBgColorForFile(this.app, f);
+				const archived = await resolveStickyArchivedForFile(this.app, f);
+				this.updateListCardChrome(prev, f, color, pinnedSet, archived);
+				await this.maybeRefreshCardPreview(prev, f);
+				return prev;
+			}
 			const color = await resolveStickyBgColorForFile(this.app, f);
 			const archived = await resolveStickyArchivedForFile(this.app, f);
-			const card = await this.createListCardElement(f, color, pinnedSet, archived);
-			container.appendChild(card);
+			return this.createListCardElement(f, color, pinnedSet, archived);
+		});
+
+		const frag = document.createDocumentFragment();
+		for (const card of nextCards) frag.appendChild(card);
+		for (const el of Array.from(container.children)) {
+			if (!(el instanceof HTMLElement)) {
+				el.remove();
+				continue;
+			}
+			if (el.hasClass('csn-list-card')) {
+				const p = el.dataset.csnNotePath;
+				if (p && !wantedSet.has(p)) this.disposeMarkdownHostForPath(p);
+			}
+			el.remove();
 		}
+		container.appendChild(frag);
 	}
 
 	private async syncListPageIncremental(
 		container: HTMLElement,
 		pageFiles: TFile[],
-		sortMode: NoteListSort,
 		pinnedSet: ReadonlySet<string>
 	): Promise<void> {
-		const wantedPaths = new Set(pageFiles.map(x => x.path));
-		const pool = new Map<string, HTMLElement>();
+		const wantedSet = new Set(pageFiles.map(x => x.path));
+		const existing = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
 			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (!p) continue;
-			if (!wantedPaths.has(p)) {
+			if (!wantedSet.has(p)) {
 				this.disposeMarkdownHostForPath(p);
 				el.remove();
 			} else {
-				pool.set(p, el);
-				el.remove();
+				existing.set(p, el);
 			}
 		}
-		for (const f of pageFiles) {
-			let card = pool.get(f.path);
-			pool.delete(f.path);
+		const cards = await mapPool(pageFiles, 6, async f => {
+			const prev = existing.get(f.path);
+			if (prev) {
+				const colorRaw = prev.dataset.csnListColor;
+				const color =
+					colorRaw && colorRaw.length > 0
+						? (colorRaw as StickyColorId)
+						: await resolveStickyBgColorForFile(this.app, f);
+				const archivedAttr = prev.dataset.csnArchived;
+				const archived =
+					archivedAttr === 'true'
+						? true
+						: archivedAttr === 'false'
+							? false
+							: await resolveStickyArchivedForFile(this.app, f);
+				this.updateListCardChrome(prev, f, color, pinnedSet, archived);
+				await this.maybeRefreshCardPreview(prev, f);
+				return prev;
+			}
 			const color = await resolveStickyBgColorForFile(this.app, f);
 			const archived = await resolveStickyArchivedForFile(this.app, f);
-			if (!card) {
-				card = await this.createListCardElement(f, color, pinnedSet, archived);
-			} else {
-				this.updateListCardChrome(card, f, color, pinnedSet, archived);
-				await this.maybeRefreshCardPreview(card, f);
-			}
-			container.appendChild(card);
-		}
-		for (const [p, el] of pool) {
-			this.disposeMarkdownHostForPath(p);
-			el.remove();
+			return this.createListCardElement(f, color, pinnedSet, archived);
+		});
+		for (let i = 0; i < cards.length; i++) {
+			const card = cards[i]!;
+			const at = container.children[i] ?? null;
+			if (card !== at) container.insertBefore(card, at);
 		}
 	}
 
 	private async syncListPageContentOnly(
 		container: HTMLElement,
 		pageFiles: TFile[],
-		sortMode: NoteListSort,
 		pinnedSet: ReadonlySet<string>
 	): Promise<void> {
 		const byPath = new Map<string, HTMLElement>();
@@ -1943,17 +2011,13 @@ export class StickyNoteListView extends ItemView {
 			if (p) byPath.set(p, el);
 		}
 		if (byPath.size !== pageFiles.length) {
-			this.disposeAllListCardMarkdownHosts();
-			container.empty();
-			await this.renderListCardsFull(container, pageFiles, sortMode, pinnedSet);
+			await this.syncListPageSwapReady(container, pageFiles, pinnedSet);
 			return;
 		}
 		for (const f of pageFiles) {
 			const card = byPath.get(f.path);
 			if (!card) {
-				this.disposeAllListCardMarkdownHosts();
-				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode, pinnedSet);
+				await this.syncListPageSwapReady(container, pageFiles, pinnedSet);
 				return;
 			}
 			const color = await resolveStickyBgColorForFile(this.app, f);
@@ -1982,6 +2046,7 @@ export class StickyNoteListView extends ItemView {
 			const folderAbs = this.app.vault.getAbstractFileByPath(folder);
 			if (!folderAbs) {
 				this.disposeAllListCardMarkdownHosts();
+				this.lastListFilterKey = '';
 				this.lastListStructureKey = '';
 				this.lastRenderedPageIndex = null;
 				container.empty();
@@ -1994,6 +2059,7 @@ export class StickyNoteListView extends ItemView {
 			}
 			if (!(folderAbs instanceof TFolder)) {
 				this.disposeAllListCardMarkdownHosts();
+				this.lastListFilterKey = '';
 				this.lastListStructureKey = '';
 				this.lastRenderedPageIndex = null;
 				container.empty();
@@ -2062,6 +2128,7 @@ export class StickyNoteListView extends ItemView {
 
 			if (filtered.length === 0) {
 				this.disposeAllListCardMarkdownHosts();
+				this.lastListFilterKey = '';
 				this.lastListStructureKey = '';
 				this.lastRenderedPageIndex = null;
 				container.empty();
@@ -2080,6 +2147,17 @@ export class StickyNoteListView extends ItemView {
 			const start = this.listPageIndex * pageSize;
 			const pageFiles = filtered.slice(start, start + pageSize);
 
+			const activeWsId = this.plugin.stickies.workspaces.activeWorkspaceId;
+			const filterKey = this.buildListFilterKey(
+				sortMode,
+				query,
+				this.plugin.settings.noteListColorFilters,
+				floatMode,
+				archiveMode,
+				wsFilterId,
+				activeWsId,
+				pageSize
+			);
 			const structureKey = this.buildListStructureKey(
 				sortMode,
 				query,
@@ -2087,13 +2165,14 @@ export class StickyNoteListView extends ItemView {
 				floatMode,
 				archiveMode,
 				wsFilterId,
-				this.plugin.stickies.workspaces.activeWorkspaceId,
+				activeWsId,
 				pageSize,
 				prio,
 				filtered,
 				pinnedNorm
 			);
 
+			const filterChanged = filterKey !== this.lastListFilterKey;
 			const structureChanged = structureKey !== this.lastListStructureKey;
 			const paginationOnly =
 				!structureChanged &&
@@ -2103,23 +2182,24 @@ export class StickyNoteListView extends ItemView {
 				!structureChanged &&
 				this.lastRenderedPageIndex !== null &&
 				this.lastRenderedPageIndex === this.listPageIndex;
+			const membershipOnlyChanged = structureChanged && !filterChanged;
 
-			if (structureChanged) {
-				this.lastListStructureKey = structureKey;
-				this.disposeAllListCardMarkdownHosts();
-				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode, pinnedSet);
-			} else if (paginationOnly) {
-				await this.syncListPageIncremental(container, pageFiles, sortMode, pinnedSet);
+			this.lastListFilterKey = filterKey;
+			this.lastListStructureKey = structureKey;
+
+			if (filterChanged) {
+				await this.syncListPageSwapReady(container, pageFiles, pinnedSet);
+			} else if (membershipOnlyChanged || paginationOnly) {
+				await this.syncListPageIncremental(container, pageFiles, pinnedSet);
 			} else if (samePageContentTouch) {
-				await this.syncListPageContentOnly(container, pageFiles, sortMode, pinnedSet);
+				await this.syncListPageContentOnly(container, pageFiles, pinnedSet);
 			} else {
-				this.disposeAllListCardMarkdownHosts();
-				container.empty();
-				await this.renderListCardsFull(container, pageFiles, sortMode, pinnedSet);
+				await this.syncListPageSwapReady(container, pageFiles, pinnedSet);
 			}
 			this.syncListCardSelectionChrome();
 
+			const pageIndexChanged =
+				this.lastRenderedPageIndex !== null && this.lastRenderedPageIndex !== this.listPageIndex;
 			this.lastRenderedPageIndex = this.listPageIndex;
 
 			this.paginationEl?.show();
@@ -2165,7 +2245,10 @@ export class StickyNoteListView extends ItemView {
 				}
 			}
 
-			container.scrollTop = 0;
+			/* 仅筛选变更或翻页时回顶；成员增减保持滚动位置 */
+			if (filterChanged || pageIndexChanged) {
+				container.scrollTop = 0;
+			}
 		} finally {
 			if (this.plugin.listPrioritizeStickyPath) {
 				this.plugin.listPrioritizeStickyPath = null;
@@ -2189,6 +2272,7 @@ export class StickyNoteListView extends ItemView {
 		this.debouncedListContentRefresh = null;
 		this.disposeAllListCardMarkdownHosts();
 		this.listItemsDelegatedEvents = false;
+		this.lastListFilterKey = '';
 		this.lastListStructureKey = '';
 		this.lastRenderedPageIndex = null;
 		this.listItemsEl = null;

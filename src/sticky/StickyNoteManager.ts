@@ -131,6 +131,13 @@ export class StickyNoteManager {
 	workspaces: WorkspacesFile = defaultWorkspacesFile();
 	/** `colorful-sticky-id` → 当前路径；便笺目录内扫描，路径变更后用于工作区恢复。 */
 	private stickyIdToPathIndex: Map<string, string> | null = null;
+	/**
+	 * 工作区成员当前路径 Set 缓存（按 ws.id）。
+	 * 成员增删/改路径时增量维护，避免筛选与树计数每次全量扫描 windows。
+	 */
+	private readonly workspaceMemberPathCache = new Map<string, Set<string>>();
+	/** 活动区 + 回收站成员路径并集缓存；任一工作区成员变更后置空，下次惰性重建。 */
+	private allAssignedMemberPathCache: Set<string> | null = null;
 
 	constructor(
 		private readonly plugin: ColorfulStickyNotesPlugin,
@@ -185,6 +192,7 @@ export class StickyNoteManager {
 
 	async init(): Promise<void> {
 		this.workspaces = await loadWorkspacesFile(this.plugin);
+		this.clearWorkspaceMemberPathCaches();
 		if (this.reconcileAllWorkspaceWindowPaths()) {
 			await this.flushWorkspacesToDisk();
 		}
@@ -407,6 +415,56 @@ export class StickyNoteManager {
 
 	private invalidateStickyIdIndex(): void {
 		this.stickyIdToPathIndex = null;
+		/* stickyId→路径变更后成员解析结果可能变，整表失效后惰性重建 */
+		this.clearWorkspaceMemberPathCaches();
+	}
+
+	private clearWorkspaceMemberPathCaches(): void {
+		this.workspaceMemberPathCache.clear();
+		this.allAssignedMemberPathCache = null;
+	}
+
+	private dropWorkspaceMemberPathCache(wsId: string): void {
+		this.workspaceMemberPathCache.delete(wsId);
+		this.allAssignedMemberPathCache = null;
+	}
+
+	/** 按当前 windows 重建单个工作区的成员路径 Set 并写入缓存。 */
+	private rebuildWorkspaceMemberPathCache(ws: StickyWorkspace): Set<string> {
+		const out = new Set<string>();
+		for (const w of ws.windows) {
+			out.add(normalizePath(this.resolveWorkspaceMemberPath(w) ?? w.path));
+		}
+		this.workspaceMemberPathCache.set(ws.id, out);
+		this.allAssignedMemberPathCache = null;
+		return out;
+	}
+
+	private memberPathCacheAdd(wsId: string, path: string): void {
+		const cached = this.workspaceMemberPathCache.get(wsId);
+		if (cached) cached.add(normalizePath(path));
+		this.allAssignedMemberPathCache = null;
+	}
+
+	private memberPathCacheRemove(wsId: string, path: string): void {
+		const cached = this.workspaceMemberPathCache.get(wsId);
+		if (cached) cached.delete(normalizePath(path));
+		this.allAssignedMemberPathCache = null;
+	}
+
+	private memberPathCacheRelocate(oldPath: string, newPath: string): void {
+		const oldN = normalizePath(oldPath);
+		const newN = normalizePath(newPath);
+		if (oldN === newN) return;
+		for (const set of this.workspaceMemberPathCache.values()) {
+			if (!set.has(oldN)) continue;
+			set.delete(oldN);
+			set.add(newN);
+		}
+		if (this.allAssignedMemberPathCache?.has(oldN)) {
+			this.allAssignedMemberPathCache.delete(oldN);
+			this.allAssignedMemberPathCache.add(newN);
+		}
 	}
 
 	private buildStickyIdToPathIndex(): Map<string, string> {
@@ -449,28 +507,24 @@ export class StickyNoteManager {
 		return this.resolveStickyFileForSerialized(serial)?.path ?? null;
 	}
 
-	/** 工作区成员对应的当前路径集合（供列表「按工作区筛选」等）。 */
+	/** 工作区成员对应的当前路径集合（供列表「按工作区筛选」等）。返回缓存 Set，请勿直接改写。 */
 	getWorkspaceMemberPathSet(ws: StickyWorkspace): Set<string> {
-		const out = new Set<string>();
-		for (const w of ws.windows) {
-			out.add(normalizePath(this.resolveWorkspaceMemberPath(w) ?? w.path));
-		}
-		return out;
+		const cached = this.workspaceMemberPathCache.get(ws.id);
+		if (cached) return cached;
+		return this.rebuildWorkspaceMemberPathCache(ws);
 	}
 
 	/** 已归入任意工作区的成员路径并集（活动区 + 回收站归档区；用于「未分类」筛选）。 */
 	getAllAssignedWorkspaceMemberPathSet(): Set<string> {
+		if (this.allAssignedMemberPathCache) return this.allAssignedMemberPathCache;
 		const out = new Set<string>();
 		for (const ws of this.workspaces.workspaces) {
-			for (const p of this.getWorkspaceMemberPathSet(ws)) {
-				out.add(p);
-			}
+			for (const p of this.getWorkspaceMemberPathSet(ws)) out.add(p);
 		}
 		for (const ws of this.workspaces.trash) {
-			for (const p of this.getWorkspaceMemberPathSet(ws)) {
-				out.add(p);
-			}
+			for (const p of this.getWorkspaceMemberPathSet(ws)) out.add(p);
 		}
+		this.allAssignedMemberPathCache = out;
 		return out;
 	}
 
@@ -497,6 +551,7 @@ export class StickyNoteManager {
 		};
 		for (const ws of this.workspaces.workspaces) touch(ws);
 		for (const ws of this.workspaces.trash) touch(ws);
+		if (changed) this.clearWorkspaceMemberPathCaches();
 		return changed;
 	}
 
@@ -515,7 +570,10 @@ export class StickyNoteManager {
 		};
 		for (const ws of this.workspaces.workspaces) relocate(ws);
 		for (const ws of this.workspaces.trash) relocate(ws);
-		if (changed) this.scheduleSaveWorkspaces();
+		if (changed) {
+			this.memberPathCacheRelocate(oldN, newN);
+			this.scheduleSaveWorkspaces();
+		}
 	}
 
 	/** 补齐便笺 frontmatter：`id`、`archived`、背景色等默认值。 */
@@ -693,11 +751,20 @@ export class StickyNoteManager {
 
 	private upsertStickyInWorkspace(ws: StickyWorkspace, file: TFile, entry: SerializedStickyWindow): boolean {
 		const idx = this.findWorkspaceWindowIndex(ws, file);
+		const nextPath = normalizePath(file.path);
 		if (idx >= 0) {
+			const prevPath = normalizePath(ws.windows[idx]!.path);
 			ws.windows[idx] = { ...ws.windows[idx]!, ...entry, path: file.path };
+			if (prevPath !== nextPath) {
+				this.memberPathCacheRemove(ws.id, prevPath);
+				this.memberPathCacheAdd(ws.id, nextPath);
+			} else {
+				this.memberPathCacheAdd(ws.id, nextPath);
+			}
 			return true;
 		}
 		ws.windows.push(entry);
+		this.memberPathCacheAdd(ws.id, nextPath);
 		return true;
 	}
 
@@ -739,6 +806,7 @@ export class StickyNoteManager {
 			const activeIdx = this.findWorkspaceWindowIndex(active, f);
 			if (activeIdx >= 0) {
 				entry = active.windows.splice(activeIdx, 1)[0];
+				this.memberPathCacheRemove(active.id, normalizePath(f.path));
 				changed = true;
 			}
 			if (this.isStickyInWorkspace(f, targetWsId)) continue;
@@ -776,6 +844,7 @@ export class StickyNoteManager {
 				const idx = this.findWorkspaceWindowIndex(ws, f);
 				if (idx < 0) continue;
 				ws.windows.splice(idx, 1);
+				this.memberPathCacheRemove(ws.id, normalizePath(f.path));
 				ws.updatedAt = Date.now();
 				changed = true;
 			}
@@ -797,6 +866,7 @@ export class StickyNoteManager {
 		if (!ws) return;
 		if (this.findWorkspaceWindowIndex(ws, file) < 0) {
 			ws.windows.push(this.buildSerializedWindowForFile(file, { open: true }));
+			this.memberPathCacheAdd(ws.id, normalizePath(file.path));
 			ws.updatedAt = Date.now();
 			this.scheduleSaveWorkspaces();
 		}
@@ -853,6 +923,7 @@ export class StickyNoteManager {
 			if (!ws) continue;
 			if (this.findWorkspaceWindowIndex(ws, file) >= 0) continue;
 			ws.windows.push(this.buildSerializedWindowForFile(file, { open: true }));
+			this.memberPathCacheAdd(ws.id, normalizePath(file.path));
 			ws.updatedAt = Date.now();
 			changed = true;
 		}
@@ -895,6 +966,7 @@ export class StickyNoteManager {
 		});
 		if (next.length !== ws.windows.length) {
 			ws.windows = next;
+			this.rebuildWorkspaceMemberPathCache(ws);
 			changed = true;
 		}
 		if (!changed) return;
@@ -925,6 +997,7 @@ export class StickyNoteManager {
 			const next = ws.windows.filter(w => normalizePath(w.path) !== norm);
 			if (next.length !== ws.windows.length) {
 				ws.windows = next;
+				this.memberPathCacheRemove(ws.id, norm);
 				ws.updatedAt = Date.now();
 				changed = true;
 			}
@@ -1249,10 +1322,12 @@ export class StickyNoteManager {
 				this.workspaces.trash.unshift(removed);
 			}
 			const wasActive = this.workspaces.activeWorkspaceId === wsId;
+			if (isBlank) this.dropWorkspaceMemberPathCache(wsId);
 			if (this.workspaces.workspaces.length === 0) {
 				const fresh = defaultWorkspacesFile();
 				this.workspaces.workspaces = fresh.workspaces;
 				this.workspaces.activeWorkspaceId = fresh.activeWorkspaceId;
+				this.clearWorkspaceMemberPathCaches();
 				this.closeAllOpenStickyWindows(true);
 			} else if (wasActive) {
 				this.workspaces.activeWorkspaceId = null;
@@ -1304,6 +1379,7 @@ export class StickyNoteManager {
 		const before = this.workspaces.trash.length;
 		this.workspaces.trash = this.workspaces.trash.filter(x => x.id !== wsId);
 		if (this.workspaces.trash.length === before) return;
+		this.dropWorkspaceMemberPathCache(wsId);
 		if (groupId) this.pruneTrashTabGroupIfUnused(groupId);
 		await this.flushWorkspacesToDisk();
 		await this.syncStickyWorkspaceYamlForFiles(memberFiles);
@@ -1658,6 +1734,7 @@ export class StickyNoteManager {
 		const ws = this.activeWorkspace();
 		if (!ws) return;
 		ws.windows = this.mergeWorkspaceWindowsSnapshot(ws.windows, this.serializeOpenWindowsSnapshot());
+		this.rebuildWorkspaceMemberPathCache(ws);
 		ws.updatedAt = Date.now();
 		this.scheduleSaveWorkspaces();
 	}

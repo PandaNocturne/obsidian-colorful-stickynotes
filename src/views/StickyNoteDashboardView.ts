@@ -97,6 +97,8 @@ import {
 	appendGroupedWorkspacePicker,
 	buildWorkspaceMenuGroups
 } from '../utils/workspace-transfer-menu';
+import { hashPathList } from '../utils/hash-path-list';
+import { mapPool } from '../utils/map-pool';
 
 const DASH_AREA_MODE_SPECS: Array<{
 	mode: DashAreaMode;
@@ -6616,19 +6618,19 @@ export class StickyNoteDashboardView extends ItemView {
 			if (p) existing.set(p, el);
 		}
 
-		const nextCards: HTMLElement[] = [];
-		for (const f of pageFiles) {
-			const color = await resolveStickyBgColorForFile(this.app, f);
-			const archived = await resolveStickyArchivedForFile(this.app, f);
+		const nextCards = await mapPool(pageFiles, 6, async f => {
 			const prev = existing.get(f.path);
 			if (prev) {
+				const color = await resolveStickyBgColorForFile(this.app, f);
+				const archived = await resolveStickyArchivedForFile(this.app, f);
 				this.updateCardChrome(prev, f, color, pinnedSet, archived);
 				await this.maybeRefreshCardPreview(prev, f);
-				nextCards.push(prev);
-			} else {
-				nextCards.push(await this.createCard(f, color, pinnedSet, archived));
+				return prev;
 			}
-		}
+			const color = await resolveStickyBgColorForFile(this.app, f);
+			const archived = await resolveStickyArchivedForFile(this.app, f);
+			return this.createCard(f, color, pinnedSet, archived);
+		});
 
 		const frag = document.createDocumentFragment();
 		for (const card of nextCards) {
@@ -6667,7 +6669,7 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		}
 		/* 本页卡片并行准备（限流），缩短串行 await 瀑布 */
-		const cards = await this.mapPool(pageFiles, 6, async f => {
+		const cards = await mapPool(pageFiles, 6, async f => {
 			const prev = existing.get(f.path);
 			if (prev) {
 				const colorRaw = prev.dataset.csnListColor;
@@ -6695,26 +6697,6 @@ export class StickyNoteDashboardView extends ItemView {
 			const at = container.children[i] ?? null;
 			if (card !== at) container.insertBefore(card, at);
 		}
-	}
-
-	/** 有限并发执行，保持结果顺序与输入一致 */
-	private async mapPool<T, R>(
-		items: readonly T[],
-		concurrency: number,
-		fn: (item: T, index: number) => Promise<R>
-	): Promise<R[]> {
-		if (items.length === 0) return [];
-		const results = new Array<R>(items.length);
-		let cursor = 0;
-		const worker = async (): Promise<void> => {
-			while (cursor < items.length) {
-				const i = cursor++;
-				results[i] = await fn(items[i]!, i);
-			}
-		};
-		const n = Math.max(1, Math.min(concurrency, items.length));
-		await Promise.all(Array.from({ length: n }, () => worker()));
-		return results;
 	}
 
 	private async syncPageContentOnly(
@@ -6808,8 +6790,8 @@ export class StickyNoteDashboardView extends ItemView {
 				pageSize
 			),
 			prio: prioPath ?? '',
-			paths: filtered.map(f => f.path),
-			pinned: [...pinnedPaths]
+			paths: hashPathList(filtered.map(f => f.path)),
+			pinned: hashPathList(pinnedPaths)
 		});
 	}
 
