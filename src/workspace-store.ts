@@ -105,12 +105,13 @@ export function resolveTrashWorkspaceGroupLabel(
 	return { key: `missing:${raw}`, label: t('WS_TRASH_GROUP_MISSING') };
 }
 
-/** 管理面板顶部分组筛选 id（`@all` 或有效分组 id；无效时回退为「全部」）。 */
+/** 管理面板顶部分组筛选 id（`@all`、`@ungrouped` 或有效分组 id；无效时回退为「全部」）。 */
 export function resolvePanelTabFilterId(
 	raw: unknown,
 	tabGroups: readonly StickyWorkspaceTabGroup[]
 ): string {
 	if (raw === WS_TAB_FILTER_ALL) return WS_TAB_FILTER_ALL;
+	if (raw === WS_TAB_GROUP_UNGROUPED_ID) return WS_TAB_GROUP_UNGROUPED_ID;
 	if (typeof raw === 'string' && raw.length > 0 && tabGroups.some(g => g.id === raw)) {
 		return raw;
 	}

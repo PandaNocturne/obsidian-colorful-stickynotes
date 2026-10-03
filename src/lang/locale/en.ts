@@ -465,6 +465,7 @@ export const en = {
 	WS_PANEL_SEARCH_EMPTY: 'No workspaces match your search',
 	WS_PANEL_LOCATE_ARIA: 'Locate active workspace',
 	WS_PANEL_LOCATE_NONE: 'No active workspace to locate',
+	WS_PANEL_SHOW_UNGROUPED_ARIA: 'Show ungrouped workspaces only',
 	WS_TRASH_GROUP_MISSING: 'Other groups',
 	WS_TAB_GROUP_DEFAULT: 'Default',
 	WS_TAB_GROUP_AUTO_NAME: 'Group {n}',

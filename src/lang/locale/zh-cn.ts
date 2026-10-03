@@ -448,6 +448,7 @@ export const zhCn: Record<MessageKey, string> = {
 	WS_PANEL_SEARCH_EMPTY: '没有匹配的工作区',
 	WS_PANEL_LOCATE_ARIA: '定位当前活动工作区',
 	WS_PANEL_LOCATE_NONE: '当前没有活动工作区可定位',
+	WS_PANEL_SHOW_UNGROUPED_ARIA: '仅显示未分组工作区',
 	WS_TRASH_GROUP_MISSING: '其他分组',
 	WS_TAB_GROUP_DEFAULT: '默认',
 	WS_TAB_GROUP_AUTO_NAME: '分组 {n}',

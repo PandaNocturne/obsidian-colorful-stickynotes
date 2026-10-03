@@ -8,7 +8,7 @@ import {
 	type StickyWorkspace,
 	type StickyWorkspaceTabGroup
 } from '../types';
-import { resolveTrashWorkspaceGroupLabel } from '../workspace-store';
+import { resolveTrashWorkspaceGroupLabel, isWorkspaceUngrouped } from '../workspace-store';
 
 /** HTML5 DnD 用 payload（text/plain 兼容性最好） */
 const WORKSPACE_DND_MIME = 'text/plain';
@@ -438,7 +438,7 @@ export class WorkspacePanelModal extends Modal {
 	 */
 	private clearInitialWorkspaceTileFocusPending = false;
 	private panelMode: 'workspaces' | 'trash' = 'workspaces';
-	/** 顶部分组筛选：`@all` 或具体分组 id。 */
+	/** 顶部分组筛选：`@all`、`@ungrouped` 或具体分组 id。 */
 	private activeTabFilterId: string = WS_TAB_FILTER_ALL;
 	/** 面板搜索框是否展开。 */
 	private panelSearchOpen = false;
@@ -739,6 +739,30 @@ export class WorkspacePanelModal extends Modal {
 		locateBtn.addEventListener('click', () => {
 			this.locateActiveWorkspace(refresh);
 		});
+
+		const showUngroupedBtn = allWrap.createEl('button', {
+			cls: `clickable-icon csn-ws-panel-tabbar-icon-btn${
+				this.activeTabFilterId === WS_TAB_GROUP_UNGROUPED_ID ? ' is-active' : ''
+			}`,
+			attr: {
+				type: 'button',
+				'aria-label': t('WS_PANEL_SHOW_UNGROUPED_ARIA'),
+				'aria-pressed': String(this.activeTabFilterId === WS_TAB_GROUP_UNGROUPED_ID),
+				title: t('WS_PANEL_SHOW_UNGROUPED_ARIA')
+			}
+		});
+		setIcon(showUngroupedBtn, 'folder-x');
+		showUngroupedBtn.addEventListener('click', () => {
+			/* 与「全部」互斥：二次点击取消，回到默认分组 */
+			if (this.activeTabFilterId === WS_TAB_GROUP_UNGROUPED_ID) {
+				const fallback =
+					data.tabGroups.find(g => g.id === WS_TAB_GROUP_DEFAULT_ID)?.id ??
+					data.tabGroups[0]?.id;
+				if (fallback) this.selectTabFilter(fallback, refresh);
+				return;
+			}
+			this.selectTabFilter(WS_TAB_GROUP_UNGROUPED_ID, refresh);
+		});
 	}
 
 	private renderPanelSearchRow(parentEl: HTMLElement, refresh: () => void): void {
@@ -797,9 +821,12 @@ export class WorkspacePanelModal extends Modal {
 			return;
 		}
 		let needRefresh = false;
-		if (this.activeTabFilterId !== WS_TAB_FILTER_ALL) {
-			this.activeTabFilterId = WS_TAB_FILTER_ALL;
-			void mgr.persistPanelTabFilterId(WS_TAB_FILTER_ALL);
+		const targetFilter = isWorkspaceUngrouped(ws, mgr.workspaces.tabGroups)
+			? WS_TAB_GROUP_UNGROUPED_ID
+			: WS_TAB_FILTER_ALL;
+		if (this.activeTabFilterId !== targetFilter) {
+			this.activeTabFilterId = targetFilter;
+			void mgr.persistPanelTabFilterId(targetFilter);
 			needRefresh = true;
 		}
 		if (this.panelSearchQuery.trim()) {

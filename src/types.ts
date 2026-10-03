@@ -83,7 +83,7 @@ export interface WorkspacesFile {
 	workspaces: StickyWorkspace[];
 	/** 管理面板顶部分组标签顺序。 */
 	tabGroups: StickyWorkspaceTabGroup[];
-	/** 管理面板上次选中的顶部分组筛选（`@all` 或具体分组 id）。 */
+	/** 管理面板上次选中的顶部分组筛选（`@all`、`@ungrouped` 或具体分组 id）。 */
 	panelTabFilterId: string;
 	/** 从面板删除的工作区快照，可还原或彻底删除（持久化在 `*-workspaces.json` 的 `trash` 字段）。 */
 	trash: StickyWorkspace[];
