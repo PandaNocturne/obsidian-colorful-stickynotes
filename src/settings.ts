@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import { formatStickyNoteRelativePath } from './filename-template';
 import { t } from './lang/helpers';
+import type { MessageKey } from './lang/locale/en';
 import type ColorfulStickyNotesPlugin from './main';
 import { FolderPickerModal } from './modals/FolderPickerModal';
 import { MarkdownFilePickerModal } from './modals/MarkdownFilePickerModal';
@@ -549,6 +550,14 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	canvasLinkBatchStackDy: 24
 };
 
+type CsnSettingsTabId =
+	| 'basic'
+	| 'sticky-window'
+	| 'list'
+	| 'assist-features'
+	| 'assist'
+	| 'canvas';
+
 export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 	plugin: ColorfulStickyNotesPlugin;
 
@@ -557,12 +566,46 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	private settingsTab: CsnSettingsTabId = 'basic';
+
+	private renderSettingsTabs(parentEl: HTMLElement): void {
+		const tabs: Array<{ id: CsnSettingsTabId; labelKey: MessageKey }> = [
+			{ id: 'basic', labelKey: 'SETTINGS_HEADING_BASIC' },
+			{ id: 'sticky-window', labelKey: 'SETTINGS_HEADING_STICKY_WINDOW' },
+			{ id: 'list', labelKey: 'SETTINGS_HEADING_LIST' },
+			{ id: 'assist-features', labelKey: 'SETTINGS_HEADING_ASSIST_FEATURES' },
+			{ id: 'assist', labelKey: 'SETTINGS_HEADING_ASSIST' },
+			{ id: 'canvas', labelKey: 'SETTINGS_HEADING_CANVAS_LINK' }
+		];
+		const bar = parentEl.createDiv({ cls: 'csn-settings-tabs', attr: { role: 'tablist' } });
+		for (const tab of tabs) {
+			const btn = bar.createEl('button', {
+				type: 'button',
+				cls: `csn-settings-tab${this.settingsTab === tab.id ? ' is-active' : ''}`,
+				text: t(tab.labelKey),
+				attr: {
+					role: 'tab',
+					'aria-selected': this.settingsTab === tab.id ? 'true' : 'false'
+				}
+			});
+			btn.addEventListener('click', () => {
+				if (this.settingsTab === tab.id) return;
+				this.settingsTab = tab.id;
+				this.display();
+			});
+		}
+	}
+
+
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+		containerEl.addClass('csn-settings');
+		this.renderSettingsTabs(containerEl);
+		const el = containerEl.createDiv({ cls: 'csn-settings-pane' });
 
-		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_BASIC'));
-		new Setting(containerEl)
+		if (this.settingsTab === 'basic') {
+		new Setting(el)
 			.setName(t('SETTINGS_STICKY_FOLDER_NAME'))
 			.setDesc(t('SETTINGS_STICKY_FOLDER_DESC'))
 			.addButton(btn => {
@@ -600,7 +643,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			});
 		};
 
-		const filenameSetting = new Setting(containerEl).setName(t('SETTINGS_FILENAME_FORMAT_NAME'));
+		const filenameSetting = new Setting(el).setName(t('SETTINGS_FILENAME_FORMAT_NAME'));
 
 		filenameSetting.descEl.empty();
 		const descP = filenameSetting.descEl.createEl('p', { cls: 'csn-setting-filename-desc' });
@@ -627,7 +670,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 			});
 		});
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_DEFAULT_TEMPLATE_NAME'))
 			.setDesc(t('SETTINGS_DEFAULT_TEMPLATE_DESC'))
 			.addButton(btn => {
@@ -653,8 +696,10 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_STICKY_WINDOW'));
-		new Setting(containerEl)
+		}
+
+		if (this.settingsTab === 'sticky-window') {
+		new Setting(el)
 			.setName(t('SETTINGS_RESTORE_ON_STARTUP_NAME'))
 			.setDesc(t('SETTINGS_RESTORE_ON_STARTUP_DESC'))
 			.addToggle(toggle =>
@@ -664,7 +709,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_RESTORE_DELAY_NAME'))
 			.setDesc(t('SETTINGS_RESTORE_DELAY_DESC'))
 			.addSlider(slider =>
@@ -690,7 +735,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_HEADER_NEW_SIDE_NAME'))
 			.setDesc(t('SETTINGS_HEADER_NEW_SIDE_DESC'))
 			.addDropdown(dd =>
@@ -704,7 +749,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_DEFAULT_VIEW_NAME'))
 			.addDropdown(dd =>
 				dd
@@ -717,7 +762,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_STICKY_LEAF_PINNED_NAME'))
 			.setDesc(t('SETTINGS_STICKY_LEAF_PINNED_DESC'))
 			.addToggle(toggle =>
@@ -728,7 +773,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_STICKY_ZOOM_NAME'))
 			.setDesc(
 				t('SETTINGS_STICKY_ZOOM_DESC', {
@@ -760,7 +805,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_DEFAULT_WIDTH_NAME'))
 			.setDesc(t('SETTINGS_DEFAULT_WIDTH_DESC'))
 			.addText(text =>
@@ -774,7 +819,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_DEFAULT_HEIGHT_NAME'))
 			.setDesc(t('SETTINGS_DEFAULT_HEIGHT_DESC'))
 			.addText(text =>
@@ -788,7 +833,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_DEFAULT_BG_NAME'))
 			.setDesc(t('SETTINGS_DEFAULT_BG_DESC'))
 			.addDropdown(dd => {
@@ -803,7 +848,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_STICKY_TAG_TOOLBAR_NAME'))
 			.setDesc(t('SETTINGS_STICKY_TAG_TOOLBAR_DESC'))
 			.addToggle(toggle =>
@@ -814,8 +859,10 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_LIST'));
-		new Setting(containerEl)
+		}
+
+		if (this.settingsTab === 'list') {
+		new Setting(el)
 			.setName(t('SETTINGS_LIST_OPEN_LOCATION_NAME'))
 			.setDesc(t('SETTINGS_LIST_OPEN_LOCATION_DESC'))
 			.addDropdown(dd =>
@@ -829,7 +876,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_LIST_CARD_HEIGHT_NAME'))
 			.setDesc(t('SETTINGS_LIST_CARD_HEIGHT_DESC'))
 			.addText(text =>
@@ -848,7 +895,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_LIST_GRID_MIN_WIDTH_NAME'))
 			.setDesc(t('SETTINGS_LIST_GRID_MIN_WIDTH_DESC'))
 			.addText(text =>
@@ -867,7 +914,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_LIST_PAGE_SIZE_NAME'))
 			.setDesc(t('SETTINGS_LIST_PAGE_SIZE_DESC'))
 			.addText(text =>
@@ -884,7 +931,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_LIST_PREVIEW_ZOOM_NAME'))
 			.setDesc(
 				t('SETTINGS_LIST_PREVIEW_ZOOM_DESC', {
@@ -916,8 +963,10 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_ASSIST_FEATURES'));
-		new Setting(containerEl)
+		}
+
+		if (this.settingsTab === 'assist-features') {
+		new Setting(el)
 			.setName(t('SETTINGS_EDGE_STRETCH_NAME'))
 			.setDesc(t('SETTINGS_EDGE_STRETCH_DESC'))
 			.addToggle(toggle =>
@@ -928,7 +977,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_NAME'))
 			.setDesc(t('SETTINGS_HEADER_DOUBLE_CLICK_STRETCH_DESC'))
 			.addToggle(toggle =>
@@ -939,7 +988,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_MAIN_DBLCLICK_TO_SOURCE_NAME'))
 			.setDesc(t('SETTINGS_MAIN_DBLCLICK_TO_SOURCE_DESC'))
 			.addToggle(toggle =>
@@ -949,7 +998,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_AUTO_DELETE_BLANK_NAME'))
 			.setDesc(t('SETTINGS_AUTO_DELETE_BLANK_DESC'))
 			.addToggle(toggle =>
@@ -959,8 +1008,10 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_ASSIST'));
-		new Setting(containerEl)
+		}
+
+		if (this.settingsTab === 'assist') {
+		new Setting(el)
 			.setName(t('SETTINGS_SNAP_TRIGGER_NAME'))
 			.setDesc(t('SETTINGS_SNAP_TRIGGER_DESC'))
 			.addDropdown(dd =>
@@ -974,7 +1025,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_SNAP_THRESHOLD_NAME'))
 			.setDesc(t('SETTINGS_SNAP_THRESHOLD_DESC'))
 			.addText(text =>
@@ -988,7 +1039,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_BIND_AFTER_SNAP_NAME'))
 			.setDesc(t('SETTINGS_BIND_AFTER_SNAP_DESC'))
 			.addToggle(toggle =>
@@ -997,7 +1048,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_NAME'))
 			.setDesc(t('SETTINGS_SNAP_UNBIND_RANGE_MULT_DESC'))
 			.addSlider(slider =>
@@ -1028,8 +1079,10 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl).setHeading().setName(t('SETTINGS_HEADING_CANVAS_LINK'));
-		new Setting(containerEl)
+		}
+
+		if (this.settingsTab === 'canvas') {
+		new Setting(el)
 			.setName(t('SETTINGS_CANVAS_CARD_WIDTH_NAME'))
 			.setDesc(t('SETTINGS_CANVAS_CARD_WIDTH_DESC'))
 			.addText(text =>
@@ -1043,7 +1096,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_CANVAS_CARD_HEIGHT_NAME'))
 			.setDesc(t('SETTINGS_CANVAS_CARD_HEIGHT_DESC'))
 			.addText(text =>
@@ -1057,7 +1110,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_CANVAS_CARD_AUTO_FIT_HEIGHT_NAME'))
 			.setDesc(t('SETTINGS_CANVAS_CARD_AUTO_FIT_HEIGHT_DESC'))
 			.addToggle(toggle =>
@@ -1066,7 +1119,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_CANVAS_MATCH_COLOR_NAME'))
 			.setDesc(t('SETTINGS_CANVAS_MATCH_COLOR_DESC'))
 			.addToggle(toggle =>
@@ -1075,7 +1128,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_CANVAS_ZOOM_SELECTION_NAME'))
 			.setDesc(t('SETTINGS_CANVAS_ZOOM_SELECTION_DESC'))
 			.addToggle(toggle =>
@@ -1084,7 +1137,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_CANVAS_DRAG_HINT_NAME'))
 			.setDesc(t('SETTINGS_CANVAS_DRAG_HINT_DESC'))
 			.addToggle(toggle =>
@@ -1093,7 +1146,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_CANVAS_BATCH_GAP_NAME'))
 			.setDesc(t('SETTINGS_CANVAS_BATCH_GAP_DESC'))
 			.addText(text =>
@@ -1107,7 +1160,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-		new Setting(containerEl)
+		new Setting(el)
 			.setName(t('SETTINGS_CANVAS_BATCH_MAX_PER_ROW_NAME'))
 			.setDesc(t('SETTINGS_CANVAS_BATCH_MAX_PER_ROW_DESC'))
 			.addText(text =>
@@ -1121,5 +1174,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+		}
 	}
 }
