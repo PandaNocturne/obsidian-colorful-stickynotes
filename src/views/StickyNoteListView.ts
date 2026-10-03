@@ -454,17 +454,17 @@ export class StickyNoteListView extends ItemView {
 	private updateCanvasDragBehaviorHintState(ctrlOrCmd: boolean, shift: boolean): void {
 		const wrap = this.canvasDragCanvasHintEl;
 		if (!wrap) return;
-		const plainEl = wrap.querySelector('[data-csn-drag-mode="plain"]');
 		const fileRefEl = wrap.querySelector('[data-csn-drag-mode="fileRef"]');
+		const embedEl = wrap.querySelector('[data-csn-drag-mode="embed"]');
 		const shiftEl = wrap.querySelector('[data-csn-drag-mode="deleteOriginal"]');
-		if (!(plainEl instanceof HTMLElement)) return;
 		if (!(fileRefEl instanceof HTMLElement)) return;
+		if (!(embedEl instanceof HTMLElement)) return;
 		if (!(shiftEl instanceof HTMLElement)) return;
 		const isDeleteOriginal = shift && !ctrlOrCmd;
-		const isFileRefOnly = ctrlOrCmd && !shift;
-		const isPlain = !isDeleteOriginal && !isFileRefOnly;
-		plainEl.toggleClass('is-active', isPlain);
-		fileRefEl.toggleClass('is-active', isFileRefOnly);
+		const isEmbed = ctrlOrCmd && !shift;
+		const isFileRef = !isDeleteOriginal && !isEmbed;
+		fileRefEl.toggleClass('is-active', isFileRef);
+		embedEl.toggleClass('is-active', isEmbed);
 		shiftEl.toggleClass('is-active', isDeleteOriginal);
 	}
 
@@ -481,10 +481,13 @@ export class StickyNoteListView extends ItemView {
 			});
 		}
 		const ul = wrap.createEl('ul', { cls: 'csn-canvas-drag-hint-list' });
-		ul.createEl('li', { text: t('LIST_DRAG_CANVAS_HINT_PLAIN'), attr: { 'data-csn-drag-mode': 'plain' } });
+		ul.createEl('li', {
+			text: t('LIST_DRAG_CANVAS_HINT_PLAIN'),
+			attr: { 'data-csn-drag-mode': 'fileRef' }
+		});
 		ul.createEl('li', {
 			text: t('LIST_DRAG_CANVAS_HINT_CTRL_OR_CMD'),
-			attr: { 'data-csn-drag-mode': 'fileRef' }
+			attr: { 'data-csn-drag-mode': 'embed' }
 		});
 		ul.createEl('li', {
 			text: t('LIST_DRAG_CANVAS_HINT_SHIFT'),
@@ -848,13 +851,14 @@ export class StickyNoteListView extends ItemView {
 				height: this.plugin.settings.canvasLinkNodeHeight
 			};
 
-			// 默认：内容导入（Canvas text 节点）
-			// Ctrl / Cmd（macOS ⌘）：文件引用（Canvas file 节点）
-			// Shift（且未按 Ctrl/Cmd）：内容导入并删除原文件（移入回收站）
+			// 默认：文件引用（Canvas file 节点）
+			// Ctrl / Cmd（macOS ⌘）：内容嵌入（Canvas text 节点）
+			// Shift（且未按 Ctrl/Cmd）：内容嵌入并删除原文件（移入回收站）
 			void (async () => {
 				const ctrlOrCmd = evt.ctrlKey || evt.metaKey;
 				const isDeleteOriginal = evt.shiftKey && !ctrlOrCmd;
-				const isFileRefOnly = ctrlOrCmd && !evt.shiftKey;
+				const isEmbed = ctrlOrCmd && !evt.shiftKey;
+				const isFileRef = !isDeleteOriginal && !isEmbed;
 
 				const createdNodes: Array<{ onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void }> = [];
 				const gap = Math.max(0, Math.min(500, Math.round(this.plugin.settings.canvasLinkBatchGridGap)));
@@ -870,7 +874,7 @@ export class StickyNoteListView extends ItemView {
 						| { color?: string; onResizeDblclick?: (e: MouseEvent, p: 'top' | 'bottom' | 'left' | 'right') => void }
 						| undefined;
 
-					if (isFileRefOnly) {
+					if (isFileRef) {
 						node = v.canvas?.createFileNode({
 							file: it.file,
 							pos: p2,

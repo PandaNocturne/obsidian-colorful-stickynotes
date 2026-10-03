@@ -401,8 +401,8 @@ export const en = {
 
 	LIST_DRAG_CANVAS_HINT_TITLE: 'Drop to Canvas',
 	LIST_DRAG_CANVAS_HINT_BATCH: 'Dragging {n} stickies',
-	LIST_DRAG_CANVAS_HINT_PLAIN: 'Default: text cards (embedded content)',
-	LIST_DRAG_CANVAS_HINT_CTRL_OR_CMD: 'Ctrl / Cmd: file cards (vault link)',
+	LIST_DRAG_CANVAS_HINT_PLAIN: 'Default: file cards (vault link)',
+	LIST_DRAG_CANVAS_HINT_CTRL_OR_CMD: 'Ctrl / Cmd: text cards (embedded content)',
 	LIST_DRAG_CANVAS_HINT_SHIFT: 'Shift only: text cards + trash originals',
 	LIST_DRAG_CANVAS_HINT_NOTE_LINK: 'Drop into note editor: insert Markdown link',
 
