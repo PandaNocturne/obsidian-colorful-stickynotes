@@ -1041,6 +1041,7 @@ export class StickyNoteManager {
 		this.workspaces.activeWorkspaceId = id;
 		await this.flushWorkspacesToDisk();
 		await this.syncStickyWorkspaceYamlForWorkspaceMembers(nw);
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/**
@@ -1071,6 +1072,7 @@ export class StickyNoteManager {
 		if (remarkTrim) nw.remark = remarkTrim;
 		this.workspaces.workspaces.push(nw);
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/**
@@ -1106,6 +1108,11 @@ export class StickyNoteManager {
 	private assertWorkspaceMetaMutable(): boolean {
 		if (this.isWorkspacePersistFrozen()) return false;
 		return true;
+	}
+
+	/** 工作区名称/排序/分组等变更后，同步刷新已打开的仪表盘树与列表。 */
+	private notifyWorkspaceStructureUi(): void {
+		this.plugin.refreshStickyListIfOpen();
 	}
 
 	/** 落盘活动工作区、关闭当前浮动便笺并按快照恢复（在 beginWorkspaceSwitchForUi 之后调用）。 */
@@ -1184,6 +1191,7 @@ export class StickyNoteManager {
 		else delete ws.remark;
 		ws.updatedAt = Date.now();
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 		new Notice(t('NOTICE_WORKSPACE_UPDATED'));
 	}
 
@@ -1208,6 +1216,7 @@ export class StickyNoteManager {
 		this.workspaces.workspaces.push(nw);
 		await this.flushWorkspacesToDisk();
 		await this.syncStickyWorkspaceYamlForWorkspaceMembers(nw);
+		this.notifyWorkspaceStructureUi();
 		new Notice(t('NOTICE_WORKSPACE_COPIED'));
 	}
 
@@ -1322,6 +1331,7 @@ export class StickyNoteManager {
 		next.splice(insertAt, 0, moved);
 		this.workspaces.workspaces = next;
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/** 将工作区插入到 `afterId` 之后。 */
@@ -1340,6 +1350,7 @@ export class StickyNoteManager {
 		next.splice(afterAt + 1, 0, moved);
 		this.workspaces.workspaces = next;
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/** 拖到工具栏「+」或列表末尾时移到当前筛选列表的末尾。 */
@@ -1354,6 +1365,7 @@ export class StickyNoteManager {
 		next.push(moved);
 		this.workspaces.workspaces = next;
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/** 新建顶部分组标签；返回新分组 id。 */
@@ -1364,6 +1376,7 @@ export class StickyNoteManager {
 		const finalName = name?.trim() || t('WS_TAB_GROUP_AUTO_NAME', { n });
 		this.workspaces.tabGroups.push({ id, name: finalName });
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 		return id;
 	}
 
@@ -1387,6 +1400,7 @@ export class StickyNoteManager {
 		}
 		this.workspaces.trashTabGroups.push({ id, name: finalName });
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 		return id;
 	}
 
@@ -1399,6 +1413,7 @@ export class StickyNoteManager {
 			ws.tabGroupId = WS_TAB_GROUP_UNGROUPED_ID;
 			ws.updatedAt = Date.now();
 			await this.flushWorkspacesToDisk();
+			this.notifyWorkspaceStructureUi();
 			return;
 		}
 		const inActive = this.workspaces.tabGroups.some(g => g.id === tabGroupId);
@@ -1407,6 +1422,7 @@ export class StickyNoteManager {
 		ws.tabGroupId = tabGroupId;
 		ws.updatedAt = Date.now();
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/** 将顶部分组标签拖到另一标签前。 */
@@ -1425,6 +1441,7 @@ export class StickyNoteManager {
 		next.splice(insertAt, 0, moved);
 		this.workspaces.tabGroups = next;
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/** 将顶部分组标签拖到末尾（「+」按钮前）。 */
@@ -1439,6 +1456,7 @@ export class StickyNoteManager {
 		next.push(moved);
 		this.workspaces.tabGroups = next;
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/** 将工作区移入指定顶部分组；`@ungrouped` 表示挂到根目录（未分组）。 */
@@ -1451,6 +1469,7 @@ export class StickyNoteManager {
 			ws.tabGroupId = WS_TAB_GROUP_UNGROUPED_ID;
 			ws.updatedAt = Date.now();
 			await this.flushWorkspacesToDisk();
+			this.notifyWorkspaceStructureUi();
 			return;
 		}
 		if (!this.workspaces.tabGroups.some(g => g.id === tabGroupId)) return;
@@ -1458,6 +1477,7 @@ export class StickyNoteManager {
 		ws.tabGroupId = tabGroupId;
 		ws.updatedAt = Date.now();
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/** 重命名顶部分组标签（活动分组或已归档分组）。 */
@@ -1474,6 +1494,7 @@ export class StickyNoteManager {
 		}
 		group.name = next;
 		await this.flushWorkspacesToDisk();
+		this.notifyWorkspaceStructureUi();
 	}
 
 	/** 统计某顶部分组下的活动工作区数量。 */
@@ -1506,6 +1527,7 @@ export class StickyNoteManager {
 				this.workspaces.panelTabFilterId = WS_TAB_FILTER_ALL;
 			}
 			await this.flushWorkspacesToDisk();
+			this.notifyWorkspaceStructureUi();
 			return 'deleted';
 		}
 
