@@ -8,6 +8,8 @@ export type WorkspaceMenuEntry = {
 	name: string;
 	alreadyIn?: boolean;
 	disabled?: boolean;
+	/** 仅勾选、仍可点击（如筛选当前项）。 */
+	selected?: boolean;
 };
 
 export type WorkspaceMenuGroupSection = {
@@ -67,7 +69,7 @@ export function appendGroupedWorkspacePicker(
 		for (const ws of entries) {
 			host.addItem(si => {
 				si.setTitle(ws.name).setIcon('layers');
-				if (ws.alreadyIn) si.setChecked(true);
+				if (ws.alreadyIn || ws.selected) si.setChecked(true);
 				if (ws.disabled || ws.alreadyIn) si.setDisabled(true);
 				si.onClick(() => onPick(ws.id));
 			});

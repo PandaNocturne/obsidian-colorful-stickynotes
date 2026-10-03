@@ -20,6 +20,9 @@ import {
 	VIEW_STICKY_NOTE_LIST,
 	NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID,
 	NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID,
+	NOTE_LIST_WORKSPACE_FILTER_UNGROUPED_ID,
+	NOTE_LIST_WORKSPACE_FILTER_UNTAGGED_ID,
+	WS_TAB_GROUP_UNGROUPED_ID,
 	type NoteListArchiveFilter,
 	type NoteListFloatOpenFilter,
 	type NoteListSort,
@@ -50,6 +53,8 @@ import {
 	mountStickyTagToolbar,
 	type StickyTagToolbarHandle
 } from '../utils/sticky-tag-toolbar';
+import { getStickyTagsForFile } from '../utils/sticky-tags-from-file';
+import { resolveWorkspaceTabGroupId } from '../workspace-store';
 
 /** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
 function listPreviewEmbedMarkdown(file: TFile): string {
@@ -152,6 +157,26 @@ function countUncategorizedStickyPathsInFolder(
 	let n = 0;
 	for (const p of stickyMdPathSet) {
 		if (!categorizedPaths.has(p)) n++;
+	}
+	return n;
+}
+
+/** 便笺目录中属于「未分组」工作区成员的 .md 数量。 */
+function countUngroupedStickyPathsInFolder(
+	ungroupedMemberPaths: ReadonlySet<string>,
+	stickyMdPathSet: ReadonlySet<string>
+): number {
+	return countWorkspaceStickyPathsInFolder(ungroupedMemberPaths, stickyMdPathSet);
+}
+
+/** 便笺目录中无标签的 .md 数量。 */
+function countUntaggedStickyPathsInFolder(
+	app: import('obsidian').App,
+	stickyFiles: readonly TFile[]
+): number {
+	let n = 0;
+	for (const f of stickyFiles) {
+		if (getStickyTagsForFile(app, f).length === 0) n++;
 	}
 	return n;
 }
@@ -1603,6 +1628,10 @@ export class StickyNoteListView extends ItemView {
 			wfTitle = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_ACTIVE');
 		} else if (wfId === NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID) {
 			wfTitle = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_UNCATEGORIZED');
+		} else if (wfId === NOTE_LIST_WORKSPACE_FILTER_UNGROUPED_ID) {
+			wfTitle = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_UNGROUPED');
+		} else if (wfId === NOTE_LIST_WORKSPACE_FILTER_UNTAGGED_ID) {
+			wfTitle = t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_UNTAGGED');
 		} else if (wfId) {
 			const ws = this.plugin.stickies.workspaces.workspaces.find(w => w.id === wfId);
 			wfTitle = ws?.name ?? titleNone;
@@ -1656,14 +1685,18 @@ export class StickyNoteListView extends ItemView {
 		const menu = new Menu();
 		const cur = this.plugin.settings.noteListWorkspaceFilterId;
 
+		let stickyFiles: TFile[] = [];
 		let stickyMdPathSet = new Set<string>();
 		const folder = normalizePath(this.plugin.settings.stickyFolder || 'StickyNotes');
 		const folderAbs = this.app.vault.getAbstractFileByPath(folder);
 		if (folderAbs instanceof TFolder) {
-			stickyMdPathSet = new Set(collectMarkdownUnderFolder(folderAbs).map(f => normalizePath(f.path)));
+			stickyFiles = collectMarkdownUnderFolder(folderAbs);
+			stickyMdPathSet = new Set(stickyFiles.map(f => normalizePath(f.path)));
 		}
 
 		const titleWithCount = (label: string, count: number) => `${label} (${count})`;
+		const mgr = this.plugin.stickies;
+		const wsFile = mgr.workspaces;
 
 		menu.addItem(item => {
 			item
@@ -1674,12 +1707,9 @@ export class StickyNoteListView extends ItemView {
 					void this.setListWorkspaceFilterId(null);
 				});
 		});
-		const activeWs = this.plugin.stickies.activeWorkspace();
+		const activeWs = mgr.activeWorkspace();
 		const activeCount = activeWs
-			? countWorkspaceStickyPathsInFolder(
-					this.plugin.stickies.getWorkspaceMemberPathSet(activeWs),
-					stickyMdPathSet
-				)
+			? countWorkspaceStickyPathsInFolder(mgr.getWorkspaceMemberPathSet(activeWs), stickyMdPathSet)
 			: 0;
 		menu.addItem(item => {
 			item
@@ -1690,32 +1720,63 @@ export class StickyNoteListView extends ItemView {
 					void this.setListWorkspaceFilterId(NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID);
 				});
 		});
-		const categorizedPaths = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
+		const categorizedPaths = mgr.getAllAssignedWorkspaceMemberPathSet();
 		const uncategorizedCount = countUncategorizedStickyPathsInFolder(stickyMdPathSet, categorizedPaths);
 		menu.addItem(item => {
 			item
 				.setTitle(
 					titleWithCount(t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_UNCATEGORIZED'), uncategorizedCount)
 				)
-				.setIcon('folder-x')
+				.setIcon('layers')
 				.setChecked(cur === NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID)
 				.onClick(() => {
 					void this.setListWorkspaceFilterId(NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID);
 				});
 		});
-		for (const ws of this.plugin.stickies.workspaces.workspaces) {
-			const n = countWorkspaceStickyPathsInFolder(
-				this.plugin.stickies.getWorkspaceMemberPathSet(ws),
-				stickyMdPathSet
-			);
-			menu.addItem(item => {
-				item
-					.setTitle(titleWithCount(ws.name, n))
-					.setIcon('layers')
-					.setChecked(cur === ws.id)
-					.onClick(() => {
-						void this.setListWorkspaceFilterId(ws.id);
-					});
+
+		const ungroupedPaths = new Set<string>();
+		for (const ws of wsFile.workspaces) {
+			if (resolveWorkspaceTabGroupId(ws, wsFile.tabGroups) !== WS_TAB_GROUP_UNGROUPED_ID) continue;
+			for (const p of mgr.getWorkspaceMemberPathSet(ws)) ungroupedPaths.add(p);
+		}
+		const ungroupedCount = countUngroupedStickyPathsInFolder(ungroupedPaths, stickyMdPathSet);
+		menu.addItem(item => {
+			item
+				.setTitle(titleWithCount(t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_UNGROUPED'), ungroupedCount))
+				.setIcon('folder-x')
+				.setChecked(cur === NOTE_LIST_WORKSPACE_FILTER_UNGROUPED_ID)
+				.onClick(() => {
+					void this.setListWorkspaceFilterId(NOTE_LIST_WORKSPACE_FILTER_UNGROUPED_ID);
+				});
+		});
+
+		const untaggedCount = countUntaggedStickyPathsInFolder(this.app, stickyFiles);
+		menu.addItem(item => {
+			item
+				.setTitle(titleWithCount(t('LIST_WORKSPACE_FILTER_TOOLBAR_TITLE_UNTAGGED'), untaggedCount))
+				.setIcon('tag')
+				.setChecked(cur === NOTE_LIST_WORKSPACE_FILTER_UNTAGGED_ID)
+				.onClick(() => {
+					void this.setListWorkspaceFilterId(NOTE_LIST_WORKSPACE_FILTER_UNTAGGED_ID);
+				});
+		});
+
+		const sections = buildWorkspaceMenuGroups(
+			wsFile,
+			() => true,
+			ws => ({
+				id: ws.id,
+				name: titleWithCount(
+					ws.name,
+					countWorkspaceStickyPathsInFolder(mgr.getWorkspaceMemberPathSet(ws), stickyMdPathSet)
+				),
+				selected: cur === ws.id
+			})
+		);
+		if (sections.some(s => s.workspaces.length > 0)) {
+			menu.addSeparator();
+			appendGroupedWorkspacePicker(menu, sections, wsId => {
+				void this.setListWorkspaceFilterId(wsId);
 			});
 		}
 		menu.showAtMouseEvent(evt);
@@ -2141,6 +2202,19 @@ export class StickyNoteListView extends ItemView {
 			if (wsFilterId === NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID) {
 				const categorized = this.plugin.stickies.getAllAssignedWorkspaceMemberPathSet();
 				files = files.filter(f => !categorized.has(normalizePath(f.path)));
+			} else if (wsFilterId === NOTE_LIST_WORKSPACE_FILTER_UNGROUPED_ID) {
+				const mgr = this.plugin.stickies;
+				const wsFile = mgr.workspaces;
+				const paths = new Set<string>();
+				for (const ws of wsFile.workspaces) {
+					if (resolveWorkspaceTabGroupId(ws, wsFile.tabGroups) !== WS_TAB_GROUP_UNGROUPED_ID) {
+						continue;
+					}
+					for (const p of mgr.getWorkspaceMemberPathSet(ws)) paths.add(p);
+				}
+				files = files.filter(f => paths.has(normalizePath(f.path)));
+			} else if (wsFilterId === NOTE_LIST_WORKSPACE_FILTER_UNTAGGED_ID) {
+				files = files.filter(f => getStickyTagsForFile(this.app, f).length === 0);
 			} else if (wsFilterId) {
 				const ws = this.resolveListWorkspaceFilterWorkspace(wsFilterId);
 				if (ws) {
