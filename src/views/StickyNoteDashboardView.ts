@@ -56,7 +56,6 @@ import { collectMarkdownUnderFolder } from '../utils/collect-markdown-under-fold
 import { resolveStickyArchivedForFile } from '../utils/sticky-archived-from-file';
 import { resolveStickyBgColorForFile } from '../utils/sticky-bg-from-file';
 import {
-	buildPaginationEntries,
 	dateCountsForFiles,
 	heatmapLevelFromCount,
 	filterStickyFilesByArchiveFilter,
@@ -319,9 +318,13 @@ export class StickyNoteDashboardView extends ItemView {
 	private paginationEl: HTMLElement | null = null;
 	private paginationRowEl: HTMLElement | null = null;
 	private paginationPagesEl: HTMLElement | null = null;
+	private paginationFirstBtn: HTMLButtonElement | null = null;
 	private paginationPrevBtn: HTMLButtonElement | null = null;
 	private paginationNextBtn: HTMLButtonElement | null = null;
+	private paginationLastBtn: HTMLButtonElement | null = null;
 	private paginationMetaEl: HTMLElement | null = null;
+	/** 当前筛选结果总页数，供「最后一页」跳转。 */
+	private dashTotalPages = 1;
 
 	private sortDropdownBtn: HTMLButtonElement | null = null;
 	private listBulkEditBtn: HTMLButtonElement | null = null;
@@ -2319,18 +2322,36 @@ export class StickyNoteDashboardView extends ItemView {
 		this.registerGridDelegatedEvents();
 		this.paginationEl = gridPane.createDiv({ cls: 'csn-list-pagination csn-dash-pagination' });
 		this.paginationRowEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-row' });
+		this.paginationFirstBtn = this.paginationRowEl.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-pagination-btn csn-list-pagination-btn--nav csn-list-pagination-btn--icon',
+			attr: { 'aria-label': t('FIRST_PAGE'), title: t('FIRST_PAGE') }
+		});
+		setIcon(this.paginationFirstBtn, 'chevrons-left');
 		this.paginationPrevBtn = this.paginationRowEl.createEl('button', {
 			type: 'button',
 			text: t('PREV_PAGE'),
 			cls: 'csn-list-pagination-btn csn-list-pagination-btn--nav'
 		});
-		this.paginationPagesEl = this.paginationRowEl.createDiv({ cls: 'csn-list-pagination-pages' });
+		/* 中间为范围统计：« 上一页 · 1–12 / 128 · 下一页 » */
+		this.paginationMetaEl = this.paginationRowEl.createDiv({ cls: 'csn-list-pagination-meta' });
 		this.paginationNextBtn = this.paginationRowEl.createEl('button', {
 			type: 'button',
 			text: t('NEXT_PAGE'),
 			cls: 'csn-list-pagination-btn csn-list-pagination-btn--nav'
 		});
-		this.paginationMetaEl = this.paginationEl.createDiv({ cls: 'csn-list-pagination-meta' });
+		this.paginationLastBtn = this.paginationRowEl.createEl('button', {
+			type: 'button',
+			cls: 'clickable-icon csn-list-pagination-btn csn-list-pagination-btn--nav csn-list-pagination-btn--icon',
+			attr: { 'aria-label': t('LAST_PAGE'), title: t('LAST_PAGE') }
+		});
+		setIcon(this.paginationLastBtn, 'chevrons-right');
+		this.paginationPagesEl = null;
+		this.registerDomEvent(this.paginationFirstBtn, 'click', () => {
+			if (this.listPageIndex <= 0) return;
+			this.listPageIndex = 0;
+			void this.renderDash();
+		});
 		this.registerDomEvent(this.paginationPrevBtn, 'click', () => {
 			if (this.listPageIndex <= 0) return;
 			this.listPageIndex -= 1;
@@ -2340,16 +2361,10 @@ export class StickyNoteDashboardView extends ItemView {
 			this.listPageIndex += 1;
 			void this.renderDash();
 		});
-		this.registerDomEvent(this.paginationEl, 'click', (evt: MouseEvent) => {
-			const hit = evt.target;
-			if (!(hit instanceof Element)) return;
-			const btn = hit.closest('button[data-csn-list-page]');
-			if (!btn || !this.paginationEl?.contains(btn)) return;
-			const raw = (btn as HTMLButtonElement).dataset.csnListPage;
-			const p0 = raw !== undefined ? parseInt(raw, 10) : NaN;
-			if (!Number.isFinite(p0) || p0 < 0) return;
-			evt.preventDefault();
-			this.listPageIndex = p0;
+		this.registerDomEvent(this.paginationLastBtn, 'click', () => {
+			const last = Math.max(0, this.dashTotalPages - 1);
+			if (this.listPageIndex >= last) return;
+			this.listPageIndex = last;
 			void this.renderDash();
 		});
 
@@ -6798,48 +6813,45 @@ export class StickyNoteDashboardView extends ItemView {
 		await run;
 	}
 
-	/** 底栏统计始终显示；多页时再显示翻页控件 */
-	private syncDashPaginationFooter(pageCount: number, totalCount: number, totalPages: number): void {
+	/**
+	 * 仪表盘底栏：第一页 / 上一页 + 范围统计 + 下一页 / 最后一页。
+	 * 单页时只显示居中统计。
+	 */
+	private syncDashPaginationFooter(from: number, to: number, totalCount: number, totalPages: number): void {
 		if (!this.paginationEl || !this.paginationMetaEl) return;
-		this.paginationEl.show();
-		this.paginationMetaEl.setText(t('LIST_PAGINATION_META', { pageCount, totalCount }));
-		if (totalPages <= 1) {
-			this.paginationPagesEl?.empty();
-			this.paginationRowEl?.hide();
+		if (totalCount <= 0) {
+			this.paginationMetaEl.setText('');
+			this.paginationFirstBtn?.hide();
+			this.paginationPrevBtn?.hide();
+			this.paginationNextBtn?.hide();
+			this.paginationLastBtn?.hide();
+			this.paginationEl.removeClass('csn-dash-pagination--meta-only');
+			this.paginationEl.hide();
 			return;
 		}
+		this.paginationEl.show();
 		this.paginationRowEl?.show();
-		if (this.paginationPrevBtn) this.paginationPrevBtn.disabled = this.listPageIndex <= 0;
-		if (this.paginationNextBtn) {
-			this.paginationNextBtn.disabled = this.listPageIndex >= totalPages - 1;
+		this.dashTotalPages = Math.max(1, totalPages);
+		this.paginationMetaEl.setText(t('DASH_PAGINATION_META', { from, to, total: totalCount }));
+		const metaOnly = totalPages <= 1;
+		this.paginationEl.toggleClass('csn-dash-pagination--meta-only', metaOnly);
+		if (metaOnly) {
+			this.paginationFirstBtn?.hide();
+			this.paginationPrevBtn?.hide();
+			this.paginationNextBtn?.hide();
+			this.paginationLastBtn?.hide();
+			return;
 		}
-		const pagesWrap = this.paginationPagesEl;
-		if (!pagesWrap) return;
-		pagesWrap.empty();
-		const entries = buildPaginationEntries(totalPages, this.listPageIndex);
-		const cur1 = this.listPageIndex + 1;
-		for (const ent of entries) {
-			if (ent === 'gap') {
-				pagesWrap.createSpan({
-					cls: 'csn-list-pagination-ellipsis',
-					text: '…',
-					attr: { 'aria-hidden': 'true' }
-				});
-				continue;
-			}
-			const isActive = ent === cur1;
-			const btn = pagesWrap.createEl('button', {
-				type: 'button',
-				cls: `csn-list-pagination-page${isActive ? ' is-active' : ''}`,
-				text: String(ent),
-				attr: {
-					'data-csn-list-page': String(ent - 1),
-					'aria-label': t('LIST_PAGINATION_PAGE_ARIA', { page: ent }),
-					...(isActive ? { 'aria-current': 'page' as const } : {})
-				}
-			});
-			if (isActive) btn.disabled = true;
-		}
+		this.paginationFirstBtn?.show();
+		this.paginationPrevBtn?.show();
+		this.paginationNextBtn?.show();
+		this.paginationLastBtn?.show();
+		const atFirst = this.listPageIndex <= 0;
+		const atLast = this.listPageIndex >= totalPages - 1;
+		if (this.paginationFirstBtn) this.paginationFirstBtn.disabled = atFirst;
+		if (this.paginationPrevBtn) this.paginationPrevBtn.disabled = atFirst;
+		if (this.paginationNextBtn) this.paginationNextBtn.disabled = atLast;
+		if (this.paginationLastBtn) this.paginationLastBtn.disabled = atLast;
 	}
 
 	private async renderDashImpl(): Promise<void> {
@@ -6861,7 +6873,7 @@ export class StickyNoteDashboardView extends ItemView {
 					text: t('DASH_FOLDER_MISSING', { folder }),
 					cls: 'csn-list-empty'
 				});
-				this.syncDashPaginationFooter(0, 0, 1);
+				this.syncDashPaginationFooter(0, 0, 0, 1);
 				return;
 			}
 
@@ -6923,7 +6935,7 @@ export class StickyNoteDashboardView extends ItemView {
 					}
 				}
 				container.replaceChildren(emptyEl);
-				this.syncDashPaginationFooter(0, 0, 1);
+				this.syncDashPaginationFooter(0, 0, 0, 1);
 				return;
 			}
 
@@ -6997,7 +7009,9 @@ export class StickyNoteDashboardView extends ItemView {
 				this.lastRenderedPageIndex !== null && this.lastRenderedPageIndex !== this.listPageIndex;
 			this.lastRenderedPageIndex = this.listPageIndex;
 
-			this.syncDashPaginationFooter(pageFiles.length, files.length, totalPages);
+			const from = pageFiles.length > 0 ? start + 1 : 0;
+			const to = pageFiles.length > 0 ? start + pageFiles.length : 0;
+			this.syncDashPaginationFooter(from, to, files.length, totalPages);
 
 			/* 仅筛选变更或翻页时回顶；成员增减保持滚动位置，减少闪动感 */
 			if (filterChanged || pageIndexChanged) {
@@ -7098,8 +7112,10 @@ export class StickyNoteDashboardView extends ItemView {
 		this.paginationEl = null;
 		this.paginationRowEl = null;
 		this.paginationPagesEl = null;
+		this.paginationFirstBtn = null;
 		this.paginationPrevBtn = null;
 		this.paginationNextBtn = null;
+		this.paginationLastBtn = null;
 		this.paginationMetaEl = null;
 		this.areaBtns.clear();
 		this.colorBtns.clear();
