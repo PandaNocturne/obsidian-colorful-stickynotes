@@ -24,6 +24,26 @@ function clearWorkspacePanelTabDropTargets(root: ParentNode): void {
 	}
 }
 
+function clearWorkspacePanelItemDropIndicators(root: ParentNode): void {
+	for (const el of Array.from(
+		root.querySelectorAll(
+			'.csn-ws-panel-item--drop-before, .csn-ws-panel-item--drop-after, .csn-ws-panel-item--drop-target'
+		)
+	)) {
+		el.classList.remove(
+			'csn-ws-panel-item--drop-before',
+			'csn-ws-panel-item--drop-after',
+			'csn-ws-panel-item--drop-target'
+		);
+	}
+}
+
+/** 卡片水平中线：左半插入前、右半插入后 */
+function workspaceCardDropBefore(e: DragEvent, row: HTMLElement): boolean {
+	const rect = row.getBoundingClientRect();
+	return e.clientX < rect.left + rect.width / 2;
+}
+
 function formatWorkspaceRelativeTime(updatedAt: number | undefined): string {
 	if (updatedAt === undefined || !Number.isFinite(updatedAt)) {
 		return t('WS_TIME_UNKNOWN');
@@ -1038,9 +1058,7 @@ export class WorkspacePanelModal extends Modal {
 		});
 		dragHandle.addEventListener('dragend', () => {
 			row.classList.remove('csn-ws-panel-item--dragging');
-			for (const el of Array.from(gridEl.querySelectorAll('.csn-ws-panel-item--drop-target'))) {
-				el.classList.remove('csn-ws-panel-item--drop-target');
-			}
+			clearWorkspacePanelItemDropIndicators(gridEl);
 			const panelRoot = gridEl.closest('.csn-workspace-panel');
 			panelRoot
 				?.querySelector('.csn-ws-panel-toolbar-btn--new')
@@ -1072,20 +1090,26 @@ export class WorkspacePanelModal extends Modal {
 			if (!e.dataTransfer?.types.includes(WORKSPACE_DND_MIME)) return;
 			e.preventDefault();
 			e.dataTransfer.dropEffect = 'move';
-			row.classList.add('csn-ws-panel-item--drop-target');
+			const before = workspaceCardDropBefore(e, row);
+			clearWorkspacePanelItemDropIndicators(gridEl);
+			row.classList.add(before ? 'csn-ws-panel-item--drop-before' : 'csn-ws-panel-item--drop-after');
 		});
 		row.addEventListener('dragleave', (e: DragEvent) => {
 			const r = e.relatedTarget as Node | null;
 			if (r && row.contains(r)) return;
-			row.classList.remove('csn-ws-panel-item--drop-target');
+			row.classList.remove('csn-ws-panel-item--drop-before', 'csn-ws-panel-item--drop-after');
 		});
 		row.addEventListener('drop', (e: DragEvent) => {
 			e.preventDefault();
 			e.stopPropagation();
-			row.classList.remove('csn-ws-panel-item--drop-target');
+			const before = workspaceCardDropBefore(e, row);
+			clearWorkspacePanelItemDropIndicators(gridEl);
 			const fromId = e.dataTransfer?.getData(WORKSPACE_DND_MIME);
 			if (!fromId || fromId === ws.id) return;
-			void mgr.reorderWorkspaceBefore(fromId, ws.id).then(() => refresh());
+			const op = before
+				? mgr.reorderWorkspaceBefore(fromId, ws.id)
+				: mgr.reorderWorkspaceAfter(fromId, ws.id);
+			void op.then(() => refresh());
 		});
 		const remarkText = ws.remark?.trim();
 		if (remarkText) {

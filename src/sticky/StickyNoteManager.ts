@@ -1324,6 +1324,24 @@ export class StickyNoteManager {
 		await this.flushWorkspacesToDisk();
 	}
 
+	/** 将工作区插入到 `afterId` 之后。 */
+	async reorderWorkspaceAfter(draggedId: string, afterId: string): Promise<void> {
+		if (!this.assertWorkspaceMetaMutable()) return;
+		if (draggedId === afterId) return;
+		const list = this.workspaces.workspaces;
+		const fromIdx = list.findIndex(w => w.id === draggedId);
+		const toIdx = list.findIndex(w => w.id === afterId);
+		if (fromIdx < 0 || toIdx < 0) return;
+		const next = [...list];
+		const [moved] = next.splice(fromIdx, 1);
+		if (moved === undefined) return;
+		const afterAt = next.findIndex(w => w.id === afterId);
+		if (afterAt < 0) return;
+		next.splice(afterAt + 1, 0, moved);
+		this.workspaces.workspaces = next;
+		await this.flushWorkspacesToDisk();
+	}
+
 	/** 拖到工具栏「+」或列表末尾时移到当前筛选列表的末尾。 */
 	async reorderWorkspaceToEnd(draggedId: string): Promise<void> {
 		if (!this.assertWorkspaceMetaMutable()) return;
