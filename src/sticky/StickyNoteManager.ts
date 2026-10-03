@@ -159,11 +159,6 @@ export class StickyNoteManager {
 		return this.popovers.size > 0;
 	}
 
-	hasSavedStickyWindowsInActiveWorkspace(): boolean {
-		const ws = this.activeWorkspace();
-		return !!ws && ws.windows.length > 0;
-	}
-
 	/**
 	 * 关闭所有浮动便笺窗口。
 	 * @param keepWorkspaceSession 为 true 时保留工作区会话：仅 destroy 各窗口并清空映射，不逐个 `closeSticky`（用于工作区切换等批量拆解）。
@@ -889,46 +884,12 @@ export class StickyNoteManager {
 	}
 
 	/**
-	 * 新建便笺工作区归属：有活动工作区则加入活动区；
-	 * 否则若从悬浮便笺「+」创建，则继承源便笺所属工作区（无则保持未分类）。
+	 * 新建便笺工作区归属：有活动工作区则加入活动区，否则保持未分类。
 	 */
-	private async assignNewStickyToWorkspaceContext(
-		file: TFile,
-		sourcePopover?: StickyNotePopover
-	): Promise<void> {
+	private async assignNewStickyToWorkspaceContext(file: TFile): Promise<void> {
 		if (this.activeWorkspace()) {
 			await this.ensureStickyInActiveWorkspace(file);
-			return;
 		}
-		if (!sourcePopover) return;
-		await this.ensureStickyInSameWorkspacesAs(file, sourcePopover);
-	}
-
-	/** 将新建便笺加入源悬浮便笺所在的全部活动工作区。 */
-	private async ensureStickyInSameWorkspacesAs(
-		file: TFile,
-		sourcePopover: StickyNotePopover
-	): Promise<void> {
-		const source = this.getPopoverFile(sourcePopover);
-		if (!source) return;
-		let wsIds = this.getWorkspaceIdsContainingFile(source);
-		if (wsIds.length === 0) {
-			const fromYaml = await resolveStickyWorkspacesForFile(this.app, source);
-			wsIds = fromYaml.filter(id => this.workspaces.workspaces.some(w => w.id === id));
-		}
-		if (wsIds.length === 0) return;
-		let changed = false;
-		for (const wsId of wsIds) {
-			const ws = this.workspaces.workspaces.find(w => w.id === wsId);
-			if (!ws) continue;
-			if (this.findWorkspaceWindowIndex(ws, file) >= 0) continue;
-			ws.windows.push(this.buildSerializedWindowForFile(file, { open: true }));
-			this.memberPathCacheAdd(ws.id, normalizePath(file.path));
-			ws.updatedAt = Date.now();
-			changed = true;
-		}
-		if (changed) this.scheduleSaveWorkspaces();
-		await this.syncStickyWorkspaceYamlForFile(file).catch(() => undefined);
 	}
 
 	/** 关闭已打开、但不在当前活动工作区成员中的浮动便笺。 */
@@ -2008,7 +1969,7 @@ export class StickyNoteManager {
 					() => undefined
 				);
 				if (!skipActiveWorkspace) {
-					await this.assignNewStickyToWorkspaceContext(f, sourcePopover).catch(() => undefined);
+					await this.assignNewStickyToWorkspaceContext(f).catch(() => undefined);
 				}
 				this.notifyStickyListOpenIndicators();
 				return f;
@@ -2062,7 +2023,7 @@ export class StickyNoteManager {
 			this.bringStickyToFront(pop);
 			this.persistOpenWindows();
 			if (!skipActiveWorkspace) {
-				await this.assignNewStickyToWorkspaceContext(f, sourcePopover).catch(() => undefined);
+				await this.assignNewStickyToWorkspaceContext(f).catch(() => undefined);
 			}
 			this.notifyStickyListOpenIndicators();
 			return f;

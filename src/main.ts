@@ -122,7 +122,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.markdownEditorClass = resolveObsidianMarkdownEditorClass(this.app);
 
 		this.addRibbonIcon('square-pen', t('RIBBON_OPEN_STICKY'), () => {
-			void this.toggleStickyWindowsForCurrentWorkspace();
+			void this.stickies.addStickyWindow();
 		});
 
 		this.addRibbonIcon('layout-list', t('RIBBON_STICKY_LIST'), () => {
@@ -135,14 +135,6 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 
 		this.addRibbonIcon('layers', t('RIBBON_WORKSPACE'), () => {
 			this.openWorkspacePanel();
-		});
-
-		this.addCommand({
-			id: 'open-sticky-note-windows',
-			name: t('CMD_TOGGLE_STICKY_WINDOWS'),
-			callback: () => {
-				void this.toggleStickyWindowsForCurrentWorkspace();
-			}
 		});
 
 		this.addCommand({
@@ -170,23 +162,10 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: 'hide-current-sticky-note',
-			name: t('CMD_HIDE_CURRENT'),
+			id: 'toggle-sticky-workspace-windows',
+			name: t('CMD_TOGGLE_STICKY_WORKSPACE'),
 			callback: () => {
-				this.stickies.toggleHideCurrentSticky();
-			}
-		});
-
-		this.addCommand({
-			id: 'toggle-sticky-notes-hide-others',
-			name: t('CMD_TOGGLE_HIDE_OTHERS'),
-			callback: () => {
-				/* 兼容旧命令：按当前状态切换隐藏其他/显示其他。 */
-				if (this.stickies.isHideOthersMode()) {
-					this.stickies.showOthersSticky();
-				} else {
-					this.stickies.hideOthersSticky();
-				}
+				void this.toggleStickyWindowsForCurrentWorkspace();
 			}
 		});
 
@@ -894,22 +873,15 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	}
 
 	/**
-	 * 命令行为：
-	 * 1) 当前便笺工作区没有便笺 → 新建并打开一张便笺
-	 * 2) 当前便笺工作区存在便笺 → 关闭该便笺工作区内所有已打开便笺
-	 * 3) 若当前无打开便笺，但该便笺工作区已有保存布局 → 恢复该便笺工作区
+	 * 关闭/打开当前便笺工作区：
+	 * 有已打开便笺 → 关闭并保留会话；否则按活动工作区快照恢复（空则无操作，不自动新建）。
 	 */
 	private async toggleStickyWindowsForCurrentWorkspace(): Promise<void> {
 		if (this.stickies.hasOpenStickyWindows()) {
-			/* 关闭窗口但保留便笺工作区会话，便于下次一键恢复。 */
 			this.stickies.closeAllOpenStickyWindows(true);
 			return;
 		}
-		if (this.stickies.hasSavedStickyWindowsInActiveWorkspace()) {
-			await this.stickies.restoreWorkspaceWindows();
-			return;
-		}
-		await this.stickies.addStickyWindow();
+		await this.stickies.restoreWorkspaceWindows();
 	}
 
 	private async restoreStickySession(): Promise<void> {
