@@ -2055,55 +2055,6 @@ export class StickyNoteDashboardView extends ItemView {
 		this.buildWorkspaceFilterPanel(wsFilterWrap);
 		this.syncWorkspaceFilterBar();
 
-		const searchWrap = filters.createDiv({ cls: 'csn-dash-search' });
-		searchWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_SEARCH_LABEL') });
-		const searchInner = searchWrap.createDiv({ cls: 'csn-dash-search-inner' });
-		this.searchInnerEl = searchInner;
-		const searchIcon = searchInner.createSpan({ cls: 'csn-dash-search-icon', attr: { 'aria-hidden': 'true' } });
-		setIcon(searchIcon, 'search');
-		this.searchInput = searchInner.createEl('input', {
-			type: 'text',
-			cls: 'csn-dash-search-input',
-			attr: {
-				placeholder: t('DASH_SEARCH_PLACEHOLDER'),
-				spellcheck: 'false',
-				'aria-label': t('SEARCH_ARIA'),
-				role: 'searchbox',
-				autocomplete: 'off'
-			}
-		});
-		this.searchInput.value = this.plugin.settings.dashboardFilters.searchQuery;
-		this.searchClearBtn = searchInner.createEl('button', {
-			type: 'button',
-			cls: 'csn-dash-search-clear csn-dash-search-clear--hidden',
-			attr: {
-				'aria-label': t('CLEAR_SEARCH_ARIA'),
-				'aria-hidden': 'true',
-				tabindex: '-1'
-			}
-		});
-		setIcon(this.searchClearBtn, 'x');
-		const debouncedSearch = debounce(
-			() => {
-				this.listPageIndex = 0;
-				void this.renderDash();
-			},
-			120,
-			true
-		);
-		this.registerDomEvent(this.searchInput, 'input', () => {
-			this.syncSearchClearVisibility();
-			debouncedSearch();
-		});
-		this.registerDomEvent(this.searchClearBtn, 'click', () => {
-			if (!this.searchInput) return;
-			this.searchInput.value = '';
-			this.syncSearchClearVisibility();
-			this.listPageIndex = 0;
-			void this.renderDash();
-			this.searchInput.focus();
-		});
-
 		this.registerDomEvent(document, 'pointerdown', (evt: PointerEvent) => {
 			const tEl = evt.target;
 			if (!(tEl instanceof Node)) return;
@@ -2220,6 +2171,60 @@ export class StickyNoteDashboardView extends ItemView {
 		);
 
 		const toolActions = toolBar.createDiv({ cls: 'csn-dash-tool-actions' });
+
+		const searchSlot = toolActions.createDiv({ cls: 'csn-dash-tool-search' });
+		const searchWrap = searchSlot.createDiv({ cls: 'csn-dash-search' });
+		searchWrap.createSpan({ cls: 'csn-dash-filter-label', text: t('DASH_SEARCH_LABEL') });
+		const searchInner = searchWrap.createDiv({ cls: 'csn-dash-search-inner' });
+		this.searchInnerEl = searchInner;
+		const searchIcon = searchInner.createSpan({
+			cls: 'csn-dash-search-icon',
+			attr: { 'aria-hidden': 'true' }
+		});
+		setIcon(searchIcon, 'search');
+		this.searchInput = searchInner.createEl('input', {
+			type: 'text',
+			cls: 'csn-dash-search-input',
+			attr: {
+				placeholder: t('DASH_SEARCH_PLACEHOLDER'),
+				spellcheck: 'false',
+				'aria-label': t('SEARCH_ARIA'),
+				role: 'searchbox',
+				autocomplete: 'off'
+			}
+		});
+		this.searchInput.value = this.plugin.settings.dashboardFilters.searchQuery;
+		this.searchClearBtn = searchInner.createEl('button', {
+			type: 'button',
+			cls: 'csn-dash-search-clear csn-dash-search-clear--hidden',
+			attr: {
+				'aria-label': t('CLEAR_SEARCH_ARIA'),
+				'aria-hidden': 'true',
+				tabindex: '-1'
+			}
+		});
+		setIcon(this.searchClearBtn, 'x');
+		const debouncedSearch = debounce(
+			() => {
+				this.listPageIndex = 0;
+				void this.renderDash();
+			},
+			120,
+			true
+		);
+		this.registerDomEvent(this.searchInput, 'input', () => {
+			this.syncSearchClearVisibility();
+			debouncedSearch();
+		});
+		this.registerDomEvent(this.searchClearBtn, 'click', () => {
+			if (!this.searchInput) return;
+			this.searchInput.value = '';
+			this.syncSearchClearVisibility();
+			this.listPageIndex = 0;
+			void this.renderDash();
+			this.searchInput.focus();
+		});
+		this.syncSearchClearVisibility();
 
 		const paneToggles = toolActions.createDiv({ cls: 'csn-dash-toolbar csn-dash-pane-toggles' });
 		this.leftPaneToggleBtn = paneToggles.createEl('button', {
