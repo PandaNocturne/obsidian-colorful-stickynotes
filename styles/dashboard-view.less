@@ -857,14 +857,15 @@
 }
 
 .csn-dash-filters {
-	/* 同行时按内容占宽，把剩余空间留给搜索；换行后由 container 规则拉满 */
+	/* 同行时按内容占宽，把剩余空间留给搜索；组过多时在筛选框内换行 */
 	flex: 0 1 auto;
 	min-width: 0;
 	display: flex;
-	flex-wrap: nowrap;
+	flex-wrap: wrap;
 	align-items: center;
 	align-content: center;
-	gap: 0;
+	column-gap: 0;
+	row-gap: 4px;
 	padding: 4px 6px;
 	box-sizing: border-box;
 	border: 1px solid var(--background-modifier-border);
