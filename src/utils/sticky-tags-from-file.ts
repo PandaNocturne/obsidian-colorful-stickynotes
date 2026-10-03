@@ -31,6 +31,38 @@ function pushFrontmatterTags(out: Set<string>, value: unknown): void {
 	}
 }
 
+/** 按 frontmatter 出现顺序追加（去重，不排序）。 */
+function pushFrontmatterTagsOrdered(out: string[], seen: Set<string>, value: unknown): void {
+	if (typeof value === 'string') {
+		for (const part of value.split(/[,\s]+/)) {
+			const n = normalizeStickyTag(part);
+			if (!n || seen.has(n)) continue;
+			seen.add(n);
+			out.push(n);
+		}
+		return;
+	}
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			if (typeof item !== 'string') continue;
+			const n = normalizeStickyTag(item);
+			if (!n || seen.has(n)) continue;
+			seen.add(n);
+			out.push(n);
+		}
+	}
+}
+
+/** 仅读取 frontmatter `tags` / `tag`（不含正文 `#tag`）；保持 YAML 声明顺序。 */
+export function getStickyFrontmatterTagsForFile(app: App, file: TFile): string[] {
+	const cache = app.metadataCache.getFileCache(file);
+	const out: string[] = [];
+	const seen = new Set<string>();
+	pushFrontmatterTagsOrdered(out, seen, cache?.frontmatter?.tags);
+	pushFrontmatterTagsOrdered(out, seen, cache?.frontmatter?.tag);
+	return out;
+}
+
 /** 从 metadataCache 读取便笺标签（正文 `#tag` + frontmatter `tags`）。 */
 export function getStickyTagsForFile(app: App, file: TFile): string[] {
 	const cache = app.metadataCache.getFileCache(file);

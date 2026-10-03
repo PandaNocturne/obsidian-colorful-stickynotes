@@ -46,6 +46,10 @@ import {
 } from '../utils/workspace-transfer-menu';
 import { hashPathList } from '../utils/hash-path-list';
 import { mapPool } from '../utils/map-pool';
+import {
+	mountStickyTagToolbar,
+	type StickyTagToolbarHandle
+} from '../utils/sticky-tag-toolbar';
 
 /** 列表卡片预览：维基嵌入语法，由 Obsidian 按阅读视图嵌入管线渲染整篇便笺。 */
 function listPreviewEmbedMarkdown(file: TFile): string {
@@ -175,6 +179,7 @@ export class StickyNoteListView extends ItemView {
 	private paginationMetaEl: HTMLElement | null = null;
 	/** 每张列表卡片嵌入预览各自一个 Component，便于翻页时按路径卸载/复用。 */
 	private readonly listCardMarkdownHosts = new Map<string, Component>();
+	private readonly cardTagToolbars = new WeakMap<HTMLElement, StickyTagToolbarHandle>();
 	private listItemsDelegatedEvents = false;
 	/** 上次渲染的筛选指纹（不含路径集）；与结构 key 配合区分「仅成员变更」与筛选切换。 */
 	private lastListFilterKey = '';
@@ -300,6 +305,54 @@ export class StickyNoteListView extends ItemView {
 				card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 			}
 		});
+	}
+
+	/** 同步「便笺标签工具栏」开关到当前页卡片。 */
+	syncStickyTagToolbarFromSettings(): void {
+		const enabled = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		this.listItemsEl?.querySelectorAll('.csn-list-card').forEach(node => {
+			if (!(node instanceof HTMLElement)) return;
+			if (enabled) {
+				if (!this.cardTagToolbars.has(node)) this.attachCardTagToolbar(node);
+				else this.cardTagToolbars.get(node)?.setEnabled(true);
+			} else {
+				this.detachCardTagToolbar(node);
+			}
+		});
+	}
+
+	private attachCardTagToolbar(card: HTMLElement): void {
+		this.detachCardTagToolbar(card);
+		if (!this.plugin.settings.stickyTagToolbarEnabled) return;
+		const handle = mountStickyTagToolbar(card, {
+			app: this.app,
+			getFile: () => {
+				const path = card.dataset.csnNotePath;
+				if (!path) return null;
+				const abs = this.app.vault.getAbstractFileByPath(normalizePath(path));
+				return abs instanceof TFile ? abs : null;
+			},
+			enabled: true,
+			variant: 'card',
+			stickyFolder: this.plugin.settings.stickyFolder
+		});
+		this.cardTagToolbars.set(card, handle);
+	}
+
+	private detachCardTagToolbar(card: HTMLElement): void {
+		const h = this.cardTagToolbars.get(card);
+		if (!h) return;
+		h.destroy();
+		this.cardTagToolbars.delete(card);
+	}
+
+	private ensureCardTagToolbar(card: HTMLElement): void {
+		if (!this.plugin.settings.stickyTagToolbarEnabled) {
+			this.detachCardTagToolbar(card);
+			return;
+		}
+		if (!this.cardTagToolbars.has(card)) this.attachCardTagToolbar(card);
+		else this.cardTagToolbars.get(card)?.refresh();
 	}
 
 	/** 从设置写入根节点 CSS 变量（网格列宽、卡片高度）及预览区 overflow（`.csn-list-card-body--rendered`）。 */
@@ -642,7 +695,8 @@ export class StickyNoteListView extends ItemView {
 			if (
 				hit.closest('.csn-list-card-pin-btn') ||
 				hit.closest('.csn-list-card-menu-btn') ||
-				hit.closest('.csn-list-card-archive-wrap')
+				hit.closest('.csn-list-card-archive-wrap') ||
+				hit.closest('.csn-sticky-tag-toolbar')
 			) {
 				return;
 			}
@@ -1892,17 +1946,21 @@ export class StickyNoteListView extends ItemView {
 		await this.renderCardPreview(previewEl, f);
 		card.dataset.csnEmbedMtime = String(f.stat.mtime);
 		this.syncPinButton(card, f.path, pinnedSet);
+		this.ensureCardTagToolbar(card);
 		return card;
 	}
 
 	private async maybeRefreshCardPreview(card: HTMLElement, f: TFile): Promise<void> {
 		const cur = card.dataset.csnEmbedMtime ?? '';
 		const next = String(f.stat.mtime);
-		if (cur === next) return;
-		const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
-		if (!(previewEl instanceof HTMLElement)) return;
-		await this.renderCardPreview(previewEl, f);
-		card.dataset.csnEmbedMtime = next;
+		if (cur !== next) {
+			const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
+			if (previewEl instanceof HTMLElement) {
+				await this.renderCardPreview(previewEl, f);
+				card.dataset.csnEmbedMtime = next;
+			}
+		}
+		this.ensureCardTagToolbar(card);
 	}
 
 	/**

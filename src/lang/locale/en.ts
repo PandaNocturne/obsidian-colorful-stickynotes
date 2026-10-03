@@ -71,6 +71,17 @@ export const en = {
 	SETTINGS_MAIN_DBLCLICK_TO_SOURCE_DESC:
 		'In Read (preview) mode, double-click the sticky body area (.csn-sticky-main) to switch to edit mode. Ignores the settings sheet, bottom bar, and links in preview.',
 
+	SETTINGS_STICKY_TAG_TOOLBAR_NAME: 'Sticky tag toolbar',
+	SETTINGS_STICKY_TAG_TOOLBAR_DESC:
+		'Show YAML tags at the bottom of floating stickies and list/dashboard cards, with a + button to add tags.',
+	STICKY_TAG_TOOLBAR_ARIA: 'Sticky note tags',
+	STICKY_TAG_ADD_ARIA: 'Add tag',
+	STICKY_TAG_CHIP_REMOVE_ARIA: 'Remove tag {tag}',
+	STICKY_TAG_NEW_MENU: 'New tag…',
+	STICKY_TAG_NEW_TITLE: 'Add tag',
+	STICKY_TAG_NEW_NAME: 'Tag',
+	STICKY_TAG_NEW_PLACEHOLDER: 'name or nested/path',
+
 	SETTINGS_HEADING_ASSIST_FEATURES: 'Assistive features',
 	SETTINGS_AUTO_DELETE_BLANK_NAME: 'Auto-delete empty stickies',
 	SETTINGS_AUTO_DELETE_BLANK_DESC:

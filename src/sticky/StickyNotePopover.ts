@@ -21,6 +21,10 @@ import {
 } from '../utils/workspace-transfer-menu';
 import { clampViewContentZoom } from '../settings';
 import { SHEET_COLOR_ORDER } from './sticky-color-order';
+import {
+	mountStickyTagToolbar,
+	type StickyTagToolbarHandle
+} from '../utils/sticky-tag-toolbar';
 
 type WorkspaceSplitCtor = new (ws: Workspace, dir: 'horizontal' | 'vertical') => WorkspaceSplit;
 type SplitWithReplace = WorkspaceSplit & {
@@ -105,6 +109,8 @@ export class StickyNotePopover {
 	private readonly sheetBackdropEl: HTMLElement;
 	private readonly sheetPanelEl: HTMLElement;
 	private sheetOpen = false;
+	private tagToolbar: StickyTagToolbarHandle | null = null;
+	private tagMetaRef: { unload: () => void } | null = null;
 	private readonly colorSwatchEls = new Map<StickyColorId, HTMLButtonElement>();
 	private readonly rootSplit: WorkspaceSplit;
 	private readonly plugin: Plugin;
@@ -231,6 +237,8 @@ export class StickyNotePopover {
 			if (!leaf || this.disposed) return;
 			void this.plugin.app.workspace.setActiveLeaf(leaf, { focus: true });
 		});
+
+		this.mountTagToolbar();
 
 		this.sheetLayerEl = this.mainColumnEl.createDiv({ cls: 'csn-sticky-sheet-layer' });
 		this.sheetPanelEl = this.sheetLayerEl.createDiv({ cls: 'csn-sticky-sheet' });
@@ -523,6 +531,9 @@ export class StickyNotePopover {
 	private wireMainDoubleClickPreviewToSource(): void {
 		this.plugin.registerDomEvent(this.mainColumnEl, 'dblclick', (evt: MouseEvent) => {
 			if (this.disposed || this.collapsed) return;
+			const t = evt.target;
+			if (!(t instanceof Element)) return;
+			if (t.closest('.csn-sticky-sheet-layer, .csn-sticky-tag-toolbar, a, .cm-editor')) return;
 			if (evt.button !== 0) return;
 			if (!this.isStickyMainDoubleClickToEditEnabled()) return;
 			const el = evt.target;
@@ -722,6 +733,48 @@ export class StickyNotePopover {
 			this.headerTitleEl.setText('');
 			this.headerTitleEl.removeAttribute('title');
 		}
+		this.refreshTagToolbar();
+	}
+
+	private isStickyTagToolbarEnabled(): boolean {
+		const s = (this.plugin as unknown as { settings?: { stickyTagToolbarEnabled?: boolean } }).settings;
+		return s?.stickyTagToolbarEnabled !== false;
+	}
+
+	private getOpenStickyFile(): TFile | null {
+		const view = this.leaf?.view;
+		const file = view && 'file' in view ? (view as { file?: TFile }).file : undefined;
+		return file instanceof TFile ? file : null;
+	}
+
+	private mountTagToolbar(): void {
+		this.tagToolbar?.destroy();
+		this.tagToolbar = mountStickyTagToolbar(this.mainColumnEl, {
+			app: this.plugin.app,
+			getFile: () => this.getOpenStickyFile(),
+			enabled: this.isStickyTagToolbarEnabled(),
+			variant: 'floating',
+			stickyFolder: (
+				this.plugin as unknown as { settings?: { stickyFolder?: string } }
+			).settings?.stickyFolder
+		});
+		this.tagMetaRef?.unload();
+		const ref = this.plugin.app.metadataCache.on('changed', file => {
+			const cur = this.getOpenStickyFile();
+			if (!cur || file.path !== cur.path) return;
+			this.refreshTagToolbar();
+		});
+		this.tagMetaRef = {
+			unload: () => this.plugin.app.metadataCache.offref(ref)
+		};
+	}
+
+	refreshTagToolbar(): void {
+		this.tagToolbar?.refresh();
+	}
+
+	setTagToolbarEnabled(enabled: boolean): void {
+		this.tagToolbar?.setEnabled(enabled);
 	}
 
 	private applyCollapsedClass(): void {
@@ -946,6 +999,10 @@ export class StickyNotePopover {
 
 	destroy(): void {
 		this.disposed = true;
+		this.tagMetaRef?.unload();
+		this.tagMetaRef = null;
+		this.tagToolbar?.destroy();
+		this.tagToolbar = null;
 		if (this.resizeReflowRaf !== null) {
 			cancelAnimationFrame(this.resizeReflowRaf);
 			this.resizeReflowRaf = null;

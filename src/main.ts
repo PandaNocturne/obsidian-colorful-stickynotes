@@ -742,6 +742,19 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		this.stickies.updateLeafPinnedFromSettings();
 	}
 
+	/** 将「便笺标签工具栏」开关同步到悬浮便笺与已打开的列表/仪表盘。 */
+	syncStickyTagToolbarToOpenViews(): void {
+		this.stickies.updateTagToolbarFromSettings();
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteListView) v.syncStickyTagToolbarFromSettings();
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_DASHBOARD)) {
+			const v = leaf.view;
+			if (v instanceof StickyNoteDashboardView) v.syncStickyTagToolbarFromSettings();
+		}
+	}
+
 	/** 将列表预览缩放同步到已打开的便笺列表与标签页仪表盘（不重渲 Markdown）。 */
 	syncNoteListViewContentZoomToOpenViews(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_STICKY_NOTE_LIST)) {

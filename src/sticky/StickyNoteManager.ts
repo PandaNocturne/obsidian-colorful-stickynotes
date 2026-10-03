@@ -2603,6 +2603,13 @@ export class StickyNoteManager {
 		}
 	}
 
+	updateTagToolbarFromSettings(): void {
+		const enabled = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		for (const p of this.popovers.values()) {
+			p.setTagToolbarEnabled(enabled);
+		}
+	}
+
 	/** 返回与 id 仍存在于内存中的同伴绑定 id 列表。 */
 	private getAllBindingsForId(id: string): string[] {
 		const set = this.bindings.get(id);

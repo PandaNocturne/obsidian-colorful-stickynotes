@@ -66,6 +66,17 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_MAIN_DBLCLICK_TO_SOURCE_DESC:
 		'阅读（预览）模式下，双击便笺主体区域（.csn-sticky-main）进入编辑模式。不作用于设置抽屉、底栏与预览内链接。',
 
+	SETTINGS_STICKY_TAG_TOOLBAR_NAME: '便笺标签工具栏',
+	SETTINGS_STICKY_TAG_TOOLBAR_DESC:
+		'在悬浮便笺与列表/仪表盘卡片底部显示 YAML 标签，并提供 + 按钮添加标签。',
+	STICKY_TAG_TOOLBAR_ARIA: '便笺标签',
+	STICKY_TAG_ADD_ARIA: '添加标签',
+	STICKY_TAG_CHIP_REMOVE_ARIA: '移除标签 {tag}',
+	STICKY_TAG_NEW_MENU: '新建标签…',
+	STICKY_TAG_NEW_TITLE: '添加标签',
+	STICKY_TAG_NEW_NAME: '标签',
+	STICKY_TAG_NEW_PLACEHOLDER: '名称或 层级/路径',
+
 	SETTINGS_HEADING_ASSIST_FEATURES: '辅助功能',
 	SETTINGS_AUTO_DELETE_BLANK_NAME: '自动删除空白便笺',
 	SETTINGS_AUTO_DELETE_BLANK_DESC:

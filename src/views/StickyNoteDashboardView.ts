@@ -86,6 +86,10 @@ import {
 	type StickyTagTreeNode
 } from '../utils/sticky-tags-from-file';
 import {
+	mountStickyTagToolbar,
+	type StickyTagToolbarHandle
+} from '../utils/sticky-tag-toolbar';
+import {
 	dragEventHasMime,
 	readStickyPathsDragData,
 	setStickyPathsDragData,
@@ -344,6 +348,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	/** 每张列表卡片嵌入预览各自一个 Component，便于翻页时按路径卸载/复用。 */
 	private readonly listCardMarkdownHosts = new Map<string, Component>();
+	private readonly cardTagToolbars = new WeakMap<HTMLElement, StickyTagToolbarHandle>();
 	private gridDelegatedEvents = false;
 	/** 上次渲染的仪表盘结构指纹；一致时翻页可走 DOM 增量。 */
 	private lastDashStructureKey = '';
@@ -607,6 +612,54 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 		});
 		this.applyComposerContentZoom(zoom);
+	}
+
+	/** 同步「便笺标签工具栏」开关到当前页卡片。 */
+	syncStickyTagToolbarFromSettings(): void {
+		const enabled = this.plugin.settings.stickyTagToolbarEnabled !== false;
+		this.gridEl?.querySelectorAll('.csn-list-card').forEach(node => {
+			if (!(node instanceof HTMLElement)) return;
+			if (enabled) {
+				if (!this.cardTagToolbars.has(node)) this.attachCardTagToolbar(node);
+				else this.cardTagToolbars.get(node)?.setEnabled(true);
+			} else {
+				this.detachCardTagToolbar(node);
+			}
+		});
+	}
+
+	private attachCardTagToolbar(card: HTMLElement): void {
+		this.detachCardTagToolbar(card);
+		if (!this.plugin.settings.stickyTagToolbarEnabled) return;
+		const handle = mountStickyTagToolbar(card, {
+			app: this.app,
+			getFile: () => {
+				const path = card.dataset.csnNotePath;
+				if (!path) return null;
+				const abs = this.app.vault.getAbstractFileByPath(normalizePath(path));
+				return abs instanceof TFile ? abs : null;
+			},
+			enabled: true,
+			variant: 'card',
+			stickyFolder: this.plugin.settings.stickyFolder
+		});
+		this.cardTagToolbars.set(card, handle);
+	}
+
+	private detachCardTagToolbar(card: HTMLElement): void {
+		const h = this.cardTagToolbars.get(card);
+		if (!h) return;
+		h.destroy();
+		this.cardTagToolbars.delete(card);
+	}
+
+	private ensureCardTagToolbar(card: HTMLElement): void {
+		if (!this.plugin.settings.stickyTagToolbarEnabled) {
+			this.detachCardTagToolbar(card);
+			return;
+		}
+		if (!this.cardTagToolbars.has(card)) this.attachCardTagToolbar(card);
+		else this.cardTagToolbars.get(card)?.refresh();
 	}
 
 	private applyComposerContentZoom(zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom)): void {
@@ -1462,7 +1515,8 @@ export class StickyNoteDashboardView extends ItemView {
 			if (
 				hit.closest('.csn-list-card-pin-btn') ||
 				hit.closest('.csn-list-card-menu-btn') ||
-				hit.closest('.csn-list-card-archive-wrap')
+				hit.closest('.csn-list-card-archive-wrap') ||
+				hit.closest('.csn-sticky-tag-toolbar')
 			) {
 				return;
 			}
@@ -6635,17 +6689,21 @@ export class StickyNoteDashboardView extends ItemView {
 		await this.renderCardPreview(previewEl, f);
 		card.dataset.csnEmbedMtime = String(f.stat.mtime);
 		this.syncPinButton(card, f.path, pinnedSet);
+		this.ensureCardTagToolbar(card);
 		return card;
 	}
 
 	private async maybeRefreshCardPreview(card: HTMLElement, f: TFile): Promise<void> {
 		const cur = card.dataset.csnEmbedMtime ?? '';
 		const next = String(f.stat.mtime);
-		if (cur === next) return;
-		const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
-		if (!(previewEl instanceof HTMLElement)) return;
-		await this.renderCardPreview(previewEl, f);
-		card.dataset.csnEmbedMtime = next;
+		if (cur !== next) {
+			const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
+			if (previewEl instanceof HTMLElement) {
+				await this.renderCardPreview(previewEl, f);
+				card.dataset.csnEmbedMtime = next;
+			}
+		}
+		this.ensureCardTagToolbar(card);
 	}
 
 	private async renderCardsFull(
