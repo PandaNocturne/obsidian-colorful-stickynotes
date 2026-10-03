@@ -563,6 +563,54 @@ export class StickyNoteListView extends ItemView {
 		return this.plugin.stickies.workspaces.workspaces.find(w => w.id === wsFilterId);
 	}
 
+	/**
+	 * 列表新建归属：按当前工作区筛选加入；「全部 / 未分类 / 未标签」保持未分类。
+	 * 「未分组」加入所有未分组工作区；「活动工作区」加入当前活动区。
+	 */
+	private resolveCreateTargetWorkspaceIds(): string[] {
+		const wfId = this.plugin.settings.noteListWorkspaceFilterId;
+		if (
+			!wfId ||
+			wfId === NOTE_LIST_WORKSPACE_FILTER_UNCATEGORIZED_ID ||
+			wfId === NOTE_LIST_WORKSPACE_FILTER_UNTAGGED_ID
+		) {
+			return [];
+		}
+		const file = this.plugin.stickies.workspaces;
+		if (wfId === NOTE_LIST_WORKSPACE_FILTER_UNGROUPED_ID) {
+			return file.workspaces
+				.filter(w => resolveWorkspaceTabGroupId(w, file.tabGroups) === WS_TAB_GROUP_UNGROUPED_ID)
+				.map(w => w.id);
+		}
+		if (wfId === NOTE_LIST_WORKSPACE_FILTER_ACTIVE_ID) {
+			const active = this.plugin.stickies.activeWorkspace();
+			return active ? [active.id] : [];
+		}
+		return file.workspaces.some(w => w.id === wfId) ? [wfId] : [];
+	}
+
+	private async assignCreatedStickyToFilterWorkspaces(file: TFile): Promise<void> {
+		const wsIds = this.resolveCreateTargetWorkspaceIds();
+		for (const wsId of wsIds) {
+			await this.plugin.stickies.addFilesToWorkspace(wsId, [file], { skipListRefresh: true });
+		}
+	}
+
+	private async createStickyFromToolbar(): Promise<void> {
+		const created = await this.plugin.stickies.addStickyWindow(undefined, undefined, {
+			deferListRefresh: true,
+			skipActiveWorkspace: true
+		});
+		if (!created) return;
+		try {
+			await this.assignCreatedStickyToFilterWorkspaces(created);
+			this.listPageIndex = 0;
+			this.plugin.refreshStickyListIfOpen({ tree: 'counts' });
+		} finally {
+			window.setTimeout(() => this.plugin.muteStickyListModifyPaths.delete(created.path), 400);
+		}
+	}
+
 	private registerListItemsDelegatedEvents(): void {
 		if (this.listItemsDelegatedEvents || !this.listItemsEl) return;
 		this.listItemsDelegatedEvents = true;
@@ -1483,7 +1531,7 @@ export class StickyNoteListView extends ItemView {
 		});
 		setIcon(newStickyBtn, 'plus');
 		this.registerDomEvent(newStickyBtn, 'click', () => {
-			void this.plugin.stickies.addStickyWindow();
+			void this.createStickyFromToolbar();
 		});
 
 		this.listBulkEditBtn = toolbarActions.createEl('button', {
