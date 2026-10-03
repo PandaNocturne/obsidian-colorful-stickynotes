@@ -3032,10 +3032,11 @@
 .csn-dash-grid-pane {
 	flex: 1 1 auto;
 	min-height: 0;
-	overflow: auto;
+	/* 卡片区滚动，底栏统计/翻页固定在窗格底部 */
+	overflow: hidden;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 0;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	padding: 4px;
@@ -3043,14 +3044,14 @@
 }
 
 .csn-dash-grid {
-	flex: 0 0 auto;
+	flex: 1 1 auto;
 	min-height: 0;
-	overflow: visible;
+	overflow: auto;
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(var(--csn-list-grid-min-width, 320px), 1fr));
 	gap: 10px;
 	align-content: start;
-	padding: 0;
+	padding: 4px;
 	border: none;
 	border-radius: 0;
 	background: transparent;
@@ -3064,10 +3065,12 @@
 
 .csn-dash-pagination {
 	flex: 0 0 auto;
+	margin-top: auto;
 	border: none;
+	border-top: 1px solid var(--background-modifier-border);
 	border-radius: 0;
-	padding: 6px 4px 2px;
-	background: transparent;
+	padding: 6px 4px 4px;
+	background: var(--background-primary);
 }
 
 @media (max-width: 900px) {

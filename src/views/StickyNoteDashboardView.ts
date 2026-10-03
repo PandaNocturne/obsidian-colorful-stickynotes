@@ -6798,6 +6798,50 @@ export class StickyNoteDashboardView extends ItemView {
 		await run;
 	}
 
+	/** 底栏统计始终显示；多页时再显示翻页控件 */
+	private syncDashPaginationFooter(pageCount: number, totalCount: number, totalPages: number): void {
+		if (!this.paginationEl || !this.paginationMetaEl) return;
+		this.paginationEl.show();
+		this.paginationMetaEl.setText(t('LIST_PAGINATION_META', { pageCount, totalCount }));
+		if (totalPages <= 1) {
+			this.paginationPagesEl?.empty();
+			this.paginationRowEl?.hide();
+			return;
+		}
+		this.paginationRowEl?.show();
+		if (this.paginationPrevBtn) this.paginationPrevBtn.disabled = this.listPageIndex <= 0;
+		if (this.paginationNextBtn) {
+			this.paginationNextBtn.disabled = this.listPageIndex >= totalPages - 1;
+		}
+		const pagesWrap = this.paginationPagesEl;
+		if (!pagesWrap) return;
+		pagesWrap.empty();
+		const entries = buildPaginationEntries(totalPages, this.listPageIndex);
+		const cur1 = this.listPageIndex + 1;
+		for (const ent of entries) {
+			if (ent === 'gap') {
+				pagesWrap.createSpan({
+					cls: 'csn-list-pagination-ellipsis',
+					text: '…',
+					attr: { 'aria-hidden': 'true' }
+				});
+				continue;
+			}
+			const isActive = ent === cur1;
+			const btn = pagesWrap.createEl('button', {
+				type: 'button',
+				cls: `csn-list-pagination-page${isActive ? ' is-active' : ''}`,
+				text: String(ent),
+				attr: {
+					'data-csn-list-page': String(ent - 1),
+					'aria-label': t('LIST_PAGINATION_PAGE_ARIA', { page: ent }),
+					...(isActive ? { 'aria-current': 'page' as const } : {})
+				}
+			});
+			if (isActive) btn.disabled = true;
+		}
+	}
+
 	private async renderDashImpl(): Promise<void> {
 		const container = this.gridEl;
 		if (!container || !this.paginationEl || !this.paginationMetaEl) return;
@@ -6817,9 +6861,7 @@ export class StickyNoteDashboardView extends ItemView {
 					text: t('DASH_FOLDER_MISSING', { folder }),
 					cls: 'csn-list-empty'
 				});
-				this.paginationPagesEl?.empty();
-				this.paginationMetaEl.setText('');
-				this.paginationEl.hide();
+				this.syncDashPaginationFooter(0, 0, 1);
 				return;
 			}
 
@@ -6881,9 +6923,7 @@ export class StickyNoteDashboardView extends ItemView {
 					}
 				}
 				container.replaceChildren(emptyEl);
-				this.paginationPagesEl?.empty();
-				this.paginationMetaEl.setText('');
-				this.paginationEl.hide();
+				this.syncDashPaginationFooter(0, 0, 1);
 				return;
 			}
 
@@ -6957,46 +6997,7 @@ export class StickyNoteDashboardView extends ItemView {
 				this.lastRenderedPageIndex !== null && this.lastRenderedPageIndex !== this.listPageIndex;
 			this.lastRenderedPageIndex = this.listPageIndex;
 
-			this.paginationEl.show();
-			this.paginationMetaEl.setText(
-				t('LIST_PAGINATION_META', { pageCount: pageFiles.length, totalCount: files.length })
-			);
-			if (totalPages <= 1) {
-				this.paginationPagesEl?.empty();
-				this.paginationRowEl?.hide();
-			} else {
-				this.paginationRowEl?.show();
-				this.paginationPrevBtn!.disabled = this.listPageIndex <= 0;
-				this.paginationNextBtn!.disabled = this.listPageIndex >= totalPages - 1;
-				const pagesWrap = this.paginationPagesEl;
-				if (pagesWrap) {
-					pagesWrap.empty();
-					const entries = buildPaginationEntries(totalPages, this.listPageIndex);
-					const cur1 = this.listPageIndex + 1;
-					for (const ent of entries) {
-						if (ent === 'gap') {
-							pagesWrap.createSpan({
-								cls: 'csn-list-pagination-ellipsis',
-								text: '…',
-								attr: { 'aria-hidden': 'true' }
-							});
-							continue;
-						}
-						const isActive = ent === cur1;
-						const btn = pagesWrap.createEl('button', {
-							type: 'button',
-							cls: `csn-list-pagination-page${isActive ? ' is-active' : ''}`,
-							text: String(ent),
-							attr: {
-								'data-csn-list-page': String(ent - 1),
-								'aria-label': t('LIST_PAGINATION_PAGE_ARIA', { page: ent }),
-								...(isActive ? { 'aria-current': 'page' as const } : {})
-							}
-						});
-						if (isActive) btn.disabled = true;
-					}
-				}
-			}
+			this.syncDashPaginationFooter(pageFiles.length, files.length, totalPages);
 
 			/* 仅筛选变更或翻页时回顶；成员增减保持滚动位置，减少闪动感 */
 			if (filterChanged || pageIndexChanged) {
