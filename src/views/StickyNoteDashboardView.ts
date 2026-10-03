@@ -1543,7 +1543,7 @@ export class StickyNoteDashboardView extends ItemView {
 		root.addClass('csn-dash');
 		this.applyDashPaneLayout();
 
-		/* 先左右栏，再各自上下：左=日历+区域管理+工作区树；右=输入区+网格 */
+		/* 先左右栏，再各自上下：左=日历+智能区域+工作区树；右=输入区+网格 */
 		const colLeft = root.createDiv({ cls: 'csn-dash-col csn-dash-col-left' });
 
 		this.calendarEl = colLeft.createDiv({ cls: 'csn-dash-calendar' });
@@ -1560,7 +1560,7 @@ export class StickyNoteDashboardView extends ItemView {
 						'aria-expanded': 'false'
 					}
 				});
-				setIcon(this.areaVisibilityBtn, 'eye');
+				setIcon(this.areaVisibilityBtn, 'settings');
 				this.registerDomEvent(this.areaVisibilityBtn, 'click', (evt: MouseEvent) => {
 					evt.preventDefault();
 					evt.stopPropagation();

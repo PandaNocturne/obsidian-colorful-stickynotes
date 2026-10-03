@@ -281,7 +281,7 @@ export const en = {
 	DASH_WS_FILTER_ALL: 'All',
 	DASH_ATTR_LABEL: 'Status:',
 	DASH_AREA_LABEL: 'Smart areas',
-	DASH_AREA_VISIBILITY_ARIA: 'Choose which smart areas to show',
+	DASH_AREA_VISIBILITY_ARIA: 'Configure which smart areas to show',
 	DASH_AREA_VISIBILITY_HINT: 'Toggle multiple items; click outside to close',
 	DASH_AREA_VISIBILITY_KEEP_ONE: 'Keep at least one smart area visible',
 	DASH_LEFT_PANEL_TOGGLE_ARIA: 'Collapse or expand {title}',
