@@ -110,8 +110,8 @@ export type NoteListSort =
 	| 'basename-asc'
 	| 'basename-desc';
 
-/** 便笺列表首次打开时的挂载位置。 */
-export type NoteListOpenLocation = 'left-sidebar' | 'right-sidebar' | 'new-tab';
+/** 便笺列表首次打开时的挂载位置（主编辑区请用便笺仪表盘）。 */
+export type NoteListOpenLocation = 'left-sidebar' | 'right-sidebar';
 
 /** 便笺头部「+」从当前窗口旁新建时，优先出现在源窗口的哪一侧（空间不足时自动换到另一侧）。 */
 export type HeaderNewStickyAdjacentSide = 'left' | 'right';

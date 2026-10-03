@@ -147,10 +147,9 @@ export const zhCn: Record<MessageKey, string> = {
 	SETTINGS_HEADING_LIST: '便笺列表',
 	SETTINGS_LIST_OPEN_LOCATION_NAME: '列表打开位置',
 	SETTINGS_LIST_OPEN_LOCATION_DESC:
-		'命令或功能区打开「便笺列表」时，若当前尚无该视图，则创建在指定位置；已固定或已打开的列表会切换到该视图。',
+		'命令或功能区打开「便笺列表」时，若当前尚无该视图，则创建在左侧或右侧侧边栏；已打开的列表会切换到该视图。需要主编辑区总览时，请打开「便笺仪表盘」。',
 	SETTINGS_LIST_LEFT_SIDEBAR: '左侧侧边栏',
 	SETTINGS_LIST_RIGHT_SIDEBAR: '右侧侧边栏',
-	SETTINGS_LIST_NEW_TAB: '新标签页',
 	SETTINGS_LIST_CARD_OVERFLOW_NAME: '预览区裁剪溢出',
 	SETTINGS_LIST_CARD_OVERFLOW_DESC:
 		'开启时列表卡片内预览区域使用 overflow: auto，超出固定高度时在区域内滚动；关闭后为 overflow: visible，预览可溢出（若外层卡片仍为 hidden，整体仍可能被裁切）。',

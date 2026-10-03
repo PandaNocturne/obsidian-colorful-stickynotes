@@ -822,7 +822,6 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 				dd
 					.addOption('left-sidebar', t('SETTINGS_LIST_LEFT_SIDEBAR'))
 					.addOption('right-sidebar', t('SETTINGS_LIST_RIGHT_SIDEBAR'))
-					.addOption('new-tab', t('SETTINGS_LIST_NEW_TAB'))
 					.setValue(this.plugin.settings.noteListOpenLocation)
 					.onChange(async v => {
 						this.plugin.settings.noteListOpenLocation = v as NoteListOpenLocation;

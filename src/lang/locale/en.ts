@@ -159,10 +159,9 @@ export const en = {
 	SETTINGS_HEADING_LIST: 'Sticky list',
 	SETTINGS_LIST_OPEN_LOCATION_NAME: 'List open location',
 	SETTINGS_LIST_OPEN_LOCATION_DESC:
-		'When command or ribbon opens the list and no view exists yet, create here; otherwise focus the existing list.',
+		'When command or ribbon opens the list and no view exists yet, create in the left or right sidebar; otherwise focus the existing list. For a main-tab overview, open Sticky Dashboard.',
 	SETTINGS_LIST_LEFT_SIDEBAR: 'Left sidebar',
 	SETTINGS_LIST_RIGHT_SIDEBAR: 'Right sidebar',
-	SETTINGS_LIST_NEW_TAB: 'New tab',
 	SETTINGS_LIST_CARD_OVERFLOW_NAME: 'Clip preview overflow',
 	SETTINGS_LIST_CARD_OVERFLOW_DESC:
 		'When on, card preview uses overflow:auto and scrolls inside fixed height; when off, overflow:visible (outer card may still clip).',

@@ -68,8 +68,7 @@ const VALID_NOTE_LIST_SORT: readonly NoteListSort[] = [
 
 const VALID_NOTE_LIST_OPEN_LOCATION: readonly NoteListOpenLocation[] = [
 	'left-sidebar',
-	'right-sidebar',
-	'new-tab'
+	'right-sidebar'
 ];
 
 const VALID_NOTE_LIST_FLOAT_OPEN_FILTER: readonly NoteListFloatOpenFilter[] = ['all', 'open', 'closed'];
@@ -842,7 +841,7 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				}
 				await L.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
 				leaf = L;
-			} else if (loc === 'right-sidebar') {
+			} else {
 				const R = workspace.getRightLeaf(false);
 				if (!R) {
 					new Notice(t('NOTICE_CANNOT_CREATE_RIGHT_SIDEBAR'));
@@ -850,10 +849,6 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 				}
 				await R.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
 				leaf = R;
-			} else {
-				const tab = workspace.getLeaf('tab');
-				await tab.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
-				leaf = tab;
 			}
 		} else {
 			await leaf.setViewState({ type: VIEW_STICKY_NOTE_LIST, active: true });
