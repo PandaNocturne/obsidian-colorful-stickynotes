@@ -220,6 +220,8 @@ body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-edi
 body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-content {
   max-width: none;
   width: 100%;
+  /* Obsidian CM6 以内联 style 写入 padding-bottom（scroll past end），悬浮窗内会多出大片空白 */
+  padding-bottom: 0 !important;
 }
 body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-contentContainer {
   padding: 0px;
@@ -248,7 +250,10 @@ body .csn-sticky-window-body .view-content .markdown-preview-view::-webkit-scrol
 }
 body .csn-sticky-window-body .view-content .markdown-preview-sizer.markdown-preview-section,
 body .csn-sticky-window-body .view-content .cm-s-obsidian .cm-content {
-  padding: 0px;
+  padding-top: 0;
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0 !important;
 }
 /*
  * 与 ASUI「body .asui-preview-window .view-content」相同作用：抬高优先级。
