@@ -3831,6 +3831,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   color: var(--text-normal);
 }
 .csn-dash-tree-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3862,6 +3863,26 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 .csn-dash-tree-item--drop-target {
   background-color: color-mix(in srgb, var(--interactive-accent) 28%, transparent) !important;
   outline: 1px dashed var(--interactive-accent);
+}
+/* 工作区拖拽排序落点：间隙横线（上半插入前 / 下半插入后） */
+.csn-dash-tree-item--drop-before::before,
+.csn-dash-tree-item--drop-after::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--interactive-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 35%, transparent);
+  pointer-events: none;
+  z-index: 6;
+}
+.csn-dash-tree-item--drop-before::before {
+  top: -2px;
+}
+.csn-dash-tree-item--drop-after::after {
+  bottom: -2px;
 }
 .csn-dash-tree-item--dragging {
   opacity: 0.45;

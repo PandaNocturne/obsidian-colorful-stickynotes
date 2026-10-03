@@ -4806,9 +4806,32 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private clearTreeDropTargets(): void {
-		this.treeEl?.querySelectorAll('.csn-dash-tree-item--drop-target').forEach(el => {
-			el.classList.remove('csn-dash-tree-item--drop-target');
+		const root = this.treeEl;
+		if (!root) return;
+		const dropClasses = [
+			'csn-dash-tree-item--drop-target',
+			'csn-dash-tree-item--drop-before',
+			'csn-dash-tree-item--drop-after'
+		] as const;
+		root.classList.remove(...dropClasses);
+		root.querySelectorAll(dropClasses.map(c => `.${c}`).join(', ')).forEach(el => {
+			el.classList.remove(...dropClasses);
 		});
+	}
+
+	/** 纵向列表中线：上半插入前、下半插入后。 */
+	private treeItemDropBefore(e: DragEvent, el: HTMLElement): boolean {
+		const rect = el.getBoundingClientRect();
+		return e.clientY < rect.top + rect.height / 2;
+	}
+
+	private setTreeDropIndicator(el: HTMLElement, mode: 'target' | 'before' | 'after'): void {
+		this.clearTreeDropTargets();
+		/* 树容器本身不做整区高亮，避免背景一直保留 drop-target */
+		if (el === this.treeEl) return;
+		if (mode === 'target') el.addClass('csn-dash-tree-item--drop-target');
+		else if (mode === 'before') el.addClass('csn-dash-tree-item--drop-before');
+		else el.addClass('csn-dash-tree-item--drop-after');
 	}
 
 	/**
@@ -5080,7 +5103,12 @@ export class StickyNoteDashboardView extends ItemView {
 			acceptSticky?: boolean;
 			onStickyDrop?: (paths: string[], evt: DragEvent) => void | Promise<void>;
 			acceptWorkspace?: boolean;
-			onWorkspaceDrop?: (workspaceId: string) => void | Promise<void>;
+			/** 工作区落点：`into` 整项高亮；`reorder` 间隙横线（默认 into） */
+			workspaceDropMode?: 'into' | 'reorder';
+			onWorkspaceDrop?: (
+				workspaceId: string,
+				place: 'before' | 'after' | 'into'
+			) => void | Promise<void>;
 			acceptGroup?: boolean;
 			onGroupDrop?: (groupId: string) => void | Promise<void>;
 		}
@@ -5105,17 +5133,36 @@ export class StickyNoteDashboardView extends ItemView {
 						: 'move'
 					: 'move';
 			}
-			el.addClass('csn-dash-tree-item--drop-target');
+			/* 便笺/分组入组仍用整项高亮；工作区排序用间隙线 */
+			if (sticky || group || opts.workspaceDropMode !== 'reorder') {
+				this.setTreeDropIndicator(el, 'target');
+				return;
+			}
+			this.setTreeDropIndicator(el, this.treeItemDropBefore(e, el) ? 'before' : 'after');
 		});
 		this.registerDomEvent(el, 'dragleave', (e: DragEvent) => {
 			const related = e.relatedTarget;
 			if (related instanceof Node && el.contains(related)) return;
-			el.removeClass('csn-dash-tree-item--drop-target');
+			el.removeClass(
+				'csn-dash-tree-item--drop-target',
+				'csn-dash-tree-item--drop-before',
+				'csn-dash-tree-item--drop-after'
+			);
 		});
 		this.registerDomEvent(el, 'drop', (e: DragEvent) => {
 			e.preventDefault();
 			e.stopPropagation();
-			el.removeClass('csn-dash-tree-item--drop-target');
+			const place: 'before' | 'after' | 'into' =
+				opts.workspaceDropMode === 'reorder'
+					? this.treeItemDropBefore(e, el)
+						? 'before'
+						: 'after'
+					: 'into';
+			el.removeClass(
+				'csn-dash-tree-item--drop-target',
+				'csn-dash-tree-item--drop-before',
+				'csn-dash-tree-item--drop-after'
+			);
 			this.clearTreeDropTargets();
 			const paths = readStickyPathsDragData(e.dataTransfer);
 			if (opts.acceptSticky && paths.length > 0 && opts.onStickyDrop) {
@@ -5134,7 +5181,7 @@ export class StickyNoteDashboardView extends ItemView {
 			}
 			const wsId = e.dataTransfer?.getData(WORKSPACE_DND_MIME)?.trim();
 			if (opts.acceptWorkspace && wsId && opts.onWorkspaceDrop) {
-				void opts.onWorkspaceDrop(wsId);
+				void opts.onWorkspaceDrop(wsId, place);
 			}
 		});
 	}
@@ -5614,10 +5661,12 @@ export class StickyNoteDashboardView extends ItemView {
 			onStickyDrop: (paths, e) =>
 				this.dropStickyPathsOnWorkspace(ws.id, paths, e.ctrlKey || e.metaKey),
 			acceptWorkspace: true,
-			onWorkspaceDrop: async draggedId => {
+			workspaceDropMode: 'reorder',
+			onWorkspaceDrop: async (draggedId, place) => {
 				if (draggedId === ws.id) return;
 				this.ensureManualWsTreeSort();
-				await mgr.reorderWorkspaceBefore(draggedId, ws.id);
+				if (place === 'after') await mgr.reorderWorkspaceAfter(draggedId, ws.id);
+				else await mgr.reorderWorkspaceBefore(draggedId, ws.id);
 				const targetGroup = resolveWorkspaceTabGroupId(ws, opts.tabGroups);
 				await mgr.moveWorkspaceToTabGroup(draggedId, targetGroup);
 				this.renderWorkspaceTree();
