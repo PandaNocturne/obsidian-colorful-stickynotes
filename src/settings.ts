@@ -78,6 +78,8 @@ export interface DashboardChromeState {
 	listPageIndex: number;
 	calYear: number;
 	calMonth0: number;
+	/** 输入区颜色色板是否展开；缺省为展开。 */
+	composerColorPaletteExpanded: boolean;
 }
 
 export const DEFAULT_DASHBOARD_CHROME: DashboardChromeState = {
@@ -86,7 +88,8 @@ export const DEFAULT_DASHBOARD_CHROME: DashboardChromeState = {
 	wsTreeShowArchived: false,
 	listPageIndex: 0,
 	calYear: new Date().getFullYear(),
-	calMonth0: new Date().getMonth()
+	calMonth0: new Date().getMonth(),
+	composerColorPaletteExpanded: true
 };
 
 const VALID_DASH_WS_TREE_SORT: DashboardWsTreeSortMode[] = [
@@ -122,7 +125,9 @@ export function normalizeDashboardChromeState(raw: unknown): DashboardChromeStat
 		wsTreeShowArchived: obj.wsTreeShowArchived === true,
 		listPageIndex,
 		calYear,
-		calMonth0
+		calMonth0,
+		/* 缺省 / 旧配置：默认展开 */
+		composerColorPaletteExpanded: obj.composerColorPaletteExpanded !== false
 	};
 }
 

@@ -1758,11 +1758,18 @@ body .csn-sticky.csn-metadata-on .metadata-container {
 }
 .csn-dash-composer-color:hover,
 .csn-dash-composer-color:focus,
-.csn-dash-composer-color:focus-visible,
-.csn-dash-composer-color.is-active,
-.csn-dash-composer-color[aria-expanded='true'] {
+.csn-dash-composer-color:focus-visible {
   color: var(--text-normal);
   background: var(--background-modifier-hover) !important;
+  transform: none;
+  box-shadow: none !important;
+  outline: none !important;
+  filter: none;
+}
+.csn-dash-composer-color.is-active,
+.csn-dash-composer-color[aria-expanded='true'] {
+  color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 22%, transparent) !important;
   transform: none;
   box-shadow: none !important;
   outline: none !important;

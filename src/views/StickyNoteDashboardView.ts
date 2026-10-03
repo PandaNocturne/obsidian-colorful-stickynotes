@@ -265,6 +265,8 @@ export class StickyNoteDashboardView extends ItemView {
 	private composerTagTreeCollapsed = new Set<string>();
 	/** 输入区新建便笺颜色（可在完成按钮旁切换）。 */
 	private composerCreateColor: StickyColorId = 'yellow';
+	/** 输入区颜色色板展开状态（写入 dashboardChrome）。 */
+	private composerColorPaletteExpanded = true;
 	private treeEl: HTMLElement | null = null;
 	private areaNavEl: HTMLElement | null = null;
 	private areaPanelEl: HTMLElement | null = null;
@@ -1725,13 +1727,15 @@ export class StickyNoteDashboardView extends ItemView {
 		const actionsLeft = actions.createDiv({ cls: 'csn-dash-composer-actions-left' });
 		const actionsRight = actions.createDiv({ cls: 'csn-dash-composer-actions-right' });
 
-		this.composerColorWrapEl = actionsLeft.createDiv({ cls: 'csn-dash-composer-color-wrap' });
+		this.composerColorWrapEl = actionsLeft.createDiv({
+			cls: `csn-dash-composer-color-wrap${this.composerColorPaletteExpanded ? ' is-expanded' : ''}`
+		});
 		this.composerColorBtn = this.composerColorWrapEl.createEl('button', {
 			type: 'button',
 			cls: 'csn-dash-composer-color clickable-icon',
 			attr: {
 				'aria-label': t('DASH_COMPOSER_COLOR_ARIA'),
-				'aria-expanded': 'false',
+				'aria-expanded': this.composerColorPaletteExpanded ? 'true' : 'false',
 				'aria-haspopup': 'true',
 				'data-csn-color': this.composerCreateColor,
 				title: t('DASH_COMPOSER_COLOR_ARIA')
@@ -1751,7 +1755,7 @@ export class StickyNoteDashboardView extends ItemView {
 			attr: {
 				role: 'group',
 				'aria-label': t('DASH_COMPOSER_COLOR_ARIA'),
-				hidden: 'true'
+				...(this.composerColorPaletteExpanded ? {} : { hidden: 'true' })
 			}
 		});
 		this.composerColorSwatchBtns.clear();
@@ -4339,7 +4343,8 @@ export class StickyNoteDashboardView extends ItemView {
 			wsTreeShowArchived: this.wsTreeShowArchived,
 			listPageIndex: this.listPageIndex,
 			calYear: this.calYear,
-			calMonth0: this.calMonth0
+			calMonth0: this.calMonth0,
+			composerColorPaletteExpanded: this.composerColorPaletteExpanded
 		});
 	}
 
@@ -4379,6 +4384,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.listPageIndex = saved.listPageIndex;
 		this.calYear = saved.calYear;
 		this.calMonth0 = saved.calMonth0;
+		this.composerColorPaletteExpanded = saved.composerColorPaletteExpanded;
 		this.plugin.settings.dashboardChrome = saved;
 	}
 
@@ -5750,8 +5756,10 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private openComposerColorPalette(): void {
+		this.composerColorPaletteExpanded = true;
 		this.composerColorWrapEl?.addClass('is-expanded');
 		this.syncComposerColorPalette();
+		this.persistDashboardChrome();
 		const active = this.composerColorSwatchBtns.get(this.composerCreateColor);
 		window.setTimeout(() => {
 			(active ?? this.composerPaletteEl?.querySelector('button'))?.focus();
@@ -5759,8 +5767,10 @@ export class StickyNoteDashboardView extends ItemView {
 	}
 
 	private closeComposerColorPalette(): void {
+		this.composerColorPaletteExpanded = false;
 		this.composerColorWrapEl?.removeClass('is-expanded');
 		this.syncComposerColorPalette();
+		this.persistDashboardChrome();
 	}
 
 	private syncComposerColorPalette(): void {
