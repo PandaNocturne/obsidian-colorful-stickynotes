@@ -1781,6 +1781,14 @@ export class StickyNoteDashboardView extends ItemView {
 				evt.preventDefault();
 				evt.stopPropagation();
 				this.removeComposerTag(tag);
+				return;
+			}
+			/* 与筛选栏标签芯片一致：点击芯片打开面板并切到「现有标签」 */
+			const chip = hit.closest('button.csn-dash-composer-tag-chip');
+			if (chip && this.composerTagChipsEl?.contains(chip)) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.openComposerTagPanel({ group: 'added' });
 			}
 		});
 		const tagAddWrap = this.composerTagWrapEl.createDiv({ cls: 'csn-dash-composer-tag-add-wrap' });
@@ -5749,11 +5757,17 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private toggleComposerTagPanel(): void {
 		if (this.isComposerTagPanelOpen()) this.closeComposerTagPanel();
-		else this.openComposerTagPanel();
+		else {
+			/* 与筛选 + 打开「全部」对应：输入区 + 打开「当前标签」便于挑选 */
+			this.openComposerTagPanel({ group: 'current' });
+		}
 	}
 
-	private openComposerTagPanel(): void {
+	private openComposerTagPanel(opts?: {
+		group?: 'added' | 'current' | 'sticky' | 'vault';
+	}): void {
 		if (!this.composerTagPanelEl) return;
+		if (opts?.group) this.composerTagPanelGroup = opts.group;
 		this.refreshComposerTagCatalogs();
 		this.composerTagPanelEl.removeClass('csn-dash-composer-tag-panel--hidden');
 		this.composerTagPanelEl.removeAttribute('hidden');
