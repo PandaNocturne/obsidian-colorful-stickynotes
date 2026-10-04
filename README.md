@@ -1,4 +1,6 @@
-**Colorful StickyNotes** · [English](#english) · [中文](#中文)
+# Colorful StickyNotes
+
+[English](#english) · [中文](#中文)
 
 # English
 
