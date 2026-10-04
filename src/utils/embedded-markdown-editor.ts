@@ -1,10 +1,91 @@
 import { Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap, placeholder as placeholderExt } from '@codemirror/view';
-import { Component, type App, type Editor as ObsidianEditor, type Plugin, type TFile } from 'obsidian';
+import {
+	Component,
+	type App,
+	type Editor as ObsidianEditor,
+	type MarkdownFileInfo,
+	type Plugin,
+	type TFile,
+	type Vault
+} from 'obsidian';
+
+/** 嵌入 Markdown 编辑器实例上可选的列表续写能力（Obsidian 私有方法）。 */
+interface EditorWithListContinue extends ObsidianEditor {
+	cm?: EditorView;
+	newlineAndIndentContinueMarkdownList?: () => void;
+}
+
+/** Obsidian 内部 Markdown 源码编辑器实例（经 embedRegistry 提取）。 */
+export interface ObsidianMarkdownEditorInstance extends Component {
+	app: App;
+	cm?: EditorView;
+	editor?: EditorWithListContinue;
+	owner?: MarkdownFileInfo | null;
+	set?(value: string): void;
+	buildLocalExtensions(): Extension[];
+	updateBottomPadding?(): void;
+}
 
 /** Obsidian 内部 Markdown 源码编辑器构造函数（经 embedRegistry 提取）。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ObsidianMarkdownEditorCtor = new (...args: any[]) => any;
+export type ObsidianMarkdownEditorCtor = new (
+	app: App,
+	containerEl: HTMLElement,
+	owner: MarkdownFileInfo
+) => ObsidianMarkdownEditorInstance;
+
+/** 嵌入编辑器的 owner / controller（兼容 Workspace.activeEditor）。 */
+interface EmbeddedEditorController extends MarkdownFileInfo {
+	showSearch: () => void;
+	toggleMode: () => void;
+	onMarkdownScroll: () => void;
+	getMode: () => string;
+	scroll: number;
+	editMode: ObsidianMarkdownEditorInstance | null;
+	get path(): string;
+}
+
+interface EmbedByExtension {
+	md?: (
+		options: { app: App; containerEl: HTMLElement; state: Record<string, unknown> },
+		file: TFile | null,
+		subpath: string
+	) => MarkdownEmbedInstance;
+}
+
+interface EmbedRegistry {
+	embedByExtension?: EmbedByExtension;
+}
+
+interface AppWithEmbedRegistry {
+	embedRegistry?: EmbedRegistry;
+}
+
+interface MarkdownEmbedInstance {
+	load(): void;
+	unload(): void;
+	editable: boolean;
+	showEditor(): void;
+	editMode?: object;
+}
+
+interface VaultWithPrivateConfig extends Vault {
+	config?: Record<string, unknown>;
+	getConfig?(key: string): unknown;
+}
+
+function asAppWithEmbedRegistry(app: App): AppWithEmbedRegistry {
+	return app as unknown as AppWithEmbedRegistry;
+}
+
+function asVaultWithPrivateConfig(vault: Vault): VaultWithPrivateConfig {
+	return vault as unknown as VaultWithPrivateConfig;
+}
+
+function reflectGet(target: object, prop: PropertyKey, receiver: unknown): unknown {
+	const value: unknown = Reflect.get(target, prop, receiver);
+	return value;
+}
 
 /**
  * 从 Obsidian 内部 `embedRegistry` 提取可嵌入的 Markdown 编辑器类（与 Kanban 插件相同手法）。
@@ -12,10 +93,10 @@ export type ObsidianMarkdownEditorCtor = new (...args: any[]) => any;
  */
 export function resolveObsidianMarkdownEditorClass(app: App): ObsidianMarkdownEditorCtor | null {
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const embedRegistry = (app as any).embedRegistry;
+		const embedRegistry = asAppWithEmbedRegistry(app).embedRegistry;
 		if (!embedRegistry?.embedByExtension?.md) return null;
-		const containerEl = document.createElement('div');
+		const containerEl = app.workspace.containerEl.createDiv();
+		containerEl.detach();
 		const md = embedRegistry.embedByExtension.md({ app, containerEl, state: {} }, null, '');
 		md.load();
 		md.editable = true;
@@ -24,10 +105,12 @@ export function resolveObsidianMarkdownEditorClass(app: App): ObsidianMarkdownEd
 			md.unload();
 			return null;
 		}
-		const Ctor = Object.getPrototypeOf(Object.getPrototypeOf(md.editMode))
-			.constructor as ObsidianMarkdownEditorCtor;
+		const proto = Object.getPrototypeOf(Object.getPrototypeOf(md.editMode)) as {
+			constructor?: unknown;
+		};
+		const Ctor = proto.constructor;
 		md.unload();
-		return typeof Ctor === 'function' ? Ctor : null;
+		return typeof Ctor === 'function' ? (Ctor as ObsidianMarkdownEditorCtor) : null;
 	} catch (e) {
 		console.error('[colorful-sticky-notes] resolveObsidianMarkdownEditorClass failed', e);
 		return null;
@@ -41,27 +124,26 @@ function noop(): void {
 /** 精简 vault 配置代理：嵌入编辑器不显示行号/折叠。 */
 function createEditorAppProxy(app: App): App {
 	return new Proxy(app, {
-		get(target, prop, receiver) {
+		get(target, prop, receiver): unknown {
 			if (prop === 'vault') {
 				return new Proxy(target.vault, {
-					get(vaultTarget, vaultProp, vaultReceiver) {
+					get(vaultTarget, vaultProp, vaultReceiver): unknown {
 						if (vaultProp === 'config') {
-							// eslint-disable-next-line @typescript-eslint/no-explicit-any
-							const config = (vaultTarget as any).config;
-							return new Proxy(config ?? {}, {
-								get(cfgTarget, cfgProp, cfgReceiver) {
+							const config = asVaultWithPrivateConfig(vaultTarget).config ?? {};
+							return new Proxy(config, {
+								get(cfgTarget, cfgProp, cfgReceiver): unknown {
 									if (['showLineNumber', 'foldHeading', 'foldIndent'].includes(String(cfgProp))) {
 										return false;
 									}
-									return Reflect.get(cfgTarget, cfgProp, cfgReceiver);
+									return reflectGet(cfgTarget, cfgProp, cfgReceiver);
 								}
 							});
 						}
-						return Reflect.get(vaultTarget, vaultProp, vaultReceiver);
+						return reflectGet(vaultTarget, vaultProp, vaultReceiver);
 					}
 				});
 			}
-			return Reflect.get(target, prop, receiver);
+			return reflectGet(target, prop, receiver);
 		}
 	});
 }
@@ -102,11 +184,9 @@ export interface EmbeddedMarkdownEditorOptions {
  */
 export class EmbeddedMarkdownEditorHost {
 	private editorChild: Component | null = null;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	private editorInst: any = null;
+	private editorInst: ObsidianMarkdownEditorInstance | null = null;
 	private cm: EditorView | null = null;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	private controller: Record<string, any> | null = null;
+	private controller: EmbeddedEditorController | null = null;
 
 	constructor(private readonly opts: EmbeddedMarkdownEditorOptions) {}
 
@@ -126,8 +206,9 @@ export class EmbeddedMarkdownEditorHost {
 		hostEl.empty();
 		const proxiedApp = createEditorAppProxy(app);
 
-		// eslint-disable-next-line @typescript-eslint/no-this-alias
-		const self = this;
+		let editorInst: ObsidianMarkdownEditorInstance | null = null;
+		let controller!: EmbeddedEditorController;
+
 		class Editor extends MarkdownEditor {
 			updateBottomPadding(): void {
 				/* 嵌入场景不需要底栏留白 */
@@ -148,12 +229,10 @@ export class EmbeddedMarkdownEditorHost {
 					Prec.highest(
 						EditorView.domEventHandlers({
 							focus: (evt: FocusEvent) => {
-								// eslint-disable-next-line @typescript-eslint/no-explicit-any
-								const owner = (this as any).owner ?? self.controller;
+								const owner = this.owner ?? controller;
 								const win = (evt.target as Node | null)?.ownerDocument?.defaultView ?? window;
 								win.setTimeout(() => {
-									// eslint-disable-next-line @typescript-eslint/no-explicit-any
-									(app.workspace as any).activeEditor = owner;
+									app.workspace.activeEditor = owner;
 								});
 								return false;
 							},
@@ -170,12 +249,10 @@ export class EmbeddedMarkdownEditorHost {
 
 				const handleEnter = (_mod: boolean, _shift: boolean) => (cm: EditorView) => {
 					try {
-						// eslint-disable-next-line @typescript-eslint/no-explicit-any
-						const ed = (this as any).editor as ObsidianEditor | undefined;
-						// eslint-disable-next-line @typescript-eslint/no-explicit-any
-						const smart = (this as any).app?.vault?.getConfig?.('smartIndentList');
-						if (smart && ed && typeof (ed as any).newlineAndIndentContinueMarkdownList === 'function') {
-							(ed as any).newlineAndIndentContinueMarkdownList();
+						const ed = this.editor;
+						const smart = asVaultWithPrivateConfig(this.app.vault).getConfig?.('smartIndentList');
+						if (smart && ed && typeof ed.newlineAndIndentContinueMarkdownList === 'function') {
+							ed.newlineAndIndentContinueMarkdownList();
 							return true;
 						}
 					} catch {
@@ -208,16 +285,17 @@ export class EmbeddedMarkdownEditorHost {
 			}
 		}
 
-		const controller: Record<string, unknown> = {
+		controller = {
 			app,
+			hoverPopover: null,
 			showSearch: noop,
 			toggleMode: noop,
 			onMarkdownScroll: noop,
 			getMode: () => 'source',
 			scroll: 0,
-			editMode: null as unknown,
-			get editor(): ObsidianEditor {
-				return self.editorInst?.editor as ObsidianEditor;
+			editMode: null,
+			get editor(): ObsidianEditor | undefined {
+				return editorInst?.editor;
 			},
 			get file(): TFile | null {
 				return getFile();
@@ -228,15 +306,16 @@ export class EmbeddedMarkdownEditorHost {
 		};
 		this.controller = controller;
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const editor = plugin.addChild(new (Editor as any)(proxiedApp, hostEl, controller));
+		const editor = plugin.addChild(new Editor(proxiedApp, hostEl, controller));
 		controller.editMode = editor;
+		editorInst = editor;
 		this.editorChild = editor;
 		this.editorInst = editor;
-		this.cm = (editor.cm ?? editor.editor?.cm) as EditorView;
-		if (!this.cm) {
+		const cm = editor.cm ?? editor.editor?.cm;
+		if (!cm) {
 			throw new Error('Obsidian MarkdownEditor did not expose a CodeMirror view');
 		}
+		this.cm = cm;
 		if (typeof editor.set === 'function') {
 			editor.set(initialValue ?? '');
 		} else {
@@ -247,14 +326,15 @@ export class EmbeddedMarkdownEditorHost {
 	getValue(): string {
 		if (this.cm) return this.cm.state.doc.toString();
 		try {
-			return (this.editorInst?.editor?.getValue?.() as string) ?? '';
+			const value = this.editorInst?.editor?.getValue();
+			return typeof value === 'string' ? value : '';
 		} catch {
 			return '';
 		}
 	}
 
 	setValue(value: string): void {
-		if (this.editorInst?.set) {
+		if (typeof this.editorInst?.set === 'function') {
 			this.editorInst.set(value);
 			return;
 		}
@@ -277,10 +357,8 @@ export class EmbeddedMarkdownEditorHost {
 				/* already detached */
 			}
 		}
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		if ((this.opts.app.workspace as any).activeEditor === this.controller) {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(this.opts.app.workspace as any).activeEditor = null;
+		if (this.opts.app.workspace.activeEditor === this.controller) {
+			this.opts.app.workspace.activeEditor = null;
 		}
 		this.editorChild = null;
 		this.editorInst = null;

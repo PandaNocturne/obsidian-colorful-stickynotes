@@ -242,14 +242,11 @@ export class StickyTagPickerPanel {
 
 	private clearPortalStyles(): void {
 		const s = this.el.style;
-		s.position = '';
-		s.left = '';
-		s.right = '';
-		s.top = '';
-		s.bottom = '';
-		s.width = '';
-		s.maxHeight = '';
-		s.zIndex = '';
+		s.removeProperty('left');
+		s.removeProperty('top');
+		s.removeProperty('bottom');
+		s.removeProperty('width');
+		s.removeProperty('max-height');
 	}
 
 	private positionPanel(): void {
@@ -264,19 +261,13 @@ export class StickyTagPickerPanel {
 			Math.max(pad, window.innerWidth - preferredW - pad)
 		);
 		const placement = this.opts.placement ?? 'below';
-		/* 高于悬浮便笺（layer-slides 一带），保证可点且遮罩能挡住便笺 */
-		const panelZ = 'calc(var(--layer-slides, 9999) + 20)';
-		this.el.style.position = 'fixed';
-		this.el.style.zIndex = panelZ;
+		/* position/z-index/right/bottom(/top when above) 由 --portaled CSS 提供 */
 		this.el.style.width = `${preferredW}px`;
 		this.el.style.left = `${left}px`;
-		this.el.style.right = 'auto';
-		this.el.style.bottom = 'auto';
 
 		if (placement === 'above') {
 			const spaceAbove = Math.max(120, Math.round(r.top - gap - pad));
 			const maxH = Math.min(380, spaceAbove);
-			this.el.style.top = 'auto';
 			this.el.style.bottom = `${Math.max(pad, Math.round(window.innerHeight - r.top + gap))}px`;
 			this.el.style.maxHeight = `${maxH}px`;
 		} else {
@@ -312,7 +303,7 @@ export class StickyTagPickerPanel {
 			vault: this.catalogVault.length
 		};
 		for (const btn of Array.from(this.groupsEl.querySelectorAll('.csn-dash-tag-group-btn'))) {
-			if (!(btn instanceof HTMLElement)) continue;
+			if (!btn?.instanceOf(HTMLElement)) continue;
 			const id = btn.dataset.csnComposerTagGroup as StickyTagPickerGroup | undefined;
 			if (!id) continue;
 			const countEl = btn.querySelector('.csn-dash-tag-group-count');

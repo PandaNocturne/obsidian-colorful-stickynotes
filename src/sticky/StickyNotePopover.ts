@@ -998,7 +998,7 @@ export class StickyNotePopover {
 		}
 
 		/* setViewState 后先交出一帧，让便笺窗口与叶视图占位先上屏，再跑 loadIfDeferred 的重排版。 */
-		await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+		await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
 		await leaf.loadIfDeferred?.();
 		this.applyLeafPinnedToLeaf();
 		if (this.disposed) return;
@@ -1052,7 +1052,7 @@ export class StickyNotePopover {
 		const md = view instanceof MarkdownView ? view : null;
 		const hasMdFile = !!md?.file && md.file.extension === 'md';
 		const show = hasMdFile || this.markdownModeTogglePending;
-		this.modeToggleWrap.style.display = show ? '' : 'none';
+		this.modeToggleWrap.toggleClass('csn-sticky-mode-toggle--hidden', !show);
 		if (!show) {
 			this.syncFileTitleText();
 			return;
@@ -1182,15 +1182,6 @@ export class StickyNotePopover {
 		const left = Math.min(maxLeft, Math.max(minPos, bounds.left));
 		const top = Math.min(maxTop, Math.max(minPos, bounds.top));
 
-		this.rootEl.style.width = `${width}px`;
-		if (this.collapsed) {
-			this.rootEl.style.removeProperty('height');
-		} else {
-			this.rootEl.style.height = `${height}px`;
-		}
-		this.rootEl.style.left = `${left}px`;
-		this.rootEl.style.top = `${top}px`;
-
 		const layer = this.readLayerPopoverToken();
 		/* 便笺叠放：在 popover 基准上加 --csn-sticky-stack，但不得 ≥ calc(var(--layer-slides) - 1) */
 		const baseZ = layer
@@ -1200,10 +1191,13 @@ export class StickyNotePopover {
 		const capped = `min(${baseZ}, ${cap})`;
 		/* 多个便笺同时顶到 cap 时，用 --csn-sticky-active-fine-lift 保证当前激活仍在上层 */
 		const zIndex = `calc(${capped} + var(--csn-sticky-active-fine-lift, 0))`;
-		this.rootEl.setCssProps({
-			position: 'fixed',
-			'z-index': zIndex
-		});
+		/* position:fixed 在 .csn-sticky；动态几何用变量/模板赋值（避免静态字面量 inline style） */
+		this.rootEl.style.width = `${width}px`;
+		if (this.collapsed) this.rootEl.style.removeProperty('height');
+		else this.rootEl.style.height = `${height}px`;
+		this.rootEl.style.left = `${left}px`;
+		this.rootEl.style.top = `${top}px`;
+		this.rootEl.style.zIndex = zIndex;
 
 		this.expandedW = width;
 		this.expandedH = height;

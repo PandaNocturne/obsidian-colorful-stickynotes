@@ -113,28 +113,19 @@ const NOTE_LIST_ARCHIVE_SPECS: readonly {
 	];
 
 function buildStickyBgSubmenuTitle(
-	doc: Document,
 	colorId: StickyColorId,
 	label: string,
 	selected: boolean
 ): DocumentFragment {
-	const frag = doc.createDocumentFragment();
-	const row = doc.createElement('span');
-	row.className = 'csn-list-bg-menu-row';
-	row.dataset.csnBg = colorId;
-
-	const lab = doc.createElement('span');
-	lab.className = 'csn-list-bg-menu-label';
-	lab.textContent = label;
-	row.appendChild(lab);
-	if (selected) {
-		const check = doc.createElement('span');
-		check.className = 'csn-list-bg-menu-check';
-		setIcon(check, 'check');
-		row.appendChild(check);
-	}
-	frag.appendChild(row);
-	return frag;
+	return createFragment(frag => {
+		const row = frag.createSpan({ cls: 'csn-list-bg-menu-row' });
+		row.dataset.csnBg = colorId;
+		row.createSpan({ cls: 'csn-list-bg-menu-label', text: label });
+		if (selected) {
+			const check = row.createSpan({ cls: 'csn-list-bg-menu-check' });
+			setIcon(check, 'check');
+		}
+	});
 }
 
 /** 工作区成员路径与便笺目录 .md 的交集数量（`memberPaths` 为按 id 解析后的当前路径）。 */
@@ -293,7 +284,7 @@ export class StickyNoteListView extends ItemView {
 		card.setAttr('data-csn-archived', archived ? 'true' : 'false');
 		const wrap = card.querySelector('.csn-list-card-archive-wrap');
 		const input = card.querySelector('.csn-list-card-archive-checkbox');
-		if (wrap instanceof HTMLElement) wrap.toggleClass('is-archived', archived);
+		if (wrap?.instanceOf(HTMLElement)) wrap.toggleClass('is-archived', archived);
 		if (input instanceof HTMLInputElement) {
 			input.checked = archived;
 			input.setAttr(
@@ -327,7 +318,7 @@ export class StickyNoteListView extends ItemView {
 		if (!this.listItemsEl) return;
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		this.listItemsEl.querySelectorAll('.csn-list-card').forEach(card => {
-			if (card instanceof HTMLElement) {
+			if (card?.instanceOf(HTMLElement)) {
 				card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 			}
 		});
@@ -338,7 +329,7 @@ export class StickyNoteListView extends ItemView {
 		this.syncStickyTagToolbarToggleBtn();
 		const enabled = this.plugin.settings.noteListStickyTagToolbarEnabled !== false;
 		this.listItemsEl?.querySelectorAll('.csn-list-card').forEach(node => {
-			if (!(node instanceof HTMLElement)) return;
+			if (!node?.instanceOf(HTMLElement)) return;
 			if (enabled) {
 				if (!this.cardTagToolbars.has(node)) this.attachCardTagToolbar(node);
 				else this.cardTagToolbars.get(node)?.setEnabled(true);
@@ -457,9 +448,9 @@ export class StickyNoteListView extends ItemView {
 		const fileRefEl = wrap.querySelector('[data-csn-drag-mode="fileRef"]');
 		const embedEl = wrap.querySelector('[data-csn-drag-mode="embed"]');
 		const shiftEl = wrap.querySelector('[data-csn-drag-mode="deleteOriginal"]');
-		if (!(fileRefEl instanceof HTMLElement)) return;
-		if (!(embedEl instanceof HTMLElement)) return;
-		if (!(shiftEl instanceof HTMLElement)) return;
+		if (!fileRefEl?.instanceOf(HTMLElement)) return;
+		if (!embedEl?.instanceOf(HTMLElement)) return;
+		if (!shiftEl?.instanceOf(HTMLElement)) return;
 		const isDeleteOriginal = shift && !ctrlOrCmd;
 		const isEmbed = ctrlOrCmd && !shift;
 		const isFileRef = !isDeleteOriginal && !isEmbed;
@@ -636,7 +627,7 @@ export class StickyNoteListView extends ItemView {
 				if (!(abs instanceof TFile)) continue;
 				const el = this.listItemsEl?.querySelector(`.csn-list-card[data-csn-note-path="${CSS.escape(p)}"]`);
 				const rawColor =
-					el instanceof HTMLElement ? (el.dataset.csnListColor as StickyColorId | undefined) : undefined;
+					el?.instanceOf(HTMLElement) ? (el.dataset.csnListColor as StickyColorId | undefined) : undefined;
 				items.push({ file: abs, color: rawColor ?? 'default' });
 			}
 			if (items.length === 0) return;
@@ -853,7 +844,7 @@ export class StickyNoteListView extends ItemView {
 			if (fitTargets.length === 0) return;
 			// 批量导入时避免并发触发双击自适应：先等待画布稳定，再逐个触发并打帧。
 			for (let fr = 0; fr < 2; fr++) {
-				await new Promise<void>(r => requestAnimationFrame(() => r()));
+				await new Promise<void>(r => window.requestAnimationFrame(() => r()));
 			}
 			for (const n of fitTargets) {
 				n.onResizeDblclick?.(new MouseEvent('dblclick'), 'bottom');
@@ -874,7 +865,7 @@ export class StickyNoteListView extends ItemView {
 			if (!(target instanceof Node)) return null;
 			for (const leaf of this.app.workspace.getLeavesOfType('canvas')) {
 				const v = leaf.view as CanvasViewLike;
-				if (v.containerEl instanceof HTMLElement && v.containerEl.contains(target)) return v;
+				if (v.containerEl?.instanceOf(HTMLElement) && v.containerEl.contains(target)) return v;
 			}
 			return null;
 		};
@@ -966,7 +957,7 @@ export class StickyNoteListView extends ItemView {
 				) {
 					/* 等待布局与 autofit（双帧）后再 zoom，避免取景框先于节点尺寸更新 */
 					for (let fr = 0; fr < 3; fr++) {
-						await new Promise<void>(r => requestAnimationFrame(() => r()));
+						await new Promise<void>(r => window.requestAnimationFrame(() => r()));
 					}
 					try {
 						await v.canvas.requestFrame?.();
@@ -1001,7 +992,7 @@ export class StickyNoteListView extends ItemView {
 		if (!container) return [];
 		const out: string[] = [];
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (p) out.push(normalizePath(p));
 		}
@@ -1012,7 +1003,7 @@ export class StickyNoteListView extends ItemView {
 		const container = this.listItemsEl;
 		if (!container) return;
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (!p) continue;
 			el.toggleClass('is-selected', this.selectedListNotePaths.has(normalizePath(p)));
@@ -1033,7 +1024,7 @@ export class StickyNoteListView extends ItemView {
 		const el = this.listItemsEl?.querySelector(
 			`.csn-list-card[data-csn-note-path="${CSS.escape(norm)}"]`
 		);
-		return el instanceof HTMLElement ? el : null;
+		return el?.instanceOf(HTMLElement) ? el : null;
 	}
 
 	private titleWithBatchCount(base: string, n: number): string {
@@ -1122,7 +1113,7 @@ export class StickyNoteListView extends ItemView {
 			for (const c of SHEET_COLOR_ORDER) {
 				const selected = sharedColor !== null && c.id === sharedColor;
 				sub.addItem(si => {
-					si.setTitle(buildStickyBgSubmenuTitle(document, c.id, t(c.labelKey), selected));
+					si.setTitle(buildStickyBgSubmenuTitle(c.id, t(c.labelKey), selected));
 					si.setIcon(null);
 					queueMicrotask(() => {
 						si.dom?.classList.add('csn-list-bg-menu-item', `csn-list-bg-menu-item--${c.id}`);
@@ -2095,7 +2086,7 @@ export class StickyNoteListView extends ItemView {
 		const next = String(f.stat.mtime);
 		if (cur !== next) {
 			const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
-			if (previewEl instanceof HTMLElement) {
+			if (previewEl?.instanceOf(HTMLElement)) {
 				await this.renderCardPreview(previewEl, f);
 				card.dataset.csnEmbedMtime = next;
 			}
@@ -2114,7 +2105,7 @@ export class StickyNoteListView extends ItemView {
 		const wantedSet = new Set(pageFiles.map(x => x.path));
 		const existing = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (p) existing.set(p, el);
 		}
@@ -2133,10 +2124,10 @@ export class StickyNoteListView extends ItemView {
 			return this.createListCardElement(f, color, pinnedSet, archived);
 		});
 
-		const frag = document.createDocumentFragment();
+		const frag = createFragment();
 		for (const card of nextCards) frag.appendChild(card);
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement)) {
+			if (!el?.instanceOf(HTMLElement)) {
 				el.remove();
 				continue;
 			}
@@ -2157,7 +2148,7 @@ export class StickyNoteListView extends ItemView {
 		const wantedSet = new Set(pageFiles.map(x => x.path));
 		const existing = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (!p) continue;
 			if (!wantedSet.has(p)) {
@@ -2204,7 +2195,7 @@ export class StickyNoteListView extends ItemView {
 	): Promise<void> {
 		const byPath = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (p) byPath.set(p, el);
 		}

@@ -153,12 +153,19 @@ export async function writeStickyTagsToFile(
 	});
 }
 
+/** Obsidian 未公开的全库标签索引（`metadataCache.getTags`）。 */
+interface MetadataCacheWithGetTags {
+	getTags?: () => Record<string, number>;
+}
+
 /** 从 Obsidian 全库标签索引收集（`metadataCache.getTags`）。 */
 export function collectVaultTagCatalog(app: App): StickyTagCount[] {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const raw = (app.metadataCache as any).getTags?.() as Record<string, number> | undefined;
+	const cache = app.metadataCache as unknown as MetadataCacheWithGetTags;
+	const getTags = cache.getTags;
+	if (typeof getTags !== 'function') return [];
+	const raw: unknown = getTags.call(app.metadataCache);
 	if (!raw || typeof raw !== 'object') return [];
-	return Object.entries(raw)
+	return Object.entries(raw as Record<string, unknown>)
 		.map(([tag, count]) => ({
 			tag: normalizeStickyTag(tag),
 			count: typeof count === 'number' ? count : 0

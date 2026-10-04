@@ -107,10 +107,16 @@ a.tag.csn-sticky-tag-item {
 	align-items: center;
 }
 
-/* 挂到 body 后由 TS 写 fixed 坐标；层级须高于悬浮便笺 */
+/* 挂到 body 后由 TS 写动态坐标；静态定位/层级在此，避免 inline style 字面量 */
 .csn-sticky-tag-picker-panel.csn-sticky-tag-picker--portaled {
 	position: fixed;
 	z-index: calc(var(--layer-slides, 9999) + 20);
+	right: auto;
+	bottom: auto;
+}
+
+.csn-sticky-tag-picker-panel.csn-sticky-tag-picker--portaled.csn-sticky-tag-picker--above {
+	top: auto;
 }
 
 /* 全屏透明遮罩：点便笺 / 其它区域即可关闭选择器 */

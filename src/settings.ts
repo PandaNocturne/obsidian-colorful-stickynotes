@@ -117,8 +117,8 @@ export function normalizeDashboardChromeState(raw: unknown): DashboardChromeStat
 	const now = new Date();
 	const wsTreeSortMode =
 		typeof obj.wsTreeSortMode === 'string' &&
-		VALID_DASH_WS_TREE_SORT.includes(obj.wsTreeSortMode as DashboardWsTreeSortMode)
-			? (obj.wsTreeSortMode as DashboardWsTreeSortMode)
+		VALID_DASH_WS_TREE_SORT.includes(obj.wsTreeSortMode)
+			? obj.wsTreeSortMode
 			: DEFAULT_DASHBOARD_CHROME.wsTreeSortMode;
 	const calYear =
 		typeof obj.calYear === 'number' && Number.isFinite(obj.calYear)
@@ -241,7 +241,7 @@ export function normalizeDashboardFilterState(raw: unknown): DashboardFilterStat
 			: DEFAULT_DASHBOARD_FILTERS.archiveFilter;
 	const colorFilters = Array.isArray(obj.colorFilters)
 		? obj.colorFilters.filter((c): c is StickyColorId =>
-				typeof c === 'string' && VALID_DASH_COLOR.includes(c as StickyColorId)
+				typeof c === 'string' && VALID_DASH_COLOR.includes(c)
 			)
 		: [];
 	const tagFilterLogic = normalizeDashFilterLogic(obj.tagFilterLogic);
@@ -618,7 +618,7 @@ export class ColorfulStickyNotesSettingTab extends PluginSettingTab {
 					.addOption('en', t('SETTINGS_LANGUAGE_EN'))
 					.setValue(this.plugin.settings.pluginLanguage)
 					.onChange(async v => {
-						const next = (v === 'en' || v === 'zh-cn' ? v : 'auto') as PluginUiLanguage;
+						const next: PluginUiLanguage = v === 'en' || v === 'zh-cn' ? v : 'auto';
 						this.plugin.settings.pluginLanguage = next;
 						setPluginUiLanguage(next);
 						await this.plugin.saveSettings();

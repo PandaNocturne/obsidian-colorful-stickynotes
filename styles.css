@@ -9,6 +9,7 @@
   --csn-h: var(--background-secondary);
   --csn-b: var(--background-primary);
   --csn-border: var(--background-modifier-border);
+  position: fixed;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -89,6 +90,9 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
+}
+.csn-sticky-mode-toggle--hidden {
+  display: none;
 }
 body .csn-sticky .csn-sticky-header .csn-sticky-header-btn.is-active {
   background-color: var(--background-modifier-active-hover);
@@ -678,10 +682,15 @@ a.tag.csn-sticky-tag-item {
   display: inline-flex;
   align-items: center;
 }
-/* 挂到 body 后由 TS 写 fixed 坐标；层级须高于悬浮便笺 */
+/* 挂到 body 后由 TS 写动态坐标；静态定位/层级在此，避免 inline style 字面量 */
 .csn-sticky-tag-picker-panel.csn-sticky-tag-picker--portaled {
   position: fixed;
   z-index: calc(var(--layer-slides, 9999) + 20);
+  right: auto;
+  bottom: auto;
+}
+.csn-sticky-tag-picker-panel.csn-sticky-tag-picker--portaled.csn-sticky-tag-picker--above {
+  top: auto;
 }
 /* 全屏透明遮罩：点便笺 / 其它区域即可关闭选择器 */
 .csn-sticky-tag-picker-backdrop {
@@ -3874,6 +3883,12 @@ a.tag.csn-sticky-tag-item {
   border: 1px solid var(--background-modifier-border);
   box-shadow: var(--shadow-s);
   overflow: auto;
+}
+/* 挂到 body 后由 TS 写 right/top/max-height；静态 fixed 在此 */
+.csn-dash-area-vis-panel--portaled {
+  position: fixed;
+  z-index: 1000;
+  left: auto;
 }
 .csn-dash-area-vis-panel--hidden {
   display: none;

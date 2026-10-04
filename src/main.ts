@@ -1,5 +1,5 @@
 import { Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from 'obsidian';
-import { setPluginUiLanguage, t, VALID_PLUGIN_UI_LANGUAGE, type PluginUiLanguage } from './lang/helpers';
+import { setPluginUiLanguage, t, VALID_PLUGIN_UI_LANGUAGE } from './lang/helpers';
 import {
 	clampDashComposerPaneHeight,
 	clampDashLeftPaneWidth,
@@ -279,8 +279,8 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		const st = this.settings as unknown as Record<string, unknown>;
 		delete st.bottomBarCommands;
 		const lang = this.settings.pluginLanguage;
-		this.settings.pluginLanguage = VALID_PLUGIN_UI_LANGUAGE.includes(lang as PluginUiLanguage)
-			? (lang as PluginUiLanguage)
+		this.settings.pluginLanguage = VALID_PLUGIN_UI_LANGUAGE.includes(lang)
+			? lang
 			: DEFAULT_SETTINGS.pluginLanguage;
 		setPluginUiLanguage(this.settings.pluginLanguage);
 		delete st.defaultPositionMode;

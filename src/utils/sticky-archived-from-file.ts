@@ -36,7 +36,7 @@ async function readStickyArchivedFromVaultCachedRead(app: App, file: TFile): Pro
  * 仍无键则视为未归档。
  */
 export async function resolveStickyArchivedForFile(app: App, file: TFile): Promise<boolean> {
-	const fm = app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+	const fm = app.metadataCache.getFileCache(file)?.frontmatter;
 	if (fm && Object.prototype.hasOwnProperty.call(fm, FM_ARCHIVED_KEY)) {
 		return normalizeStickyArchivedValue(fm[FM_ARCHIVED_KEY]);
 	}

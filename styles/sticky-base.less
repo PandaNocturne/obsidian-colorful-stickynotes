@@ -9,6 +9,7 @@
 	--csn-h: var(--background-secondary);
 	--csn-b: var(--background-primary);
 	--csn-border: var(--background-modifier-border);
+	position: fixed;
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
@@ -118,6 +119,10 @@
 	display: flex;
 	align-items: center;
 	flex: 0 0 auto;
+}
+
+.csn-sticky-mode-toggle--hidden {
+	display: none;
 }
 
 body .csn-sticky .csn-sticky-header .csn-sticky-header-btn.is-active {

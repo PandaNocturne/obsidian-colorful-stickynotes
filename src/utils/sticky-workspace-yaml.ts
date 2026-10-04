@@ -55,7 +55,7 @@ function resolveWorkspaceListFromMetadata(
 	file: TFile,
 	key: string
 ): string[] | null {
-	const fm = app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+	const fm = app.metadataCache.getFileCache(file)?.frontmatter;
 	if (!fm || !Object.prototype.hasOwnProperty.call(fm, key)) return null;
 	return normalizeStickyWorkspaceIdList(fm[key]);
 }

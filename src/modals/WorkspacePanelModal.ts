@@ -106,7 +106,7 @@ export class EditStickyWorkspaceModal extends Modal {
 		cancel.addEventListener('click', () => this.close());
 		const ok = row.createEl('button', { text: t('MODAL_OK'), cls: 'mod-cta' });
 		ok.addEventListener('click', () => void this.commit(input.value, textarea.value));
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			input.focus();
 			input.select();
 		});
@@ -179,7 +179,7 @@ export class NewBlankWorkspaceModal extends Modal {
 		cancel.addEventListener('click', () => this.close());
 		const ok = row.createEl('button', { text: t('MODAL_OK'), cls: 'mod-cta' });
 		ok.addEventListener('click', () => void this.commit(input.value, textarea.value));
-		requestAnimationFrame(() => input.focus());
+		window.requestAnimationFrame(() => input.focus());
 	}
 
 	private async commit(rawName: string, rawRemark: string): Promise<void> {
@@ -322,7 +322,7 @@ export class NewWorkspaceTabGroupModal extends Modal {
 		cancel.addEventListener('click', () => this.close());
 		const ok = row.createEl('button', { text: t('MODAL_OK'), cls: 'mod-cta' });
 		ok.addEventListener('click', () => void this.commit(input.value));
-		requestAnimationFrame(() => input.focus());
+		window.requestAnimationFrame(() => input.focus());
 	}
 
 	private async commit(rawName: string): Promise<void> {
@@ -408,7 +408,7 @@ export class RenameWorkspaceTabGroupModal extends Modal {
 		cancel.addEventListener('click', () => this.close());
 		const ok = row.createEl('button', { text: t('MODAL_OK'), cls: 'mod-cta' });
 		ok.addEventListener('click', () => void this.commit(input.value));
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			input.focus();
 			input.select();
 		});
@@ -623,7 +623,7 @@ export class WorkspacePanelModal extends Modal {
 				window.requestAnimationFrame(() => {
 					const ae = document.activeElement;
 					if (
-						ae instanceof HTMLElement &&
+						ae?.instanceOf(HTMLElement) &&
 						ae.classList.contains('csn-ws-panel-item') &&
 						ae.classList.contains('csn-ws-panel-item--clickable') &&
 						this.modalEl.contains(ae)
@@ -788,10 +788,8 @@ export class WorkspacePanelModal extends Modal {
 			this.panelSearchQuery = input.value;
 			refresh();
 			window.requestAnimationFrame(() => {
-				const next = this.contentEl.querySelector(
-					'.csn-ws-panel-search-input'
-				) as HTMLInputElement | null;
-				if (!next) return;
+				const next = this.contentEl.querySelector('.csn-ws-panel-search-input');
+				if (!(next instanceof HTMLInputElement)) return;
 				next.focus();
 				const len = next.value.length;
 				next.setSelectionRange(len, len);
@@ -839,7 +837,7 @@ export class WorkspacePanelModal extends Modal {
 			const el = this.contentEl.querySelector(
 				`.csn-ws-panel-item[data-csn-ws-id="${CSS.escape(activeId)}"]`
 			);
-			if (!(el instanceof HTMLElement)) {
+			if (!el?.instanceOf(HTMLElement)) {
 				new Notice(t('WS_PANEL_LOCATE_NONE'));
 				return;
 			}
@@ -1241,9 +1239,9 @@ export class WorkspacePanelModal extends Modal {
 		};
 
 		row.addEventListener('click', e => {
-			const el = e.target;
-			if (el instanceof HTMLElement && el.closest('.csn-ws-panel-item-float-actions')) return;
-			if (el instanceof HTMLElement && el.closest('.csn-ws-panel-item-drag')) return;
+			const el = e.target as Node | null;
+			if (el?.instanceOf(HTMLElement) && el.closest('.csn-ws-panel-item-float-actions')) return;
+			if (el?.instanceOf(HTMLElement) && el.closest('.csn-ws-panel-item-drag')) return;
 			void toggleWorkspace();
 		});
 

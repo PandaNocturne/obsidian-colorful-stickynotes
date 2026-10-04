@@ -170,27 +170,19 @@ const NOTE_LIST_SORT_SPECS: readonly {
 ];
 
 function buildStickyBgSubmenuTitle(
-	doc: Document,
 	colorId: StickyColorId,
 	label: string,
 	selected: boolean
 ): DocumentFragment {
-	const frag = doc.createDocumentFragment();
-	const row = doc.createElement('span');
-	row.className = 'csn-list-bg-menu-row';
-	row.dataset.csnBg = colorId;
-	const lab = doc.createElement('span');
-	lab.className = 'csn-list-bg-menu-label';
-	lab.textContent = label;
-	row.appendChild(lab);
-	if (selected) {
-		const check = doc.createElement('span');
-		check.className = 'csn-list-bg-menu-check';
-		setIcon(check, 'check');
-		row.appendChild(check);
-	}
-	frag.appendChild(row);
-	return frag;
+	return createFragment(frag => {
+		const row = frag.createSpan({ cls: 'csn-list-bg-menu-row' });
+		row.dataset.csnBg = colorId;
+		row.createSpan({ cls: 'csn-list-bg-menu-label', text: label });
+		if (selected) {
+			const check = row.createSpan({ cls: 'csn-list-bg-menu-check' });
+			setIcon(check, 'check');
+		}
+	});
 }
 
 function weekdayMinLabels(): string[] {
@@ -616,7 +608,7 @@ export class StickyNoteDashboardView extends ItemView {
 	syncViewContentZoomFromSettings(): void {
 		const zoom = clampViewContentZoom(this.plugin.settings.noteListViewContentZoom);
 		this.gridEl?.querySelectorAll('.csn-list-card').forEach(card => {
-			if (card instanceof HTMLElement) {
+			if (card?.instanceOf(HTMLElement)) {
 				card.style.setProperty('--csn-sticky-view-content-zoom', String(zoom));
 			}
 		});
@@ -628,7 +620,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncStickyTagToolbarToggleBtn();
 		const enabled = this.plugin.settings.dashboardStickyTagToolbarEnabled !== false;
 		this.gridEl?.querySelectorAll('.csn-list-card').forEach(node => {
-			if (!(node instanceof HTMLElement)) return;
+			if (!node?.instanceOf(HTMLElement)) return;
 			if (enabled) {
 				if (!this.cardTagToolbars.has(node)) this.attachCardTagToolbar(node);
 				else this.cardTagToolbars.get(node)?.setEnabled(true);
@@ -732,7 +724,7 @@ export class StickyNoteDashboardView extends ItemView {
 		card.setAttr('data-csn-archived', archived ? 'true' : 'false');
 		const wrap = card.querySelector('.csn-list-card-archive-wrap');
 		const input = card.querySelector('.csn-list-card-archive-checkbox');
-		if (wrap instanceof HTMLElement) wrap.toggleClass('is-archived', archived);
+		if (wrap?.instanceOf(HTMLElement)) wrap.toggleClass('is-archived', archived);
 		if (input instanceof HTMLInputElement) {
 			input.checked = archived;
 			input.setAttr(
@@ -854,9 +846,9 @@ export class StickyNoteDashboardView extends ItemView {
 		const plainEl = wrap.querySelector('[data-csn-drag-mode="plain"]');
 		const fileRefEl = wrap.querySelector('[data-csn-drag-mode="fileRef"]');
 		const shiftEl = wrap.querySelector('[data-csn-drag-mode="deleteOriginal"]');
-		if (!(plainEl instanceof HTMLElement)) return;
-		if (!(fileRefEl instanceof HTMLElement)) return;
-		if (!(shiftEl instanceof HTMLElement)) return;
+		if (!plainEl?.instanceOf(HTMLElement)) return;
+		if (!fileRefEl?.instanceOf(HTMLElement)) return;
+		if (!shiftEl?.instanceOf(HTMLElement)) return;
 		const isDeleteOriginal = shift && !ctrlOrCmd;
 		const isFileRefOnly = ctrlOrCmd && !shift;
 		const isPlain = !isDeleteOriginal && !isFileRefOnly;
@@ -870,7 +862,7 @@ export class StickyNoteDashboardView extends ItemView {
 		if (!wrap || this.cardDragHintKind !== 'workspace') return;
 		const moveEl = wrap.querySelector('[data-csn-drag-mode="move"]');
 		const copyEl = wrap.querySelector('[data-csn-drag-mode="copy"]');
-		if (!(moveEl instanceof HTMLElement) || !(copyEl instanceof HTMLElement)) return;
+		if (!moveEl?.instanceOf(HTMLElement) || !copyEl?.instanceOf(HTMLElement)) return;
 		moveEl.toggleClass('is-active', !ctrlOrCmd);
 		copyEl.toggleClass('is-active', ctrlOrCmd);
 	}
@@ -1003,7 +995,7 @@ export class StickyNoteDashboardView extends ItemView {
 			const fitTargets = nodes.filter(n => typeof n.onResizeDblclick === 'function');
 			if (fitTargets.length === 0) return;
 			for (let fr = 0; fr < 2; fr++) {
-				await new Promise<void>(r => requestAnimationFrame(() => r()));
+				await new Promise<void>(r => window.requestAnimationFrame(() => r()));
 			}
 			for (const n of fitTargets) {
 				n.onResizeDblclick?.(new MouseEvent('dblclick'), 'bottom');
@@ -1024,7 +1016,7 @@ export class StickyNoteDashboardView extends ItemView {
 			if (!(target instanceof Node)) return null;
 			for (const leaf of this.app.workspace.getLeavesOfType('canvas')) {
 				const v = leaf.view as CanvasViewLike;
-				if (v.containerEl instanceof HTMLElement && v.containerEl.contains(target)) return v;
+				if (v.containerEl?.instanceOf(HTMLElement) && v.containerEl.contains(target)) return v;
 			}
 			return null;
 		};
@@ -1114,7 +1106,7 @@ export class StickyNoteDashboardView extends ItemView {
 					v.canvas?.zoomToSelection
 				) {
 					for (let fr = 0; fr < 3; fr++) {
-						await new Promise<void>(r => requestAnimationFrame(() => r()));
+						await new Promise<void>(r => window.requestAnimationFrame(() => r()));
 					}
 					try {
 						await v.canvas.requestFrame?.();
@@ -1151,7 +1143,7 @@ export class StickyNoteDashboardView extends ItemView {
 		if (!container) return [];
 		const out: string[] = [];
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (p) out.push(normalizePath(p));
 		}
@@ -1162,7 +1154,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const container = this.gridEl;
 		if (!container) return;
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (!p) continue;
 			el.toggleClass('is-selected', this.selectedListNotePaths.has(normalizePath(p)));
@@ -1285,7 +1277,7 @@ export class StickyNoteDashboardView extends ItemView {
 			if (!(abs instanceof TFile)) continue;
 			const el = this.gridEl?.querySelector(`.csn-list-card[data-csn-note-path="${CSS.escape(p)}"]`);
 			const rawColor =
-				el instanceof HTMLElement ? (el.dataset.csnListColor as StickyColorId | undefined) : undefined;
+				el?.instanceOf(HTMLElement) ? (el.dataset.csnListColor as StickyColorId | undefined) : undefined;
 			items.push({ file: abs, color: rawColor ?? 'default' });
 		}
 		if (items.length === 0) return false;
@@ -1317,7 +1309,7 @@ export class StickyNoteDashboardView extends ItemView {
 	private getCardElForPath(path: string): HTMLElement | null {
 		const norm = normalizePath(path);
 		const el = this.gridEl?.querySelector(`.csn-list-card[data-csn-note-path="${CSS.escape(norm)}"]`);
-		return el instanceof HTMLElement ? el : null;
+		return el?.instanceOf(HTMLElement) ? el : null;
 	}
 
 	private titleWithBatchCount(base: string, n: number): string {
@@ -1398,7 +1390,7 @@ export class StickyNoteDashboardView extends ItemView {
 				return;
 			}
 			const card = dragHandleEl.closest('.csn-list-card');
-			if (!(card instanceof HTMLElement)) return;
+			if (!card?.instanceOf(HTMLElement)) return;
 			if (!this.beginStickyCardDrag(evt, card)) evt.preventDefault();
 		});
 
@@ -1765,7 +1757,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.registerDomEvent(this.wsTreeFilterInput, 'input', () => debouncedWsFilter());
 		this.syncWsTreeShowArchivedBtn();
 
-		const splitV = root.createEl('div', {
+		const splitV = root.createDiv({
 			cls: 'csn-dash-splitter csn-dash-splitter--v',
 			attr: {
 				role: 'separator',
@@ -1935,7 +1927,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncComposerTagChips();
 		this.syncComposerCancelBtn();
 
-		const splitH = colRight.createEl('div', {
+		const splitH = colRight.createDiv({
 			cls: 'csn-dash-splitter csn-dash-splitter--h',
 			attr: {
 				role: 'separator',
@@ -2260,7 +2252,7 @@ export class StickyNoteDashboardView extends ItemView {
 				evt.preventDefault();
 				evt.stopPropagation();
 				const ae = document.activeElement;
-				if (ae instanceof HTMLElement && this.contentEl.contains(ae)) {
+				if (ae?.instanceOf(HTMLElement) && this.contentEl.contains(ae)) {
 					ae.blur();
 				}
 			},
@@ -2612,6 +2604,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncAreaVisibilityPanelChrome();
 		/* 挂到 body，避免被左侧栏 / panel 的 overflow:hidden 裁切 */
 		document.body.appendChild(panel);
+		panel.addClass('csn-dash-area-vis-panel--portaled');
 		panel.removeClass('csn-dash-area-vis-panel--hidden');
 		this.positionAreaVisibilityPanel();
 		this.areaVisibilityBtn?.setAttr('aria-expanded', 'true');
@@ -2626,9 +2619,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const r = btn.getBoundingClientRect();
 		const pad = 8;
 		const gap = 6;
-		panel.style.position = 'fixed';
-		panel.style.zIndex = '1000';
-		panel.style.left = 'auto';
+		/* position/z-index/left 由 --portaled CSS 提供 */
 		panel.style.right = `${Math.max(pad, Math.round(window.innerWidth - r.right))}px`;
 		panel.style.top = `${Math.round(r.bottom + gap)}px`;
 		panel.style.maxHeight = `${Math.max(120, Math.round(window.innerHeight - r.bottom - gap - pad))}px`;
@@ -2639,13 +2630,11 @@ export class StickyNoteDashboardView extends ItemView {
 		const wrap = this.areaVisibilityBtn?.closest('.csn-dash-area-vis-wrap');
 		if (panel) {
 			panel.addClass('csn-dash-area-vis-panel--hidden');
-			panel.style.position = '';
-			panel.style.zIndex = '';
-			panel.style.left = '';
-			panel.style.right = '';
-			panel.style.top = '';
-			panel.style.maxHeight = '';
-			if (wrap instanceof HTMLElement && panel.parentElement !== wrap) {
+			panel.removeClass('csn-dash-area-vis-panel--portaled');
+			panel.style.removeProperty('right');
+			panel.style.removeProperty('top');
+			panel.style.removeProperty('max-height');
+			if (wrap?.instanceOf(HTMLElement) && panel.parentElement !== wrap) {
 				wrap.appendChild(panel);
 			}
 		}
@@ -2722,7 +2711,7 @@ export class StickyNoteDashboardView extends ItemView {
 			if (!spec.showCount) continue;
 			const btn = this.areaBtns.get(spec.mode);
 			const countEl = btn?.querySelector('.csn-dash-area-item-count');
-			if (!(countEl instanceof HTMLElement)) continue;
+			if (!countEl?.instanceOf(HTMLElement)) continue;
 			const n = this.areaCounts[spec.mode];
 			countEl.setText(typeof n === 'number' ? String(n) : '');
 		}
@@ -2817,7 +2806,6 @@ export class StickyNoteDashboardView extends ItemView {
 	private syncTagFilterButton(): void {
 		const btn = this.tagFilterBtn;
 		const chipsEl = this.tagChipsEl;
-		const hasFilters = this.activeTagFilterCount() > 0;
 		if (btn) {
 			/* 仅面板打开时高亮；已有筛选用 chips 表达，勿点亮 + */
 			btn.toggleClass('is-active', this.isTagFilterPanelOpen());
@@ -2852,7 +2840,7 @@ export class StickyNoteDashboardView extends ItemView {
 				}
 			});
 			chip.createSpan({ cls: 'csn-dash-tag-chip-text', text: t('DASH_TAG_NO_TAGS') });
-			const remove = chip.createEl('span', {
+			const remove = chip.createSpan({
 				cls: 'csn-dash-tag-chip-remove',
 				attr: {
 					role: 'button',
@@ -2876,7 +2864,7 @@ export class StickyNoteDashboardView extends ItemView {
 				}
 			});
 			chip.createSpan({ cls: 'csn-dash-tag-chip-text', text: displayStickyTag(tag) });
-			const remove = chip.createEl('span', {
+			const remove = chip.createSpan({
 				cls: 'csn-dash-tag-chip-remove',
 				attr: {
 					role: 'button',
@@ -3109,7 +3097,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const allCount = this.tagCatalog.length;
 
 		for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-tag-group-btn'))) {
-			if (!(btn instanceof HTMLElement)) continue;
+			if (!btn?.instanceOf(HTMLElement)) continue;
 			const id = btn.dataset.csnTagGroup;
 			const countEl = btn.querySelector('.csn-dash-tag-group-count');
 			if (countEl) countEl.setText(String(id === 'selected' ? selectedCount : allCount));
@@ -3740,7 +3728,7 @@ export class StickyNoteDashboardView extends ItemView {
 		if (!host) return;
 
 		for (const el of Array.from(host.querySelectorAll('button.csn-dash-cal-cell[data-csn-date]'))) {
-			if (!(el instanceof HTMLElement)) continue;
+			if (!el?.instanceOf(HTMLElement)) continue;
 			const key = el.dataset.csnDate;
 			if (!key) continue;
 			this.syncDayCellHeat(el, key);
@@ -4042,7 +4030,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 		const rows = this.collectDateFilterPanelRows();
 		for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-filter-panel-group-btn'))) {
-			if (!(btn instanceof HTMLElement)) continue;
+			if (!btn?.instanceOf(HTMLElement)) continue;
 			const id = btn.dataset.csnDateGroup;
 			const countEl = btn.querySelector('.csn-dash-filter-panel-group-count');
 			if (countEl) {
@@ -4156,7 +4144,7 @@ export class StickyNoteDashboardView extends ItemView {
 				}
 			});
 			chip.createSpan({ cls: 'csn-dash-date-filter-chip-text', text: label });
-			const remove = chip.createEl('span', {
+			const remove = chip.createSpan({
 				cls: 'csn-dash-date-filter-chip-remove',
 				attr: {
 					role: 'button',
@@ -4273,7 +4261,7 @@ export class StickyNoteDashboardView extends ItemView {
 				file.workspaces.find(w => w.id === id) ?? file.trash.find(w => w.id === id);
 			if (!ws) continue;
 			const countEl = el.querySelector('.csn-dash-tree-count:not(.csn-dash-tree-count--toggle)');
-			if (countEl instanceof HTMLElement) {
+			if (countEl?.instanceOf(HTMLElement)) {
 				countEl.setText(String(mgr.getWorkspaceMemberPathSet(ws).size));
 			}
 		}
@@ -4377,7 +4365,7 @@ export class StickyNoteDashboardView extends ItemView {
 		}
 		const titleBtn = this.leftPanelTitleBtns.get('workspace');
 		const titleText = titleBtn?.querySelector('.csn-dash-panel-title-text');
-		if (titleText instanceof HTMLElement) {
+		if (titleText?.instanceOf(HTMLElement)) {
 			titleText.setText(on ? t('DASH_WS_ARCHIVED_SECTION') : t('DASH_WS_TREE_TITLE'));
 		}
 	}
@@ -4462,7 +4450,7 @@ export class StickyNoteDashboardView extends ItemView {
 		panel?.toggleClass('is-collapsed', collapsed);
 		titleBtn?.setAttr('aria-expanded', collapsed ? 'false' : 'true');
 		const chevron = titleBtn?.querySelector('.csn-dash-panel-chevron');
-		if (chevron instanceof HTMLElement) {
+		if (chevron?.instanceOf(HTMLElement)) {
 			chevron.empty();
 			setIcon(chevron, collapsed ? 'chevron-right' : 'chevron-down');
 		}
@@ -4937,7 +4925,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 		if (groupsEl) {
 			for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-filter-panel-group-btn'))) {
-				if (!(btn instanceof HTMLElement)) continue;
+				if (!btn?.instanceOf(HTMLElement)) continue;
 				const id = btn.dataset.csnWsGroup;
 				const countEl = btn.querySelector('.csn-dash-filter-panel-group-count');
 				if (countEl) {
@@ -5096,7 +5084,7 @@ export class StickyNoteDashboardView extends ItemView {
 			});
 			setIcon(icon, 'inbox');
 			chip.createSpan({ cls: 'csn-dash-ws-filter-chip-text', text: label });
-			const remove = chip.createEl('span', {
+			const remove = chip.createSpan({
 				cls: 'csn-dash-ws-filter-chip-remove',
 				attr: {
 					role: 'button',
@@ -5134,7 +5122,7 @@ export class StickyNoteDashboardView extends ItemView {
 			});
 			setIcon(icon, kind === 'group' ? 'folder' : 'layers');
 			chip.createSpan({ cls: 'csn-dash-ws-filter-chip-text', text: label });
-			const remove = chip.createEl('span', {
+			const remove = chip.createSpan({
 				cls: 'csn-dash-ws-filter-chip-remove',
 				attr: {
 					role: 'button',
@@ -5261,7 +5249,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const row = this.treeEl?.querySelector(
 			`.csn-dash-tree-ws[data-csn-ws-id="${CSS.escape(ws.id)}"]`
 		);
-		if (!(row instanceof HTMLElement)) return;
+		if (!row?.instanceOf(HTMLElement)) return;
 		this.beginInlineTreeRename(row, ws.name, async name => {
 			await this.plugin.stickies.updateWorkspace(ws.id, name, ws.remark ?? '');
 			this.renderWorkspaceTree();
@@ -5273,7 +5261,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const row = this.treeEl?.querySelector(
 			`.csn-dash-tree-group-btn[data-csn-ws-group="${CSS.escape(group.id)}"], .csn-dash-tree-group-btn[data-csn-ws-group-archived="${CSS.escape(group.id)}"]`
 		);
-		if (!(row instanceof HTMLElement)) return;
+		if (!row?.instanceOf(HTMLElement)) return;
 		this.beginInlineTreeRename(row, group.name, async name => {
 			await this.plugin.stickies.renameWorkspaceTabGroup(group.id, name);
 			this.renderWorkspaceTree();
@@ -5289,7 +5277,7 @@ export class StickyNoteDashboardView extends ItemView {
 	): void {
 		if (rowEl.querySelector('.csn-dash-tree-rename-input')) return;
 		const label = rowEl.querySelector('.csn-dash-tree-label');
-		if (!(label instanceof HTMLElement)) return;
+		if (!label?.instanceOf(HTMLElement)) return;
 
 		const wasDraggable = rowEl.getAttr('draggable');
 		rowEl.removeAttribute('draggable');
@@ -6049,7 +6037,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 		/* and：交集；or / not：并集（not 在 apply 时取反） */
 		if (this.workspaceFilterLogic === 'and') {
-			let inter = new Set(criteria[0]!);
+			let inter = new Set(criteria[0]);
 			for (let i = 1; i < criteria.length; i++) {
 				const next = criteria[i]!;
 				const kept = new Set<string>();
@@ -6268,7 +6256,7 @@ export class StickyNoteDashboardView extends ItemView {
 			vault: this.composerTagCatalogVault.length
 		};
 		for (const btn of Array.from(groupsEl.querySelectorAll('.csn-dash-tag-group-btn'))) {
-			if (!(btn instanceof HTMLElement)) continue;
+			if (!btn?.instanceOf(HTMLElement)) continue;
 			const id = btn.dataset.csnComposerTagGroup as
 				| 'added'
 				| 'current'
@@ -6477,7 +6465,7 @@ export class StickyNoteDashboardView extends ItemView {
 					onEscape: () => {
 						/* 失焦即可，勿清空草稿 */
 						const ae = document.activeElement;
-						if (ae instanceof HTMLElement && host.contains(ae)) ae.blur();
+						if (ae?.instanceOf(HTMLElement) && host.contains(ae)) ae.blur();
 					},
 					onChange: md => {
 						this.schedulePersistComposerDraft(md);
@@ -6689,7 +6677,7 @@ export class StickyNoteDashboardView extends ItemView {
 			for (const c of SHEET_COLOR_ORDER) {
 				const selected = sharedColor !== null && c.id === sharedColor;
 				sub.addItem(si => {
-					si.setTitle(buildStickyBgSubmenuTitle(document, c.id, t(c.labelKey), selected));
+					si.setTitle(buildStickyBgSubmenuTitle(c.id, t(c.labelKey), selected));
 					si.setIcon(null);
 					queueMicrotask(() => {
 						si.dom?.classList.add('csn-list-bg-menu-item', `csn-list-bg-menu-item--${c.id}`);
@@ -6998,7 +6986,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const next = String(f.stat.mtime);
 		if (cur !== next) {
 			const previewEl = card.querySelector('.csn-list-card-body.csn-list-card-body--rendered');
-			if (previewEl instanceof HTMLElement) {
+			if (previewEl?.instanceOf(HTMLElement)) {
 				await this.renderCardPreview(previewEl, f);
 				card.dataset.csnEmbedMtime = next;
 			}
@@ -7030,7 +7018,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const wantedSet = new Set(pageFiles.map(x => x.path));
 		const existing = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (p) existing.set(p, el);
 		}
@@ -7049,12 +7037,12 @@ export class StickyNoteDashboardView extends ItemView {
 			return this.createCard(f, color, pinnedSet, archived);
 		});
 
-		const frag = document.createDocumentFragment();
+		const frag = createFragment();
 		for (const card of nextCards) {
 			frag.appendChild(card);
 		}
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement)) {
+			if (!el?.instanceOf(HTMLElement)) {
 				el.remove();
 				continue;
 			}
@@ -7075,7 +7063,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const wantedSet = new Set(pageFiles.map(x => x.path));
 		const existing = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (!p) continue;
 			if (!wantedSet.has(p)) {
@@ -7123,7 +7111,7 @@ export class StickyNoteDashboardView extends ItemView {
 	): Promise<void> {
 		const byPath = new Map<string, HTMLElement>();
 		for (const el of Array.from(container.children)) {
-			if (!(el instanceof HTMLElement) || !el.hasClass('csn-list-card')) continue;
+			if (!el?.instanceOf(HTMLElement) || !el.hasClass('csn-list-card')) continue;
 			const p = el.dataset.csnNotePath;
 			if (p) byPath.set(p, el);
 		}
@@ -7498,11 +7486,9 @@ export class StickyNoteDashboardView extends ItemView {
 				this.lastDashFilterKey = '';
 				this.lastRenderedPageIndex = null;
 				this.clearDashResultCache();
-				const emptyEl = document.createElement('div');
-				emptyEl.addClass('csn-list-empty');
-				emptyEl.setText(t('DASH_EMPTY'));
+				const emptyEl = createDiv({ cls: 'csn-list-empty', text: t('DASH_EMPTY') });
 				for (const el of Array.from(container.children)) {
-					if (el instanceof HTMLElement && el.hasClass('csn-list-card')) {
+					if (el?.instanceOf(HTMLElement) && el.hasClass('csn-list-card')) {
 						const p = el.dataset.csnNotePath;
 						if (p) this.disposeMarkdownHostForPath(p);
 					}

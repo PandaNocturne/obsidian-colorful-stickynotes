@@ -2731,6 +2731,13 @@
 	overflow: auto;
 }
 
+/* 挂到 body 后由 TS 写 right/top/max-height；静态 fixed 在此 */
+.csn-dash-area-vis-panel--portaled {
+	position: fixed;
+	z-index: 1000;
+	left: auto;
+}
+
 .csn-dash-area-vis-panel--hidden {
 	display: none;
 }
