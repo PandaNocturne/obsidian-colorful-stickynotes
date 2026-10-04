@@ -221,11 +221,11 @@ body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-edi
   overflow: auto;
   padding: 0;
 }
-body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-content {
+body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-content.cm-content {
   max-width: none;
   width: 100%;
   /* Obsidian CM6 以内联 style 写入 padding-bottom（scroll past end），悬浮窗内会多出大片空白 */
-  padding-bottom: 0 !important;
+  padding-bottom: 0;
 }
 body .csn-sticky-window-body .view-content .markdown-source-view.mod-cm6 .cm-contentContainer {
   padding: 0px;
@@ -253,11 +253,11 @@ body .csn-sticky-window-body .view-content .markdown-preview-view::-webkit-scrol
   width: 0px;
 }
 body .csn-sticky-window-body .view-content .markdown-preview-sizer.markdown-preview-section,
-body .csn-sticky-window-body .view-content .cm-s-obsidian .cm-content {
+body .csn-sticky-window-body .view-content .cm-s-obsidian .cm-content.cm-content {
   padding-top: 0;
   padding-left: 0;
   padding-right: 0;
-  padding-bottom: 0 !important;
+  padding-bottom: 0;
 }
 /*
  * 与 ASUI「body .asui-preview-window .view-content」相同作用：抬高优先级。
@@ -1706,31 +1706,31 @@ a.tag.csn-sticky-tag-item {
   flex-direction: column;
   overflow: hidden;
 }
-/* Obsidian CM：强制高度链，占满快速输入区 */
-.csn-dash-composer-cm .cm-editor {
+/* Obsidian CM：强制高度链，占满快速输入区（双类名抬高优先级） */
+.csn-dash-composer-cm .cm-editor.cm-editor {
   background: transparent;
   flex: 1 1 auto;
-  min-height: 0 !important;
-  height: 100% !important;
+  min-height: 0;
+  height: 100%;
   width: 100%;
-  display: flex !important;
+  display: flex;
   flex-direction: column;
   font-family: var(--font-text);
   font-size: var(--font-text-size);
   line-height: var(--line-height-normal);
 }
-.csn-dash-composer-cm .cm-scroller {
+.csn-dash-composer-cm .cm-scroller.cm-scroller {
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
-  overflow: auto !important;
+  overflow: auto;
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
 }
-.csn-dash-composer-cm .cm-content {
-  padding: 4px 0 !important;
-  min-height: 100% !important;
+.csn-dash-composer-cm .cm-content.cm-content {
+  padding: 4px 0;
+  min-height: 100%;
   box-sizing: border-box;
 }
 .csn-dash-composer-cm .cm-gutters {
@@ -1844,9 +1844,10 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-composer-color-wrap.is-expanded .csn-dash-composer-palette {
   display: flex;
 }
-.csn-dash-composer-palette[hidden] {
-  /* 公共：覆盖同选择器权重下的 display:flex */
-  display: none !important;
+.csn-dash-composer-color-wrap.is-expanded .csn-dash-composer-palette[hidden],
+.csn-dash-composer-palette.csn-dash-composer-palette[hidden] {
+  /* 覆盖 is-expanded 下的 display:flex */
+  display: none;
 }
 /* 与便笺色条 / 列表筛选色块一致（圆角方块） */
 .csn-dash-composer-swatch {
@@ -2085,9 +2086,9 @@ a.tag.csn-sticky-tag-item {
   overflow: hidden;
 }
 .csn-dash-composer-tag-panel.csn-dash-composer-tag-panel--hidden,
-.csn-dash-composer-tag-panel[hidden] {
-  /* 公共：覆盖面板自身的 display:flex */
-  display: none !important;
+.csn-dash-composer-tag-panel.csn-dash-composer-tag-panel[hidden] {
+  /* 覆盖面板自身的 display:flex */
+  display: none;
 }
 .csn-dash-composer-cancel {
   display: none;

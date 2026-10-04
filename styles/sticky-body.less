@@ -115,11 +115,11 @@ body .csn-sticky-window-body {
 				padding: 0;
 			}
 
-			.cm-content {
+			.cm-content.cm-content {
 				max-width: none;
 				width: 100%;
 				/* Obsidian CM6 以内联 style 写入 padding-bottom（scroll past end），悬浮窗内会多出大片空白 */
-				padding-bottom: 0 !important;
+				padding-bottom: 0;
 			}
 
 			.cm-contentContainer {
@@ -154,11 +154,11 @@ body .csn-sticky-window-body {
 		}
 
 		.markdown-preview-sizer.markdown-preview-section,
-		.cm-s-obsidian .cm-content {
+		.cm-s-obsidian .cm-content.cm-content {
 			padding-top: 0;
 			padding-left: 0;
 			padding-right: 0;
-			padding-bottom: 0 !important;
+			padding-bottom: 0;
 		}
 	}
 }
