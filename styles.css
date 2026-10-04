@@ -1570,7 +1570,7 @@ a.tag.csn-sticky-tag-item {
   outline: none;
   background: transparent;
 }
-.csn-dash-panel-title {
+.csn-dash-panel-title.csn-dash-panel-title {
   appearance: none;
   -webkit-appearance: none;
   flex: 0 1 auto;
@@ -3430,7 +3430,7 @@ a.tag.csn-sticky-tag-item {
   justify-content: flex-start;
   /* 勿 overflow:hidden，否则年月弹层会被裁切 */
 }
-.csn-dash-cal-ym {
+.csn-dash-cal-ym.csn-dash-cal-ym {
   appearance: none;
   -webkit-appearance: none;
   border: none;
