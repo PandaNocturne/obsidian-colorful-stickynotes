@@ -185,7 +185,9 @@
 	height: 14px;
 }
 
-.csn-ws-panel-search-input {
+.csn-ws-panel-search-input.csn-ws-panel-search-input,
+.csn-ws-panel-search-input.csn-ws-panel-search-input:focus,
+.csn-ws-panel-search-input.csn-ws-panel-search-input:focus-visible {
 	flex: 1 1 auto;
 	min-width: 0;
 	border: none;
@@ -255,7 +257,7 @@
 }
 
 /* 顶部分组标签栏：底边指示选中，无按钮外观 */
-.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab {
+.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab.csn-ws-panel-tab {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -282,7 +284,7 @@
 	transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 
-.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab:hover:not(.csn-ws-panel-tab--active) {
+.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab.csn-ws-panel-tab:hover:not(.csn-ws-panel-tab--active) {
 	background: color-mix(in srgb, var(--background-modifier-hover) 70%, transparent);
 	color: var(--text-normal);
 	box-shadow: none;
@@ -299,9 +301,9 @@
 	box-shadow: none;
 }
 
-.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab:active,
-.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab:focus,
-.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab:focus-visible {
+.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab.csn-ws-panel-tab:active,
+.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab.csn-ws-panel-tab:focus,
+.modal.csn-workspace-panel-modal .csn-ws-panel-tabbar button.csn-ws-panel-tab.csn-ws-panel-tab:focus-visible {
 	background: color-mix(in srgb, var(--background-modifier-hover) 70%, transparent);
 	border-color: transparent;
 	box-shadow: none;
@@ -470,7 +472,7 @@
 	justify-content: flex-end;
 }
 
-.csn-ws-panel-input {
+.csn-ws-panel-input.csn-ws-panel-input {
 	flex: 1 1 auto;
 	min-width: 0;
 	height: var(--input-height);
@@ -480,14 +482,17 @@
 	background: var(--background-primary);
 	color: var(--text-normal);
 	font-size: var(--font-ui-small);
+	box-shadow: none;
 }
 
-.csn-ws-panel-input:focus {
+.csn-ws-panel-input.csn-ws-panel-input:focus,
+.csn-ws-panel-input.csn-ws-panel-input:focus-visible {
 	border-color: var(--interactive-accent);
 	outline: none;
+	box-shadow: none;
 }
 
-.csn-ws-panel-btn {
+.csn-ws-panel-btn.csn-ws-panel-btn {
 	flex: 0 0 auto;
 	height: var(--input-height);
 	padding: 0 16px;
@@ -499,11 +504,11 @@
 	cursor: pointer;
 }
 
-.csn-ws-panel-btn:hover:not(:disabled) {
+.csn-ws-panel-btn.csn-ws-panel-btn:hover:not(:disabled) {
 	background: var(--background-modifier-hover);
 }
 
-.csn-ws-panel-btn:disabled {
+.csn-ws-panel-btn.csn-ws-panel-btn:disabled {
 	opacity: 0.45;
 	cursor: not-allowed;
 }
@@ -631,7 +636,7 @@
 	outline-offset: 2px;
 }
 
-/* 与卡片底部 .csn-ws-panel-icon-btn 内 Lucide 图标视觉一致 */
+/* 与卡片底部 .csn-ws-panel-icon-btn.csn-ws-panel-icon-btn 内 Lucide 图标视觉一致 */
 .csn-ws-panel-add-tile-icon {
 	display: inline-flex;
 	align-items: center;
@@ -925,7 +930,7 @@
 	box-sizing: border-box;
 }
 
-.csn-ws-panel-icon-btn {
+.csn-ws-panel-icon-btn.csn-ws-panel-icon-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -941,22 +946,22 @@
 	box-sizing: border-box;
 }
 
-.csn-ws-panel-icon-btn:hover:not(:disabled) {
+.csn-ws-panel-icon-btn.csn-ws-panel-icon-btn:hover:not(:disabled) {
 	background: var(--background-modifier-hover);
 	color: var(--text-normal);
 }
 
-.csn-ws-panel-icon-btn:disabled {
+.csn-ws-panel-icon-btn.csn-ws-panel-icon-btn:disabled {
 	opacity: 0.38;
 	cursor: not-allowed;
 }
 
-.csn-ws-panel-icon-btn svg {
+.csn-ws-panel-icon-btn.csn-ws-panel-icon-btn svg {
 	flex-shrink: 0;
 }
 
 /* 底部操作行内图标：无额外框线（收窄到工作区管理弹窗，避免与全域按钮样式拉锯） */
-.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn {
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn.csn-ws-panel-icon-btn {
 	width: calc(var(--input-height) - 4px);
 	min-width: calc(var(--input-height) - 4px);
 	height: calc(var(--input-height) - 4px);
@@ -967,17 +972,17 @@
 	appearance: none;
 }
 
-.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:hover:not(:disabled),
-.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:active:not(:disabled),
-.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus:not(:disabled),
-.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:focus-visible {
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn.csn-ws-panel-icon-btn:hover:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn.csn-ws-panel-icon-btn:active:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn.csn-ws-panel-icon-btn:focus:not(:disabled),
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn.csn-ws-panel-icon-btn:focus-visible {
 	background: var(--background-modifier-hover);
 	box-shadow: none;
 	outline: none;
 	color: var(--text-normal);
 }
 
-.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn:disabled {
+.modal.csn-workspace-panel-modal .csn-ws-panel-item-float-actions .csn-ws-panel-icon-btn.csn-ws-panel-icon-btn:disabled {
 	background: transparent;
 }
 
@@ -1001,7 +1006,9 @@
 	margin-top: 0;
 }
 
-.csn-ws-edit-modal .csn-ws-edit-name-input {
+.csn-ws-edit-modal .csn-ws-edit-name-input.csn-ws-edit-name-input,
+.csn-ws-edit-modal .csn-ws-edit-name-input.csn-ws-edit-name-input:focus,
+.csn-ws-edit-modal .csn-ws-edit-name-input.csn-ws-edit-name-input:focus-visible {
 	display: block;
 	width: 100%;
 	margin-bottom: 12px;
@@ -1013,9 +1020,13 @@
 	color: var(--text-normal);
 	font-size: var(--font-ui-small);
 	box-sizing: border-box;
+	outline: none;
+	box-shadow: none;
 }
 
-.csn-ws-edit-modal .csn-ws-edit-remark-input {
+.csn-ws-edit-modal .csn-ws-edit-remark-input.csn-ws-edit-remark-input,
+.csn-ws-edit-modal .csn-ws-edit-remark-input.csn-ws-edit-remark-input:focus,
+.csn-ws-edit-modal .csn-ws-edit-remark-input.csn-ws-edit-remark-input:focus-visible {
 	display: block;
 	width: 100%;
 	min-height: 88px;
@@ -1030,6 +1041,8 @@
 	line-height: 1.45;
 	resize: vertical;
 	box-sizing: border-box;
+	outline: none;
+	box-shadow: none;
 }
 
 .csn-ws-edit-actions {
