@@ -572,11 +572,8 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 		}
 		this.settings.canvasLinkBatchMaxPerRow = Math.max(1, Math.min(50, Math.round(maxPerRow)));
 
-		// 保留旧字段但做一次归一化，避免写回 data.json 时出现奇怪值
-		const legacyStackDy = st.canvasLinkBatchStackDy;
-		const stackDy =
-			typeof legacyStackDy === 'number' && Number.isFinite(legacyStackDy) ? legacyStackDy : 24;
-		st.canvasLinkBatchStackDy = Math.max(0, Math.min(500, Math.round(stackDy)));
+		// 旧版「纵向错开」已迁移到 canvasLinkBatchGridGap，写回时删除废弃键
+		delete st.canvasLinkBatchStackDy;
 
 		const listFromDisk = await loadNoteListPersistedFile(this);
 		if (listFromDisk) {

@@ -1,9 +1,14 @@
 import { moment } from 'obsidian';
 
+/** Moment 实例上我们实际用到的 API（obsidian 的 moment 类型偏宽，避免 unsafe-*）。 */
+interface MomentFormatOnly {
+	format(fmt: string): string;
+}
+
 /** 将 Moment 格式化为字符串（避免官方审查器对 moment 返回类型的 unsafe-* 警告）。 */
 function formatWithMoment(fmt: string): string {
-	const formatted: unknown = moment().format(fmt);
-	return typeof formatted === 'string' ? formatted : String(formatted);
+	const m = moment() as unknown as MomentFormatOnly;
+	return m.format(fmt);
 }
 
 /**

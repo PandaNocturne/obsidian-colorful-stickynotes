@@ -599,7 +599,7 @@ body .csn-sticky.csn-metadata-on .metadata-container {
   background: color-mix(in srgb, var(--background-primary) 88%, transparent);
 }
 .csn-sticky-tag-toolbar.is-hidden {
-  display: none !important;
+  display: none;
 }
 .csn-sticky-tag-toolbar-chips {
   display: flex;
@@ -723,7 +723,7 @@ a.tag.csn-sticky-tag-item {
   padding-bottom: 34px;
 }
 .csn-sticky--collapsed .csn-sticky-tag-toolbar--floating {
-  display: none !important;
+  display: none;
 }
 /* 卡片：参与纵向 flex，压缩正文区；背景与正文预览区同色 */
 .csn-sticky-tag-toolbar--card {
@@ -1565,9 +1565,9 @@ a.tag.csn-sticky-tag-item {
   padding: 0;
   margin: 0;
   min-width: 0;
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
+  border: none;
+  box-shadow: none;
+  outline: none;
   background: transparent;
 }
 .csn-dash-panel-title {
@@ -1581,10 +1581,10 @@ a.tag.csn-sticky-tag-item {
   justify-content: flex-start;
   gap: 4px;
   margin: 0;
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
-  background: transparent !important;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  background: transparent;
   padding: 2px 0;
   border-radius: 0;
   color: var(--text-muted);
@@ -1598,10 +1598,10 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-panel-title:focus,
 .csn-dash-panel-title:focus-visible {
   color: var(--text-normal);
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-panel-chevron {
   display: inline-flex;
@@ -1845,6 +1845,7 @@ a.tag.csn-sticky-tag-item {
   display: flex;
 }
 .csn-dash-composer-palette[hidden] {
+  /* 公共：覆盖同选择器权重下的 display:flex */
   display: none !important;
 }
 /* 与便笺色条 / 列表筛选色块一致（圆角方块） */
@@ -1857,18 +1858,18 @@ a.tag.csn-sticky-tag-item {
   border-radius: 6px;
   cursor: var(--cursor);
   box-sizing: border-box;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
-  outline: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  outline: none;
   flex: 0 0 auto;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 .csn-dash-composer-swatch:hover,
 .csn-dash-composer-swatch:focus-visible {
   transform: scale(1.08);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
 }
 .csn-dash-composer-swatch.is-active {
-  box-shadow: inset 0 0 0 2px var(--text-accent), 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+  box-shadow: inset 0 0 0 2px var(--text-accent), 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 .csn-dash-composer-swatch[data-csn-color='yellow'] {
   background: #f5e6a3;
@@ -1893,7 +1894,7 @@ a.tag.csn-sticky-tag-item {
 }
 .theme-dark .csn-dash-composer-swatch {
   border-color: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 .theme-dark .csn-dash-composer-swatch[data-csn-color='yellow'] {
   background: #5c5430;
@@ -1925,15 +1926,15 @@ a.tag.csn-sticky-tag-item {
   padding: 0;
   border: none;
   border-radius: var(--radius-s);
-  background: transparent !important;
-  background-image: none !important;
+  background: transparent;
+  background-image: none;
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: var(--cursor);
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
   pointer-events: auto;
   flex: 0 0 auto;
 }
@@ -1941,24 +1942,24 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-composer-color:focus,
 .csn-dash-composer-color:focus-visible {
   color: var(--text-normal);
-  background: var(--background-modifier-hover) !important;
+  background: var(--background-modifier-hover);
   transform: none;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
   filter: none;
 }
 .csn-dash-composer-color.is-active,
 .csn-dash-composer-color[aria-expanded='true'] {
   color: var(--interactive-accent);
-  background: color-mix(in srgb, var(--interactive-accent) 22%, transparent) !important;
+  background: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
   transform: none;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
   filter: none;
 }
 .csn-dash-composer-color:active {
   transform: none;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 .csn-dash-composer-color svg {
   width: 16px;
@@ -1987,8 +1988,8 @@ a.tag.csn-sticky-tag-item {
   padding: 0;
   border: 1px dashed var(--background-modifier-border);
   border-radius: var(--radius-s);
-  background: transparent !important;
-  box-shadow: none !important;
+  background: transparent;
+  box-shadow: none;
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
@@ -2001,7 +2002,7 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-composer-tag-add-btn:hover {
   color: var(--text-normal);
   border-color: var(--background-modifier-border-hover);
-  background: var(--background-modifier-hover) !important;
+  background: var(--background-modifier-hover);
 }
 .csn-dash-composer-tag-add-btn[aria-expanded='true'],
 .csn-dash-composer-tag-add-btn.is-active {
@@ -2085,6 +2086,7 @@ a.tag.csn-sticky-tag-item {
 }
 .csn-dash-composer-tag-panel.csn-dash-composer-tag-panel--hidden,
 .csn-dash-composer-tag-panel[hidden] {
+  /* 公共：覆盖面板自身的 display:flex */
   display: none !important;
 }
 .csn-dash-composer-cancel {
@@ -2094,18 +2096,18 @@ a.tag.csn-sticky-tag-item {
   padding: 4px 10px 4px 8px;
   font-size: var(--font-ui-small);
   cursor: var(--cursor);
-  background-color: var(--background-secondary) !important;
-  border-color: var(--background-modifier-border) !important;
-  color: var(--text-muted) !important;
-  box-shadow: none !important;
+  background-color: var(--background-secondary);
+  border-color: var(--background-modifier-border);
+  color: var(--text-muted);
+  box-shadow: none;
 }
 .csn-dash-composer-cancel.is-visible {
   display: inline-flex;
 }
 .csn-dash-composer-cancel:hover {
-  background-color: var(--background-modifier-hover) !important;
-  border-color: var(--background-modifier-border-hover, var(--background-modifier-border)) !important;
-  color: var(--text-normal) !important;
+  background-color: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
+  color: var(--text-normal);
 }
 .csn-dash-composer-cancel-icon {
   display: inline-flex;
@@ -2131,15 +2133,15 @@ a.tag.csn-sticky-tag-item {
   padding: 4px 10px 4px 8px;
   font-size: var(--font-ui-small);
   cursor: var(--cursor);
-  background-color: var(--interactive-accent) !important;
-  border-color: var(--interactive-accent) !important;
-  color: var(--text-on-accent, #fff) !important;
-  box-shadow: none !important;
+  background-color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent, #fff);
+  box-shadow: none;
 }
 .csn-dash-composer-done:hover {
-  background-color: var(--interactive-accent-hover, var(--interactive-accent)) !important;
-  border-color: var(--interactive-accent-hover, var(--interactive-accent)) !important;
-  color: var(--text-on-accent, #fff) !important;
+  background-color: var(--interactive-accent-hover, var(--interactive-accent));
+  border-color: var(--interactive-accent-hover, var(--interactive-accent));
+  color: var(--text-on-accent, #fff);
 }
 .csn-dash-composer-done-icon {
   display: inline-flex;
@@ -2379,14 +2381,14 @@ a.tag.csn-sticky-tag-item {
   padding: 2px 4px 2px 6px;
   cursor: var(--cursor);
   line-height: 1.2;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-ws-filter-chip:hover,
 .csn-dash-ws-filter-chip:focus,
 .csn-dash-ws-filter-chip:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 .csn-dash-ws-filter-chip--exclude,
 .csn-dash-ws-filter-chip--uncategorized {
@@ -2443,8 +2445,8 @@ a.tag.csn-sticky-tag-item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-ws-filter-add-btn:hover,
 .csn-dash-ws-filter-add-btn:focus,
@@ -2452,8 +2454,8 @@ a.tag.csn-sticky-tag-item {
   color: var(--text-normal);
   border-color: var(--background-modifier-border-hover);
   background: var(--background-modifier-hover);
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 .csn-dash-ws-filter-add-btn.is-active {
   color: var(--interactive-accent);
@@ -2505,14 +2507,14 @@ a.tag.csn-sticky-tag-item {
   padding: 2px 4px 2px 8px;
   cursor: var(--cursor);
   line-height: 1.2;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-date-filter-chip:hover,
 .csn-dash-date-filter-chip:focus,
 .csn-dash-date-filter-chip:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 .csn-dash-date-filter-chip-text {
   min-width: 0;
@@ -2550,8 +2552,8 @@ a.tag.csn-sticky-tag-item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-date-filter-add-btn:hover,
 .csn-dash-date-filter-add-btn:focus,
@@ -2559,8 +2561,8 @@ a.tag.csn-sticky-tag-item {
   color: var(--text-normal);
   border-color: var(--background-modifier-border-hover);
   background: var(--background-modifier-hover);
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 .csn-dash-date-filter-add-btn.is-active {
   color: var(--interactive-accent);
@@ -2612,16 +2614,16 @@ a.tag.csn-sticky-tag-item {
   font-size: var(--font-ui-smaller);
   line-height: 1.2;
   cursor: var(--cursor);
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-date-filter-mode-btn:hover,
 .csn-dash-date-filter-mode-btn:focus,
 .csn-dash-date-filter-mode-btn:focus-visible {
   color: var(--text-normal);
   background: var(--background-modifier-hover);
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 .csn-dash-date-filter-mode-btn.is-active {
   color: var(--text-normal);
@@ -2634,19 +2636,19 @@ a.tag.csn-sticky-tag-item {
   line-height: 1.3;
 }
 .csn-dash-date-filter-panel-row {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
   width: 100%;
 }
 .csn-dash-date-filter-input {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
-  width: auto !important;
-  max-width: none !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  max-width: none;
   font-size: var(--font-ui-small);
   padding: 4px 8px;
   border-radius: 6px;
@@ -2658,31 +2660,31 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-date-filter-confirm-btn {
   appearance: none;
   -webkit-appearance: none;
-  flex: 0 0 28px !important;
-  width: 28px !important;
-  min-width: 28px !important;
-  height: 28px !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: 1px solid var(--background-modifier-border) !important;
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
-  background: transparent !important;
+  background: transparent;
   color: var(--text-muted);
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
   cursor: var(--cursor);
 }
 .csn-dash-date-filter-confirm-btn:hover,
 .csn-dash-date-filter-confirm-btn:focus,
 .csn-dash-date-filter-confirm-btn:focus-visible {
   color: var(--interactive-accent);
-  border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border)) !important;
-  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent) !important;
-  outline: none !important;
-  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+  outline: none;
+  box-shadow: none;
 }
 .csn-dash-date-filter-confirm-btn svg {
   width: 16px;
@@ -2836,9 +2838,9 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-filter-panel-search-input {
   flex: 1 1 auto;
   min-width: 0;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
+  border: none;
+  outline: none;
+  box-shadow: none;
   background: transparent;
   padding: 4px 0;
   font-size: var(--font-ui-small);
@@ -2917,8 +2919,8 @@ a.tag.csn-sticky-tag-item {
   padding: 6px 8px;
   cursor: var(--cursor);
   text-align: left;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-filter-panel-item.is-indent {
   padding-left: 18px;
@@ -2927,8 +2929,8 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-filter-panel-item:focus,
 .csn-dash-filter-panel-item:focus-visible {
   background: var(--background-modifier-hover);
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 .csn-dash-filter-panel-item.is-selected {
   background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
@@ -2987,7 +2989,7 @@ a.tag.csn-sticky-tag-item {
 }
 .csn-dash-date-filter-panel .csn-dash-date-filter-panel-row {
   width: 100%;
-  flex-wrap: nowrap !important;
+  flex-wrap: nowrap;
 }
 .csn-dash-date-filter-panel .csn-dash-date-filter-panel-hint {
   width: 100%;
@@ -3049,9 +3051,9 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-tag-search-input {
   flex: 1 1 auto;
   min-width: 0;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
+  border: none;
+  outline: none;
+  box-shadow: none;
   background: transparent;
   padding: 4px 0;
   font-size: var(--font-ui-small);
@@ -3059,9 +3061,9 @@ a.tag.csn-sticky-tag-item {
 }
 .csn-dash-tag-search-input:focus,
 .csn-dash-tag-search-input:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
-  border: none !important;
+  outline: none;
+  box-shadow: none;
+  border: none;
 }
 .csn-dash-tag-logic {
   display: flex;
@@ -3291,9 +3293,9 @@ a.tag.csn-sticky-tag-item {
   width: auto;
   margin: 0;
   padding: 5px 6px;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
+  border: none;
+  outline: none;
+  box-shadow: none;
   background: transparent;
   font-size: var(--font-ui-small);
   line-height: var(--line-height-tight);
@@ -3385,8 +3387,8 @@ a.tag.csn-sticky-tag-item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-attr-btn--icon svg {
   width: 16px;
@@ -3431,8 +3433,8 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-cal-ym {
   appearance: none;
   -webkit-appearance: none;
-  border: none !important;
-  background: transparent !important;
+  border: none;
+  background: transparent;
   padding: 0 1px;
   margin: 0;
   min-width: 0;
@@ -3444,28 +3446,28 @@ a.tag.csn-sticky-tag-item {
   line-height: 1.3;
   color: var(--text-muted);
   cursor: var(--cursor);
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  outline: none !important;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-cal-ym:hover,
 .csn-dash-cal-ym:focus,
 .csn-dash-cal-ym:focus-visible,
 .csn-dash-cal-ym:active {
   color: var(--text-normal);
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-cal-ym.is-open,
 .csn-dash-cal-ym.is-open:focus,
 .csn-dash-cal-ym.is-open:focus-visible {
   color: var(--text-normal);
-  box-shadow: inset 0 -1px 0 var(--text-muted) !important;
-  outline: none !important;
-  border: none !important;
-  background: transparent !important;
+  box-shadow: inset 0 -1px 0 var(--text-muted);
+  outline: none;
+  border: none;
+  background: transparent;
 }
 .csn-dash-cal-popover {
   position: absolute;
@@ -3502,8 +3504,8 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-cal-popover-nav-btn {
   appearance: none;
   -webkit-appearance: none;
-  border: none !important;
-  background: transparent !important;
+  border: none;
+  background: transparent;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -3513,17 +3515,17 @@ a.tag.csn-sticky-tag-item {
   align-items: center;
   justify-content: center;
   cursor: var(--cursor);
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-cal-popover-nav-btn:hover,
 .csn-dash-cal-popover-nav-btn:focus,
 .csn-dash-cal-popover-nav-btn:focus-visible {
   color: var(--text-normal);
-  background: var(--background-modifier-hover) !important;
-  box-shadow: none !important;
-  outline: none !important;
-  border: none !important;
+  background: var(--background-modifier-hover);
+  box-shadow: none;
+  outline: none;
+  border: none;
 }
 .csn-dash-cal-popover-nav-btn svg {
   width: 14px;
@@ -3542,8 +3544,8 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-cal-popover-item {
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid transparent !important;
-  background: transparent !important;
+  border: 1px solid transparent;
+  background: transparent;
   padding: 6px 4px;
   margin: 0;
   border-radius: 4px;
@@ -3552,8 +3554,8 @@ a.tag.csn-sticky-tag-item {
   cursor: var(--cursor);
   text-align: center;
   line-height: 1.2;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
   transition: filter 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
 .csn-dash-cal-popover-item:hover,
@@ -3561,25 +3563,25 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-cal-popover-item:focus-visible,
 .csn-dash-cal-popover-item:active {
   color: var(--text-normal);
-  background: var(--background-modifier-hover) !important;
-  box-shadow: none !important;
-  outline: none !important;
-  border: 1px solid transparent !important;
+  background: var(--background-modifier-hover);
+  box-shadow: none;
+  outline: none;
+  border: 1px solid transparent;
 }
 .csn-dash-cal-popover-item.heat-1 {
-  background: var(--csn-heat-1) !important;
+  background: var(--csn-heat-1);
   color: var(--csn-heat-fg-on);
 }
 .csn-dash-cal-popover-item.heat-2 {
-  background: var(--csn-heat-2) !important;
+  background: var(--csn-heat-2);
   color: var(--csn-heat-fg-on);
 }
 .csn-dash-cal-popover-item.heat-3 {
-  background: var(--csn-heat-3) !important;
+  background: var(--csn-heat-3);
   color: #fff;
 }
 .csn-dash-cal-popover-item.heat-4 {
-  background: var(--csn-heat-4) !important;
+  background: var(--csn-heat-4);
   color: #fff;
 }
 .theme-dark .csn-dash-cal-popover-item.heat-1,
@@ -3595,34 +3597,34 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-cal-popover-item[class*='heat-']:focus-visible,
 .csn-dash-cal-popover-item[class*='heat-']:active {
   filter: brightness(0.96);
-  border: 1px solid transparent !important;
+  border: 1px solid transparent;
 }
 .csn-dash-cal-popover-item.heat-1:hover,
 .csn-dash-cal-popover-item.heat-1:focus,
 .csn-dash-cal-popover-item.heat-1:focus-visible,
 .csn-dash-cal-popover-item.heat-1:active {
-  background: var(--csn-heat-1) !important;
+  background: var(--csn-heat-1);
   color: var(--csn-heat-fg-on);
 }
 .csn-dash-cal-popover-item.heat-2:hover,
 .csn-dash-cal-popover-item.heat-2:focus,
 .csn-dash-cal-popover-item.heat-2:focus-visible,
 .csn-dash-cal-popover-item.heat-2:active {
-  background: var(--csn-heat-2) !important;
+  background: var(--csn-heat-2);
   color: var(--csn-heat-fg-on);
 }
 .csn-dash-cal-popover-item.heat-3:hover,
 .csn-dash-cal-popover-item.heat-3:focus,
 .csn-dash-cal-popover-item.heat-3:focus-visible,
 .csn-dash-cal-popover-item.heat-3:active {
-  background: var(--csn-heat-3) !important;
+  background: var(--csn-heat-3);
   color: #fff;
 }
 .csn-dash-cal-popover-item.heat-4:hover,
 .csn-dash-cal-popover-item.heat-4:focus,
 .csn-dash-cal-popover-item.heat-4:focus-visible,
 .csn-dash-cal-popover-item.heat-4:active {
-  background: var(--csn-heat-4) !important;
+  background: var(--csn-heat-4);
   color: #fff;
 }
 .theme-dark .csn-dash-cal-popover-item.heat-3:hover,
@@ -3639,38 +3641,38 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-cal-popover-item.is-selected:hover,
 .csn-dash-cal-popover-item.is-selected:focus,
 .csn-dash-cal-popover-item.is-selected:focus-visible {
-  border: 1px dashed var(--interactive-accent) !important;
-  background: transparent !important;
+  border: 1px dashed var(--interactive-accent);
+  background: transparent;
   color: var(--text-normal);
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
 }
 .csn-dash-cal-popover-item.is-selected.heat-1,
 .csn-dash-cal-popover-item.is-selected.heat-1:hover,
 .csn-dash-cal-popover-item.is-selected.heat-1:focus,
 .csn-dash-cal-popover-item.is-selected.heat-1:focus-visible {
-  background: var(--csn-heat-1) !important;
+  background: var(--csn-heat-1);
   color: var(--csn-heat-fg-on);
 }
 .csn-dash-cal-popover-item.is-selected.heat-2,
 .csn-dash-cal-popover-item.is-selected.heat-2:hover,
 .csn-dash-cal-popover-item.is-selected.heat-2:focus,
 .csn-dash-cal-popover-item.is-selected.heat-2:focus-visible {
-  background: var(--csn-heat-2) !important;
+  background: var(--csn-heat-2);
   color: var(--csn-heat-fg-on);
 }
 .csn-dash-cal-popover-item.is-selected.heat-3,
 .csn-dash-cal-popover-item.is-selected.heat-3:hover,
 .csn-dash-cal-popover-item.is-selected.heat-3:focus,
 .csn-dash-cal-popover-item.is-selected.heat-3:focus-visible {
-  background: var(--csn-heat-3) !important;
+  background: var(--csn-heat-3);
   color: #fff;
 }
 .csn-dash-cal-popover-item.is-selected.heat-4,
 .csn-dash-cal-popover-item.is-selected.heat-4:hover,
 .csn-dash-cal-popover-item.is-selected.heat-4:focus,
 .csn-dash-cal-popover-item.is-selected.heat-4:focus-visible {
-  background: var(--csn-heat-4) !important;
+  background: var(--csn-heat-4);
   color: #fff;
 }
 .theme-dark .csn-dash-cal-popover-item.is-selected.heat-3,
@@ -3696,8 +3698,8 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-cal-nav {
   appearance: none;
   -webkit-appearance: none;
-  border: none !important;
-  background: transparent !important;
+  border: none;
+  background: transparent;
   border-radius: 6px;
   color: var(--text-muted);
   cursor: var(--cursor);
@@ -3709,8 +3711,8 @@ a.tag.csn-sticky-tag-item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none !important;
-  outline: none !important;
+  box-shadow: none;
+  outline: none;
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 .csn-dash-cal-scope-btn:hover,
@@ -3726,15 +3728,15 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-cal-today:focus-visible,
 .csn-dash-cal-nav:focus-visible {
   color: var(--text-normal);
-  background: var(--background-modifier-hover) !important;
-  box-shadow: none !important;
-  outline: none !important;
-  border: none !important;
+  background: var(--background-modifier-hover);
+  box-shadow: none;
+  outline: none;
+  border: none;
 }
 .csn-dash-cal-scope-btn.is-active {
   color: var(--interactive-accent);
-  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 45%, transparent) !important;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 45%, transparent);
 }
 .csn-dash-cal-scope-btn svg,
 .csn-dash-cal-heat-toggle svg,
@@ -3764,7 +3766,7 @@ a.tag.csn-sticky-tag-item {
   -webkit-appearance: none;
   border: none;
   background: transparent;
-  padding: 0 !important;
+  padding: 0;
   margin: 0;
   border-radius: 3px;
   font-size: 11px;
@@ -3774,18 +3776,18 @@ a.tag.csn-sticky-tag-item {
   line-height: 1;
   width: 100%;
   min-width: 0;
-  height: auto !important;
+  height: auto;
   min-height: 0;
   aspect-ratio: 1 / 1;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  outline: none !important;
+  outline: none;
   transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, transform 0.08s ease;
 }
 .csn-dash-cal-day {
-  border: 1px solid var(--background-modifier-border) !important;
+  border: 1px solid var(--background-modifier-border);
   background: var(--csn-heat-empty);
   box-shadow: none;
 }
@@ -3795,7 +3797,7 @@ a.tag.csn-sticky-tag-item {
   transform: scale(1.08);
   z-index: 1;
   filter: brightness(0.96);
-  outline: none !important;
+  outline: none;
 }
 .csn-dash-cal-day.heat-1 {
   background: var(--csn-heat-1);
@@ -4028,9 +4030,9 @@ a.tag.csn-sticky-tag-item {
 .csn-dash-ws-filter-input {
   flex: 1 1 auto;
   min-width: 0;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
+  border: none;
+  outline: none;
+  box-shadow: none;
   background: transparent;
   padding: 4px 0;
   font-size: var(--font-ui-small);
@@ -4067,7 +4069,7 @@ a.tag.csn-sticky-tag-item {
   outline: 1px solid var(--interactive-accent);
 }
 .csn-dash-tree-item--drop-target {
-  background-color: color-mix(in srgb, var(--interactive-accent) 28%, transparent) !important;
+  background-color: color-mix(in srgb, var(--interactive-accent) 28%, transparent);
   outline: 1px dashed var(--interactive-accent);
 }
 /* 工作区拖拽排序落点：间隙横线（上半插入前 / 下半插入后） */
@@ -4139,7 +4141,7 @@ a.tag.csn-sticky-tag-item {
 /* 分组内子工作区整体缩进 10px；根目录未分组与分组标题对齐 */
 .csn-dash-ws-add-btn--hidden,
 .csn-dash-ws-action-btn--hidden {
-  display: none !important;
+  display: none;
 }
 .csn-dash-tree-ws--archived {
   opacity: 0.9;
@@ -4445,9 +4447,9 @@ a.tag.csn-sticky-tag-item {
 .csn-ws-panel-search-input {
   flex: 1 1 auto;
   min-width: 0;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
+  border: none;
+  outline: none;
+  box-shadow: none;
   background: transparent;
   padding: 6px 0;
   font-size: var(--font-ui-small);

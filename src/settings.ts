@@ -486,11 +486,6 @@ export interface ColorfulStickyNotesSettings {
 	canvasLinkBatchGridGap: number;
 	/** 列表批量拖入 Canvas 时每行最大卡片数量。 */
 	canvasLinkBatchMaxPerRow: number;
-	/**
-	 * @deprecated 旧版「纵向错开」的设置键，保留用于迁移到 `canvasLinkBatchGridGap`。
-	 * 不再用于排布计算，也不再在设置 UI 中展示。
-	 */
-	canvasLinkBatchStackDy: number;
 }
 
 export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
@@ -549,8 +544,7 @@ export const DEFAULT_SETTINGS: ColorfulStickyNotesSettings = {
 	canvasLinkZoomToSelection: false,
 	canvasLinkShowDragHint: true,
 	canvasLinkBatchGridGap: 24,
-	canvasLinkBatchMaxPerRow: 10,
-	canvasLinkBatchStackDy: 24
+	canvasLinkBatchMaxPerRow: 10
 };
 
 type CsnSettingsTabId =
