@@ -165,13 +165,19 @@ export function collectVaultTagCatalog(app: App): StickyTagCount[] {
 	if (typeof getTags !== 'function') return [];
 	const raw: unknown = getTags.call(app.metadataCache);
 	if (!raw || typeof raw !== 'object') return [];
-	return Object.entries(raw as Record<string, unknown>)
-		.map(([tag, count]) => ({
-			tag: normalizeStickyTag(tag),
-			count: typeof count === 'number' ? count : 0
-		}))
-		.filter(row => row.tag)
-		.sort((a, b) => a.tag.localeCompare(b.tag));
+	const record = raw as Record<string, unknown>;
+	const rows: StickyTagCount[] = [];
+	for (const key of Object.keys(record)) {
+		const tag = normalizeStickyTag(key);
+		if (!tag) continue;
+		const countVal = record[key];
+		rows.push({
+			tag,
+			count: typeof countVal === 'number' ? countVal : 0
+		});
+	}
+	rows.sort((a, b) => a.tag.localeCompare(b.tag));
+	return rows;
 }
 
 /** Obsidian 层级标签树节点（`parent/child`）。 */

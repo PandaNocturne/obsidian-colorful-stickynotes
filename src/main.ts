@@ -274,9 +274,17 @@ export default class ColorfulStickyNotesPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const raw = ((await this.loadData()) ?? {}) as Record<string, unknown>;
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw) as ColorfulStickyNotesSettings;
-		const st = this.settings as unknown as Record<string, unknown>;
+		const data: unknown = await this.loadData();
+		const raw: Record<string, unknown> =
+			data !== null && typeof data === 'object' && !Array.isArray(data)
+				? { ...(data as Record<string, unknown>) }
+				: {};
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			...(raw as Partial<ColorfulStickyNotesSettings>)
+		};
+		/* 清理已废弃设置键（不在 ColorfulStickyNotesSettings 类型上） */
+		const st = this.settings as ColorfulStickyNotesSettings & Record<string, unknown>;
 		delete st.bottomBarCommands;
 		const lang = this.settings.pluginLanguage;
 		this.settings.pluginLanguage = VALID_PLUGIN_UI_LANGUAGE.includes(lang)

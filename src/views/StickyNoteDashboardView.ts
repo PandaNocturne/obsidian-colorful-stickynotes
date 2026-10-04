@@ -945,6 +945,14 @@ export class StickyNoteDashboardView extends ItemView {
 			lavender: '#d4c4f5',
 			gray: '#d8d8d8'
 		};
+		type CanvasNodeLike = {
+			color?: string;
+			onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
+		};
+		type CanvasSelectionLike = {
+			clear: () => void;
+			add: (node: CanvasNodeLike) => void;
+		};
 		type CanvasViewLike = {
 			containerEl?: HTMLElement;
 			file?: TFile;
@@ -956,23 +964,17 @@ export class StickyNoteDashboardView extends ItemView {
 					save: boolean;
 					size?: { width: number; height: number };
 					focus?: boolean;
-				}) => {
-					color?: string;
-					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
-				};
+				}) => CanvasNodeLike;
 				createFileNode: (arg: {
 					file: TFile;
 					pos: unknown;
 					save: boolean;
 					size?: { width: number; height: number };
 					focus?: boolean;
-				}) => {
-					color?: string;
-					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
-				};
+				}) => CanvasNodeLike;
 				requestSave?: () => Promise<void>;
 				requestFrame?: () => Promise<void>;
-				selection?: Set<unknown>;
+				selection?: CanvasSelectionLike;
 				zoomToSelection?: () => void;
 			};
 		};
@@ -3064,6 +3066,7 @@ export class StickyNoteDashboardView extends ItemView {
 		if (!this.tagPanelEl) return;
 		this.refreshTagCatalogFromVault();
 		this.tagPanelEl.removeClass('csn-dash-tag-panel--hidden');
+		this.tagPanelWrapEl?.addClass('is-open');
 		this.syncTagFilterButton();
 		this.renderTagPanelBody();
 		window.setTimeout(() => this.tagPanelSearchInput?.focus(), 0);
@@ -3071,6 +3074,7 @@ export class StickyNoteDashboardView extends ItemView {
 
 	private closeTagFilterPanel(): void {
 		this.tagPanelEl?.addClass('csn-dash-tag-panel--hidden');
+		this.tagPanelWrapEl?.removeClass('is-open');
 		this.syncTagFilterButton();
 	}
 
@@ -4088,6 +4092,7 @@ export class StickyNoteDashboardView extends ItemView {
 		this.syncDateFilterAddModeUi();
 		this.fillDateFilterInputDefault(false);
 		panel.removeClass('csn-dash-date-filter-panel--hidden');
+		this.dateFilterWrapEl?.addClass('is-open');
 		btn?.addClass('is-active');
 		btn?.setAttr('aria-expanded', 'true');
 		window.setTimeout(() => this.dateFilterInput?.focus(), 0);
@@ -4098,6 +4103,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const btn = this.dateFilterAddBtn;
 		if (!panel || panel.hasClass('csn-dash-date-filter-panel--hidden')) return;
 		panel.addClass('csn-dash-date-filter-panel--hidden');
+		this.dateFilterWrapEl?.removeClass('is-open');
 		btn?.removeClass('is-active');
 		btn?.setAttr('aria-expanded', 'false');
 	}
@@ -4859,6 +4865,7 @@ export class StickyNoteDashboardView extends ItemView {
 		if (opts?.group) this.wsFilterPanelGroup = opts.group;
 		this.renderWorkspaceFilterPanelList();
 		panel.removeClass('csn-dash-ws-filter-panel--hidden');
+		this.wsFilterWrapEl?.addClass('is-open');
 		btn?.addClass('is-active');
 		btn?.setAttr('aria-expanded', 'true');
 		window.setTimeout(() => this.wsFilterPanelSearchInput?.focus(), 0);
@@ -4869,6 +4876,7 @@ export class StickyNoteDashboardView extends ItemView {
 		const btn = this.wsFilterAddBtn;
 		if (!panel || panel.hasClass('csn-dash-ws-filter-panel--hidden')) return;
 		panel.addClass('csn-dash-ws-filter-panel--hidden');
+		this.wsFilterWrapEl?.removeClass('is-open');
 		btn?.removeClass('is-active');
 		btn?.setAttr('aria-expanded', 'false');
 	}

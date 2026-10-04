@@ -79,7 +79,7 @@ function asAppWithEmbedRegistry(app: App): AppWithEmbedRegistry {
 }
 
 function asVaultWithPrivateConfig(vault: Vault): VaultWithPrivateConfig {
-	return vault as unknown as VaultWithPrivateConfig;
+	return vault as VaultWithPrivateConfig;
 }
 
 function reflectGet(target: object, prop: PropertyKey, receiver: unknown): unknown {

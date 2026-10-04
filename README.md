@@ -1,8 +1,8 @@
-**Colorful Sticky Notes** · [English](#english) · [中文](#中文)
+**Colorful StickyNotes** · [English](#english) · [中文](#中文)
 
 # English
 
-**Colorful Sticky Notes** is an [Obsidian](https://obsidian.md) plugin that opens **draggable, stackable sticker-style windows** over your vault. Each sticky is backed by a Obsidian note (default folder `StickyNotes`, configurable).
+**Colorful StickyNotes** is an [Obsidian](https://obsidian.md) plugin that opens **draggable, stackable sticker-style windows** over your vault. Each sticky is backed by a Obsidian note (default folder `StickyNotes`, configurable).
 
 Sticky dashboard — Quick Access, calendar, workspace tree, filters, and composer:
 

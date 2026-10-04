@@ -56,8 +56,10 @@ function activePack(): Partial<Record<MessageKey, string>> {
 function applyVars(template: string, vars?: Record<string, string | number>): string {
 	if (!vars) return template;
 	let s = template;
-	for (const [k, v] of Object.entries(vars)) {
-		s = s.split(`{${k}}`).join(String(v));
+	for (const k of Object.keys(vars)) {
+		const v = vars[k];
+		if (v === undefined) continue;
+		s = s.split(`{${k}}`).join(typeof v === 'number' ? String(v) : v);
 	}
 	return s;
 }

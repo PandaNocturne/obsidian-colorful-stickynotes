@@ -34,5 +34,8 @@
 		"@codemirror/view": "6.38.6",
 		"monkey-around": "^3.0.0",
 		"obsidian": "latest"
+	},
+	"overrides": {
+		"moment": "2.31.0"
 	}
 }

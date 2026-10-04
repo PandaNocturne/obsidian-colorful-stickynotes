@@ -191,8 +191,8 @@ a.tag.csn-sticky-tag-item {
 	overflow: auto;
 }
 
-/* 打开标签选择器时允许面板溢出卡片 */
-.csn-list-card:has(.csn-dash-composer-tag-panel:not(.csn-dash-composer-tag-panel--hidden)) {
+/* 打开标签选择器时允许面板溢出卡片（由 TS 切换 csn-tag-picker-open） */
+.csn-list-card.csn-tag-picker-open {
 	overflow: visible;
 	z-index: 40;
 }

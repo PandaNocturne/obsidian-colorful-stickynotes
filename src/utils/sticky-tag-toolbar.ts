@@ -96,6 +96,8 @@ export function mountStickyTagToolbar(
 		addBtn.setAttr('aria-expanded', open ? 'true' : 'false');
 		addBtn.toggleClass('is-active', open);
 		el.toggleClass('is-picker-open', open);
+		/* 替代 :has，避免官方 CSS 审查对 :has 的性能警告 */
+		host.toggleClass('csn-tag-picker-open', open);
 	};
 
 	const openPicker = (): void => {

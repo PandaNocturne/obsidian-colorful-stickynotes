@@ -798,6 +798,14 @@ export class StickyNoteListView extends ItemView {
 			lavender: '#d4c4f5',
 			gray: '#d8d8d8'
 		};
+		type CanvasNodeLike = {
+			color?: string;
+			onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
+		};
+		type CanvasSelectionLike = {
+			clear: () => void;
+			add: (node: CanvasNodeLike) => void;
+		};
 		type CanvasViewLike = {
 			containerEl?: HTMLElement;
 			file?: TFile;
@@ -809,23 +817,17 @@ export class StickyNoteListView extends ItemView {
 					save: boolean;
 					size?: { width: number; height: number };
 					focus?: boolean;
-				}) => {
-					color?: string;
-					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
-				};
+				}) => CanvasNodeLike;
 				createFileNode: (arg: {
 					file: TFile;
 					pos: unknown;
 					save: boolean;
 					size?: { width: number; height: number };
 					focus?: boolean;
-				}) => {
-					color?: string;
-					onResizeDblclick?: (event: MouseEvent, position: 'top' | 'bottom' | 'left' | 'right') => void;
-				};
+				}) => CanvasNodeLike;
 				requestSave?: () => Promise<void>;
 				requestFrame?: () => Promise<void>;
-				selection?: Set<unknown>;
+				selection?: CanvasSelectionLike;
 				zoomToSelection?: () => void;
 			};
 		};

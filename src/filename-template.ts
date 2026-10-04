@@ -1,5 +1,11 @@
 import { moment } from 'obsidian';
 
+/** 将 Moment 格式化为字符串（避免官方审查器对 moment 返回类型的 unsafe-* 警告）。 */
+function formatWithMoment(fmt: string): string {
+	const formatted: unknown = moment().format(fmt);
+	return typeof formatted === 'string' ? formatted : String(formatted);
+}
+
 /**
  * 与「核心插件 → 日记」一致：
  * - **整段字符串**作为 [Moment 格式](https://momentjs.com/docs/#/displaying/format/)（如 `YYYY/YYYY-MM-DD`）；
@@ -11,11 +17,11 @@ export function formatStickyNoteRelativePath(template: string): string {
 	if (t.length === 0) return 'note';
 	try {
 		if (/\{\{\s*date:/.test(t)) {
-			return t.replace(/\{\{\s*date:([^}]+)\}\}/g, (_, inner: string) =>
-				moment().format(inner.trim())
+			return t.replace(/\{\{\s*date:([^}]+)\}\}/g, (_match: string, inner: string) =>
+				formatWithMoment(inner.trim())
 			);
 		}
-		return moment().format(t);
+		return formatWithMoment(t);
 	} catch {
 		return 'invalid-format';
 	}
