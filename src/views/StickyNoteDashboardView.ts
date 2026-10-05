@@ -1198,7 +1198,12 @@ export class StickyNoteDashboardView extends ItemView {
 			if (on && !first) first = el;
 		}
 		if (scroll && first) {
-			first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+			/* 布局完成后再滚，避免 tree 刚 empty/重建时 nearest 不生效 */
+			const target = first;
+			window.requestAnimationFrame(() => {
+				if (!target.isConnected) return;
+				target.scrollIntoView({ block: 'center', inline: 'nearest' });
+			});
 		}
 	}
 
@@ -1208,6 +1213,13 @@ export class StickyNoteDashboardView extends ItemView {
 			this.cardFocusWorkspaceIds = [];
 			this.applyCardFocusWorkspaceChrome(false);
 			return;
+		}
+		/* 归档树视图下无活动工作区节点，先切回活动列表再定位 */
+		if (this.wsTreeShowArchived) {
+			this.wsTreeShowArchived = false;
+			this.persistDashboardChrome();
+			this.syncWsTreeShowArchivedBtn();
+			this.renderWorkspaceTree();
 		}
 		this.cardFocusWorkspaceIds = this.collectWorkspaceIdsForSelectedCards();
 		if (this.cardFocusWorkspaceIds.length === 0) {
@@ -1220,18 +1232,16 @@ export class StickyNoteDashboardView extends ItemView {
 			this.applyLeftPanelCollapsedClass('workspace');
 		}
 		let expanded = false;
-		if (!this.wsTreeShowArchived) {
-			const file = this.plugin.stickies.workspaces;
-			const tabGroups = file.tabGroups;
-			for (const wsId of this.cardFocusWorkspaceIds) {
-				const ws = file.workspaces.find(w => w.id === wsId);
-				if (!ws) continue;
-				const groupId = resolveWorkspaceTabGroupId(ws, tabGroups);
-				if (groupId === WS_TAB_GROUP_UNGROUPED_ID) continue;
-				if (this.collapsedGroupIds.has(groupId)) {
-					this.collapsedGroupIds.delete(groupId);
-					expanded = true;
-				}
+		const file = this.plugin.stickies.workspaces;
+		const tabGroups = file.tabGroups;
+		for (const wsId of this.cardFocusWorkspaceIds) {
+			const ws = file.workspaces.find(w => w.id === wsId);
+			if (!ws) continue;
+			const groupId = resolveWorkspaceTabGroupId(ws, tabGroups);
+			if (groupId === WS_TAB_GROUP_UNGROUPED_ID) continue;
+			if (this.collapsedGroupIds.has(groupId)) {
+				this.collapsedGroupIds.delete(groupId);
+				expanded = true;
 			}
 		}
 		if (expanded) {

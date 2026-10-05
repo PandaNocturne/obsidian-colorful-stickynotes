@@ -704,7 +704,8 @@ export class StickyNoteManager {
 	isStickyInWorkspace(file: TFile, wsId: string): boolean {
 		const ws = this.workspaces.workspaces.find(w => w.id === wsId);
 		if (!ws) return false;
-		return this.findWorkspaceWindowIndex(ws, file) >= 0;
+		/* 与列表/树筛选一致：走成员路径缓存（含 stickyId 解析后的当前路径） */
+		return this.getWorkspaceMemberPathSet(ws).has(normalizePath(file.path));
 	}
 
 	private buildSerializedWindowForFile(
@@ -876,9 +877,10 @@ export class StickyNoteManager {
 
 	/** 活动工作区列表中包含该文件的工作区 id。 */
 	getWorkspaceIdsContainingFile(file: TFile): string[] {
+		const norm = normalizePath(file.path);
 		const ids: string[] = [];
 		for (const ws of this.workspaces.workspaces) {
-			if (this.findWorkspaceWindowIndex(ws, file) >= 0) ids.push(ws.id);
+			if (this.getWorkspaceMemberPathSet(ws).has(norm)) ids.push(ws.id);
 		}
 		return ids;
 	}
